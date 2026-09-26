@@ -26,6 +26,7 @@ from scout_api.core.performance import (
 from scout_api.modules.crawler.core.browser_health import (
     is_browser_infrastructure_error,
 )
+from scout_api.modules.crawler.core.browser_scheduler import browser_queue_deadline
 from scout_api.modules.crawler.core.exceptions import ParseError, RequestError
 from scout_api.modules.crawler.core.fingerprints import canonicalize_url
 from scout_api.modules.crawler.core.scrape_purpose import ScrapePurpose
@@ -39,6 +40,11 @@ from scout_api.modules.crawler.services.product_scrape_service import (
 from scout_api.modules.crawler.stores import STORE_CONFIGS, store_display_name
 from scout_api.modules.matching.attempt_budget import StoreAttemptBudget
 from scout_api.modules.matching.eligibility import eligible_match_store_keys
+from scout_api.modules.matching.embedding_evidence import (
+    MatchEmbeddingEvaluator,
+    apply_embedding_evidence,
+    embedding_eligible,
+)
 from scout_api.modules.matching.engine import MatchingEngine
 from scout_api.modules.matching.gtin_learning import (
     TrustedGtin,
@@ -232,11 +238,17 @@ class ProductMatchService:
         search_service: StoreSearchService | None = None,
         engine: MatchingEngine | None = None,
         session: Session | None = None,
+        embedding_evaluator: MatchEmbeddingEvaluator | None = None,
+        embedding_mode: str = "off",
+        embedding_active_threshold: float | None = None,
     ) -> None:
         self._scrape = scrape_service or ProductScrapeService()
         self._search = search_service or StoreSearchService()
         self._engine = engine or MatchingEngine()
         self._session = session
+        self._embedding_evaluator = embedding_evaluator
+        self._embedding_mode = embedding_mode
+        self._embedding_active_threshold = embedding_active_threshold
 
     def match(
         self,
@@ -379,7 +391,6 @@ class ProductMatchService:
                     retryable=False,
                 )
 
-        queries = build_search_queries(ref_identity)
         target_stores = self._resolve_stores(
             stores,
             reference,
@@ -420,12 +431,14 @@ class ProductMatchService:
             on_progress(MatchProgressEvent.model_validate(payload))
 
         def process_one(store_key: str) -> None:
-            nonlocal queries, ref_identity, learned
+            nonlocal ref_identity, learned
             ensure_run_budget()
             display_name = _store_label(store_key)
             with state_lock:
-                local_queries = list(queries)
                 local_identity = ref_identity
+            store_config = STORE_CONFIGS.get(store_key)
+            query_locale = store_config.query_locale if store_config else None
+            local_queries = build_search_queries(local_identity, locale=query_locale)
             # --- Phase 3: per-store attempt budget ---
             settings = get_settings()
             budget = StoreAttemptBudget(
@@ -602,12 +615,16 @@ class ProductMatchService:
                                 extra={"store": store_key, "phase": "serp"},
                             )
                             break
-                        candidates = self._search.search(
-                            store_key,
-                            query,
-                            limit=max_candidates_per_store,
-                            on_browser_nav_used=budget.record_browser_nav,
-                        )
+                        # Browser queue waits are bounded by this store's wall
+                        # budget. HTTP-first work remains concurrent; only a
+                        # caller that falls back to C1 browser uses this cap.
+                        with browser_queue_deadline(store_deadline.deadline_monotonic):
+                            candidates = self._search.search(
+                                store_key,
+                                query,
+                                limit=max_candidates_per_store,
+                                on_browser_nav_used=budget.record_browser_nav,
+                            )
                         with state_lock:
                             search_cache[cache_key] = list(candidates)
                     search_ms = (time.perf_counter() - search_t0) * 1000
@@ -624,6 +641,9 @@ class ProductMatchService:
                         },
                     )
                 except RequestError as exc:
+                    if store_deadline.expired():
+                        store_wall_timed_out()
+                        return
                     last_error = _store_error(
                         store_key,
                         code=exc.code,
@@ -754,14 +774,18 @@ class ProductMatchService:
                         )
                         mark(MatchProgressPhase.FETCHING_CANDIDATE, store=store_key)
                         scrape_t0 = time.perf_counter()
-                        product, scrape_error = self._scrape_candidate(
-                            candidate.url,
-                            store_key=store_key,
-                            include_images=include_images,
-                        )
+                        with browser_queue_deadline(store_deadline.deadline_monotonic):
+                            product, scrape_error = self._scrape_candidate(
+                                candidate.url,
+                                store_key=store_key,
+                                include_images=include_images,
+                            )
                         scrapes_done += 1
                         scrape_ms = (time.perf_counter() - scrape_t0) * 1000
                         scrape_ms_total += scrape_ms
+                        if store_deadline.expired():
+                            store_wall_timed_out()
+                            return
                         if product is not None:
                             with state_lock:
                                 scrape_cache[canon] = product
@@ -789,6 +813,26 @@ class ProductMatchService:
 
                     candidate_identity = identity_from_price_item(product)
                     score = self._engine.score(local_identity, candidate_identity)
+                    embedding_evidence: dict[str, str | float | int | None] | None = (
+                        None
+                    )
+                    if self._embedding_evaluator is not None and embedding_eligible(
+                        score
+                    ):
+                        evidence = self._embedding_evaluator.evaluate(
+                            local_identity,
+                            candidate_identity,
+                            deadline=store_deadline,
+                        )
+                        embedding_evidence = evidence.as_json()
+                        score = apply_embedding_evidence(
+                            score,
+                            evidence,
+                            mode=self._embedding_mode,
+                            active_threshold=self._embedding_active_threshold,
+                            reference=local_identity,
+                            candidate=candidate_identity,
+                        )
                     candidate_url_parts = urlsplit(
                         (product.url or product.canonical_url).strip()
                     )
@@ -828,6 +872,7 @@ class ProductMatchService:
                                     f"{r.code}:{r.detail}" for r in score.reasons[:8]
                                 ],
                                 "duration_ms": int(round(scrape_ms)),
+                                "embedding_evidence": embedding_evidence,
                             }
                         )
                     if score.decision == "reject":
@@ -859,9 +904,10 @@ class ProductMatchService:
                                 ref_identity = identity_with_gtin(
                                     ref_identity, learned.gtin
                                 )
-                                queries = build_search_queries(ref_identity)
                                 local_identity = ref_identity
-                                local_queries = list(queries)
+                                local_queries = build_search_queries(
+                                    local_identity, locale=query_locale
+                                )
                                 logger.info(
                                     "trusted_gtin_learned",
                                     extra={

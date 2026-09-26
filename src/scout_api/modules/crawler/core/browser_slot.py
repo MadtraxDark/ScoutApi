@@ -70,3 +70,4 @@ class BrowserSlotLease:
 
     slot_id: int
     _profile_lock_lease: ProfileLockLease | None = field(default=None, repr=False)
+    _profile_lock_retained: bool = field(default=False, repr=False)

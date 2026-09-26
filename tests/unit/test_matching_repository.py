@@ -13,6 +13,8 @@ from scout_api.core.database import Base
 from scout_api.modules.crawler.models.product import ProductOffer, ProductPriceItem
 from scout_api.modules.matching.db import create_all
 from scout_api.modules.matching.identity import ProductIdentity
+from scout_api.modules.matching.match_run_serializers import candidate_to_view
+from scout_api.modules.matching.models import MatchCandidateLog
 from scout_api.modules.matching.repository import MatchingRepository
 
 
@@ -98,3 +100,26 @@ def test_repository_upsert_canonical_listing_and_snapshot(session: Session) -> N
         "store_listings",
         "offer_snapshots",
     }
+
+
+def test_match_candidate_embedding_evidence_is_metadata_only() -> None:
+    evidence = {
+        "status": "ok",
+        "provider": "openai",
+        "model": "text-embedding-3-small",
+        "representation": "hybrid",
+        "similarity": 0.94,
+        "duration_ms": 120,
+        "cache_hits": 1,
+        "input_tokens": 42,
+    }
+    candidate = MatchCandidateLog(
+        sequence=1,
+        decision="review",
+        reasons=["variant_semantic_uncertain"],
+        embedding_evidence=evidence,
+    )
+
+    view = candidate_to_view(candidate)
+    assert view.embedding_evidence == evidence
+    assert not hasattr(view, "vector")

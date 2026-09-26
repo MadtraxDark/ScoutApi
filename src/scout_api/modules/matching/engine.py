@@ -71,7 +71,7 @@ def _brand_compatible(ref: ProductIdentity, cand: ProductIdentity) -> bool:
     return ref.brand == cand.brand or ref.brand in cand.brand or cand.brand in ref.brand
 
 
-def _price_extreme(ref: ProductIdentity, cand: ProductIdentity) -> bool:
+def price_extreme(ref: ProductIdentity, cand: ProductIdentity) -> bool:
     if ref.price is None or cand.price is None:
         return False
     if ref.price <= 0 or cand.price <= 0:
@@ -562,7 +562,7 @@ class MatchingEngine:
                     confidence=min(confidence, Decimal("0.8900")),
                     reasons=tuple(reasons),
                 )
-            if _price_extreme(reference, candidate):
+            if price_extreme(reference, candidate):
                 reasons.append(
                     MatchReason(
                         code="price_deviation",
@@ -601,7 +601,7 @@ class MatchingEngine:
         ):
             confidence = min(confidence, TITLE_ONLY_CAP)
 
-        if _price_extreme(reference, candidate):
+        if price_extreme(reference, candidate):
             reasons.append(
                 MatchReason(
                     code="price_deviation",

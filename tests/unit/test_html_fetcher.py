@@ -438,7 +438,9 @@ def test_camoufox_fetch_is_safe_from_worker_threads(tmp_path: Any) -> None:
     assert page_threads[0].startswith("camoufox-owner")
 
 
-def test_camoufox_oneshot_drops_warm_before_nested_launch(tmp_path: Any) -> None:
+def test_camoufox_oneshot_drops_warm_before_nested_launch(
+    tmp_path: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """AliExpress oneshot must close warm first (no nested Sync Camoufox)."""
     launches = {"n": 0}
     closed = {"n": 0}
@@ -483,6 +485,18 @@ def test_camoufox_oneshot_drops_warm_before_nested_launch(tmp_path: Any) -> None
         warmup_origin=False,
         warm_reuse=True,
         warm_max_fetches=20,
+    )
+
+    def _navigate_without_payload_wait(
+        page: FakePage, url: str, captured: dict[str, str]
+    ) -> None:
+        del captured
+        page.goto(url)
+
+    # Lifecycle is the subject of this test; avoid the production 25-second
+    # AliExpress payload wait because this fake intentionally emits no payload.
+    monkeypatch.setattr(
+        fetcher, "_goto_aliexpress_early_stop", _navigate_without_payload_wait
     )
     try:
         fetcher.fetch("https://www.kabum.com.br/produto/1")

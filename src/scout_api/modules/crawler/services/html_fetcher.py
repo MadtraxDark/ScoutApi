@@ -865,7 +865,21 @@ class _WarmBrowserSession:
     (Playwright Sync cannot hold multiple Camoufox contexts on one thread).
     """
 
-    __slots__ = ("cm", "browser", "fingerprint", "fetch_count")
+    DEFAULT_IDLE_TIMEOUT_S = 10.0
+
+    __slots__ = (
+        "cm",
+        "browser",
+        "fingerprint",
+        "fetch_count",
+        "scheduler",
+        "slot_lease",
+        "_idle_timeout_s",
+        "_on_idle",
+        "_idle_timer",
+        "_idle_generation",
+        "_timer_lock",
+    )
 
     def __init__(
         self,
@@ -873,17 +887,73 @@ class _WarmBrowserSession:
         cm: AbstractContextManager[Any],
         browser: Any,
         fingerprint: str,
+        on_idle: Callable[[_WarmBrowserSession, int], None] | None = None,
     ) -> None:
         self.cm = cm
         self.browser = browser
         self.fingerprint = fingerprint
         self.fetch_count = 0
+        self.scheduler: Any | None = None
+        self.slot_lease: Any | None = None
+        self._idle_timeout_s = 0.0
+        self._on_idle = on_idle
+        self._idle_timer: threading.Timer | None = None
+        self._idle_generation = 0
+        self._timer_lock = threading.Lock()
 
-    def close(self) -> None:
+    def retain_profile_ownership(
+        self,
+        *,
+        scheduler: Any,
+        slot_lease: Any,
+        idle_timeout_s: float,
+    ) -> None:
+        self.scheduler = scheduler
+        self.slot_lease = slot_lease
+        self._idle_timeout_s = idle_timeout_s
+        self.touch()
+
+    def touch(self) -> None:
+        if self._idle_timeout_s <= 0 or self._on_idle is None:
+            return
+        with self._timer_lock:
+            self._idle_generation += 1
+            generation = self._idle_generation
+            if self._idle_timer is not None:
+                self._idle_timer.cancel()
+            self._idle_timer = threading.Timer(
+                self._idle_timeout_s,
+                self._on_idle,
+                args=(self, generation),
+            )
+            self._idle_timer.daemon = True
+            self._idle_timer.start()
+
+    def lock_lost(self) -> bool:
+        lock_lease = getattr(self.slot_lease, "_profile_lock_lease", None)
+        return bool(lock_lease is not None and lock_lease.lost)
+
+    def idle_generation_matches(self, generation: int) -> bool:
+        with self._timer_lock:
+            return generation == self._idle_generation
+
+    def close(self, *, generation: int | None = None) -> None:
+        with self._timer_lock:
+            if generation is not None and generation != self._idle_generation:
+                return
+            self._idle_generation += 1
+            if self._idle_timer is not None:
+                self._idle_timer.cancel()
+                self._idle_timer = None
         try:
             self.cm.__exit__(None, None, None)
         except Exception:
             logger.debug("camoufox_warm_session_close_failed", exc_info=True)
+        finally:
+            if self.scheduler is not None and self.slot_lease is not None:
+                self.scheduler.release_profile_lock(self.slot_lease)
+                self.scheduler = None
+                self.slot_lease = None
 
 
 class CamoufoxHtmlFetcher:
@@ -1007,21 +1077,29 @@ class CamoufoxHtmlFetcher:
                           Has no effect when the scheduler is disabled.
         """
         if self._scheduler_enabled and self._scheduler is not None:
-            lease = self._scheduler.acquire(cancel_event=cancel_event)
+            lease = None
+            if not self._has_reusable_warm_session(url):
+                lease = self._scheduler.acquire(cancel_event=cancel_event)
             store_cfg = resolve_store_config(url)
             store_key = store_cfg.key if store_cfg is not None else "unknown"
-            logger.debug(
-                "browser_slot_fetch_start",
-                extra={"slot_id": lease.slot_id, "url": url, "store": store_key},
-            )
-            try:
-                return self._fetch_via_owner(url)
-            finally:
-                self._scheduler.release(lease)
+            if lease is not None:
                 logger.debug(
-                    "browser_slot_fetch_end",
+                    "browser_slot_fetch_start",
                     extra={"slot_id": lease.slot_id, "url": url, "store": store_key},
                 )
+            try:
+                return self._fetch_via_owner(url, slot_lease=lease)
+            finally:
+                if lease is not None:
+                    self._scheduler.release(lease)
+                    logger.debug(
+                        "browser_slot_fetch_end",
+                        extra={
+                            "slot_id": lease.slot_id,
+                            "url": url,
+                            "store": store_key,
+                        },
+                    )
         return self._fetch_via_owner(url)
 
     def browser_post(
@@ -1041,26 +1119,25 @@ class CamoufoxHtmlFetcher:
         """
 
         def _post() -> tuple[int, str]:
-            with self._lock:
-                browser, _reused = self._acquire_browser(url)
-                # Cloudflare JA3-blocks Playwright APIRequestContext even with
-                # shared cookies. In-page fetch() uses Camoufox TLS + cookies.
-                page = self._new_page(browser)
-                try:
-                    parsed = urlparse(url)
-                    origin = f"{parsed.scheme}://{parsed.netloc}"
-                    land = headers.get("Referer") or f"{origin}/"
-                    timeout = float(
-                        timeout_ms if timeout_ms is not None else self._timeout_ms
-                    )
-                    page.goto(land, wait_until="domcontentloaded", timeout=timeout)
-                    body_text = (
-                        data.decode("utf-8")
-                        if isinstance(data, (bytes, bytearray))
-                        else str(data)
-                    )
-                    result = page.evaluate(
-                        """async ({url, headers, body}) => {
+            browser, _reused = self._acquire_browser(url)
+            # Cloudflare JA3-blocks Playwright APIRequestContext even with
+            # shared cookies. In-page fetch() uses Camoufox TLS + cookies.
+            page = self._new_page(browser)
+            try:
+                parsed = urlparse(url)
+                origin = f"{parsed.scheme}://{parsed.netloc}"
+                land = headers.get("Referer") or f"{origin}/"
+                timeout = float(
+                    timeout_ms if timeout_ms is not None else self._timeout_ms
+                )
+                page.goto(land, wait_until="domcontentloaded", timeout=timeout)
+                body_text = (
+                    data.decode("utf-8")
+                    if isinstance(data, (bytes, bytearray))
+                    else str(data)
+                )
+                result = page.evaluate(
+                    """async ({url, headers, body}) => {
                             const resp = await fetch(url, {
                                 method: 'POST',
                                 headers,
@@ -1070,50 +1147,140 @@ class CamoufoxHtmlFetcher:
                             const text = await resp.text();
                             return {status: resp.status, text};
                         }""",
-                        {
-                            "url": url,
-                            "headers": dict(headers),
-                            "body": body_text,
-                        },
+                    {
+                        "url": url,
+                        "headers": dict(headers),
+                        "body": body_text,
+                    },
+                )
+                if not isinstance(result, dict):
+                    raise RequestError(
+                        "browser_post evaluate retornou shape inesperado",
+                        code="BROWSER_INFRASTRUCTURE_UNAVAILABLE",
+                        url=url,
+                        retryable=False,
                     )
-                    if not isinstance(result, dict):
-                        raise RequestError(
-                            "browser_post evaluate retornou shape inesperado",
-                            code="BROWSER_INFRASTRUCTURE_UNAVAILABLE",
-                            url=url,
-                            retryable=False,
+                status = int(result.get("status") or 0)
+                text = result.get("text") or ""
+                return status, str(text)
+            finally:
+                closer = getattr(page, "close", None)
+                if callable(closer):
+                    try:
+                        closer()
+                    except Exception:
+                        logger.debug(
+                            "browser_post_page_close_failed",
+                            exc_info=True,
                         )
-                    status = int(result.get("status") or 0)
-                    text = result.get("text") or ""
-                    return status, str(text)
-                finally:
-                    closer = getattr(page, "close", None)
-                    if callable(closer):
-                        try:
-                            closer()
-                        except Exception:
-                            logger.debug(
-                                "browser_post_page_close_failed",
-                                exc_info=True,
-                            )
 
         if self._scheduler_enabled and self._scheduler is not None:
-            lease = self._scheduler.acquire(cancel_event=cancel_event)
+            lease = None
+            if not self._has_reusable_warm_session(url):
+                lease = self._scheduler.acquire(cancel_event=cancel_event)
             try:
-                return self._owner.call(_post)
+                return self._owner_call_with_profile_lease(
+                    _post,
+                    slot_lease=lease,
+                )
             finally:
-                self._scheduler.release(lease)
-        return self._owner.call(_post)
+                if lease is not None:
+                    self._scheduler.release(lease)
+        return self._owner_call_with_profile_lease(_post, slot_lease=None)
 
-    def _fetch_via_owner(self, url: str) -> HtmlResponse:
+    def _fetch_via_owner(
+        self,
+        url: str,
+        *,
+        slot_lease: Any | None = None,
+    ) -> HtmlResponse:
         """Dispatch fetch to the owner thread (Playwright sync API)."""
-        def _fetch() -> HtmlResponse:
-            with self._lock:
-                return self._fetch_locked(url)
-
-        result = self._owner.call(_fetch)
+        result = self._owner_call_with_profile_lease(
+            lambda: self._fetch_locked(url),
+            slot_lease=slot_lease,
+        )
         assert isinstance(result, HtmlResponse)
         return result
+
+    def _owner_call_with_profile_lease(
+        self,
+        operation: Callable[[], Any],
+        *,
+        slot_lease: Any | None,
+    ) -> Any:
+        def _run() -> Any:
+            with self._lock:
+                try:
+                    return operation()
+                finally:
+                    session = self._warm_session
+                    if slot_lease is not None and session is not None:
+                        if self._scheduler.retain_profile_lock(slot_lease):
+                            lock_lease = slot_lease._profile_lock_lease
+                            ttl_ms = getattr(lock_lease, "_ttl_ms", None)
+                            lock_wait_ms = getattr(
+                                self._scheduler,
+                                "profile_lock_timeout_ms",
+                                30_000,
+                            )
+                            idle_limits = [
+                                _WarmBrowserSession.DEFAULT_IDLE_TIMEOUT_S,
+                                max(0.05, lock_wait_ms / 2000.0),
+                            ]
+                            if isinstance(ttl_ms, int):
+                                idle_limits.append(max(0.05, ttl_ms / 3000.0))
+                            idle_timeout_s = min(idle_limits)
+                            session.retain_profile_ownership(
+                                scheduler=self._scheduler,
+                                slot_lease=slot_lease,
+                                idle_timeout_s=idle_timeout_s,
+                            )
+                        else:
+                            # Without a backend that can retain ownership, do
+                            # not leave a persistent browser on an unprotected profile.
+                            self._close_warm_session_unlocked()
+                    elif self._scheduler is not None and session is not None:
+                        # An injected but disabled scheduler cannot protect a
+                        # persistent profile between fetches.
+                        self._close_warm_session_unlocked()
+        return self._owner.call(_run)
+
+    def _has_reusable_warm_session(self, url: str) -> bool:
+        def _check() -> bool:
+            with self._lock:
+                session = self._warm_session
+                if session is None:
+                    return False
+                kwargs = self._launch_kwargs(url=url)
+                if (
+                    session.fingerprint != self._warm_fingerprint(kwargs)
+                    or session.fetch_count >= self._warm_max_fetches
+                    or session.lock_lost()
+                ):
+                    self._close_warm_session_unlocked()
+                    return False
+                session.touch()
+                return True
+
+        return bool(self._owner.call(_check))
+
+    def _expire_warm_session(
+        self,
+        expected: _WarmBrowserSession,
+        generation: int,
+    ) -> None:
+        def _expire() -> None:
+            with self._lock:
+                if self._warm_session is expected and expected.idle_generation_matches(
+                    generation
+                ):
+                    logger.info("camoufox_warm_session_idle_expired")
+                    self._close_warm_session_unlocked()
+
+        try:
+            self._owner.call(_expire)
+        except Exception:
+            logger.warning("camoufox_warm_session_idle_close_failed", exc_info=True)
 
     def _close_warm_session_unlocked(self) -> None:
         """Close the single warm Camoufox session, if any."""
@@ -1213,6 +1380,7 @@ class CamoufoxHtmlFetcher:
                 cm=timed,
                 browser=browser,
                 fingerprint=fingerprint,
+                on_idle=self._expire_warm_session,
             )
             self._warm_session.fetch_count = 1
             self._browser_launches += 1
@@ -1232,6 +1400,7 @@ class CamoufoxHtmlFetcher:
         if trial_token is not None:
             circuit.complete_trial(trial_token, success=True)
         session.fetch_count += 1
+        session.touch()
         self._browser_reuses += 1
         store_cfg = resolve_store_config(url)
         store_key = store_cfg.key if store_cfg is not None else "unknown"
@@ -1265,11 +1434,10 @@ class CamoufoxHtmlFetcher:
         reused = False
         try:
             from scout_api.modules.crawler.core.browser_health import (
+                TrialToken,  # noqa: F401 (local re-import for oneshot path)
                 browser_unavailable_error,
                 get_browser_circuit,
             )
-
-            from scout_api.modules.crawler.core.browser_health import TrialToken  # noqa: F401 (local re-import for oneshot path)
 
             circuit = get_browser_circuit()
             oneshot_trial: TrialToken | None = None
@@ -1284,7 +1452,11 @@ class CamoufoxHtmlFetcher:
                         raise browser_unavailable_error(url=url)
                     logger.info(
                         "camoufox_circuit_probe_start",
-                        extra={"url": url, "oneshot": True, "token_id": oneshot_trial.token_id},
+                        extra={
+                            "url": url,
+                            "oneshot": True,
+                            "token_id": oneshot_trial.token_id,
+                        },
                     )
                 if self._warm_session is not None:
                     logger.info(
@@ -2230,7 +2402,22 @@ class _TimedBrowserLaunch:
 
     def __enter__(self) -> Any:
         t0 = time.perf_counter()
-        browser = self._inner.__enter__()
+        try:
+            browser = self._inner.__enter__()
+        except Exception as exc:
+            observe(
+                "browser_launch",
+                (time.perf_counter() - t0) * 1000,
+                category=OperationCategory.BROWSER_LAUNCH,
+                stage=self._store,
+                context={
+                    "outcome": "error",
+                    "error_type": type(exc).__name__,
+                    "failure_kind": _browser_launch_failure_kind(exc),
+                },
+                force_event=True,
+            )
+            raise
         observe(
             "browser_launch",
             (time.perf_counter() - t0) * 1000,
@@ -2247,6 +2434,23 @@ class _TimedBrowserLaunch:
     ) -> bool | None:
         result = self._inner.__exit__(exc_type, exc, tb)
         return result if isinstance(result, bool) else None
+
+
+def _browser_launch_failure_kind(exc: BaseException) -> str:
+    """Return a low-cardinality diagnostic without logging raw browser output."""
+    message = str(exc).casefold()
+    if (
+        "process did exit" in message
+        or "failed to launch the browser process" in message
+    ):
+        return "process_exit"
+    if "timeout" in message or "timed out" in message:
+        return "launch_timeout"
+    if "profile" in message or "parentlock" in message or "lock file" in message:
+        return "profile_or_lock"
+    if "executable doesn't exist" in message or "no such file or directory" in message:
+        return "missing_binary"
+    return "launch_error"
 
 
 def profile_dirs_for_base(base: Path) -> tuple[Path, Path]:

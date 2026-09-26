@@ -46,6 +46,19 @@ espaçados, preservando o sufixo discriminante, além das queries genéricas de
 MPN e título. Isso corrige modelos estruturados concatenados como
 `ryzen75800x3d` sem baixar thresholds gerais.
 
+### Identidade de monitores
+
+O código de modelo de monitor é um sinal exato quando existe; a ausência não é
+conflito. Em Search, monitores sem código também geram cedo uma consulta com a
+marca e a família legível extraída do título, seguida por uma variante com
+tamanho e taxa de atualização quando presentes. Isso preserva frases como
+`Samsung Odyssey G30` quando o campo `model` normalizado está concatenado
+(`odysseyg30`), sem alterar os gates de decisão do matcher. Para categorias de
+monitor, tamanho da tela, resolução com dimensões explícitas e taxa de
+atualização também são normalizados entre grafias equivalentes (por exemplo,
+`24"`/`24 pol.`, `FHD (1920x1080)`/`1920 x 1080 pixels` e `144Hz`/`144 Hz`).
+Dimensões ou frequências diferentes continuam sendo conflitos de variante.
+
 ## Arquitetura
 
 ```text

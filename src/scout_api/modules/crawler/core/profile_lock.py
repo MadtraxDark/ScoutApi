@@ -34,7 +34,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import IO, TYPE_CHECKING, Any, Protocol
+from typing import IO, TYPE_CHECKING, Protocol
 
 from scout_api.modules.crawler.core.exceptions import RequestError
 
@@ -60,6 +60,14 @@ else
 end
 """
 
+_RENEW_LUA = """
+if redis.call('get', KEYS[1]) == ARGV[1] then
+    return redis.call('pexpire', KEYS[1], ARGV[2])
+else
+    return 0
+end
+"""
+
 # Poll interval when waiting for a locked profile to become available.
 _POLL_INTERVAL_S = 0.05  # 50 ms
 
@@ -67,6 +75,7 @@ _POLL_INTERVAL_S = 0.05  # 50 ms
 # ---------------------------------------------------------------------------
 # Lease
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class ProfileLockLease:
@@ -79,13 +88,23 @@ class ProfileLockLease:
     profile_path: Path
     backend: str  # "redis" | "file" | "null" | "redis_failopen" | "file_noop"
     _token: str = field(default="", repr=False)
+    _ttl_ms: int | None = field(default=None, repr=False)
+    _renew_stop: threading.Event | None = field(default=None, repr=False)
+    _renew_thread: threading.Thread | None = field(default=None, repr=False)
+    _lost_event: threading.Event = field(default_factory=threading.Event, repr=False)
     # File handle kept open for the duration of a file lock.
     _file_handle: IO[str] | None = field(default=None, repr=False)
+
+    @property
+    def lost(self) -> bool:
+        """Whether a renewable backend lease is known to have been lost."""
+        return self._lost_event.is_set()
 
 
 # ---------------------------------------------------------------------------
 # Protocol
 # ---------------------------------------------------------------------------
+
 
 class ProfileLock(Protocol):
     """Cross-process profile ownership lock."""
@@ -113,10 +132,15 @@ class ProfileLock(Protocol):
         """Release ownership. Idempotent; never raises."""
         ...
 
+    def retain(self, lease: ProfileLockLease) -> bool:
+        """Keep ownership beyond one fetch; return whether the backend supports it."""
+        ...
+
 
 # ---------------------------------------------------------------------------
 # Null implementation (off mode / emergency)
 # ---------------------------------------------------------------------------
+
 
 class NullProfileLock:
     """No-op profile lock. Logs WARN on every acquire — dev/emergency only."""
@@ -138,10 +162,15 @@ class NullProfileLock:
     def release(self, lease: ProfileLockLease) -> None:
         pass  # no-op
 
+    def retain(self, lease: ProfileLockLease) -> bool:
+        del lease
+        return False
+
 
 # ---------------------------------------------------------------------------
 # Redis implementation (primary, recommended)
 # ---------------------------------------------------------------------------
+
 
 class RedisProfileLock:
     """Cross-process profile ownership via Redis SET NX PX + compare-and-delete.
@@ -215,6 +244,7 @@ class RedisProfileLock:
                     profile_path=profile_path,
                     backend="redis",
                     _token=token,
+                    _ttl_ms=self._ttl_ms,
                 )
 
             remaining = deadline - time.monotonic()
@@ -239,6 +269,14 @@ class RedisProfileLock:
     def release(self, lease: ProfileLockLease) -> None:
         if lease.backend.startswith("redis_failopen") or lease.backend == "null":
             return
+        stop = lease._renew_stop
+        worker = lease._renew_thread
+        if stop is not None:
+            stop.set()
+        if worker is not None and worker is not threading.current_thread():
+            worker.join(timeout=1.0)
+        lease._renew_stop = None
+        lease._renew_thread = None
         key = self._key(lease.profile_path)
         client = self._gateway.get_client()
         if client is None:
@@ -257,17 +295,85 @@ class RedisProfileLock:
             )
             self._gateway.reset()
 
+    def retain(self, lease: ProfileLockLease) -> bool:
+        """Renew the Redis lease while a persistent browser owns its profile."""
+        if lease.backend != "redis":
+            return False
+        if lease._renew_thread is not None and lease._renew_thread.is_alive():
+            return True
+        if lease._ttl_ms is None:
+            return False
+        stop = threading.Event()
+        lease._renew_stop = stop
+        worker = threading.Thread(
+            target=self._renew_loop,
+            args=(lease, stop),
+            name="camoufox-profile-lock-renew",
+            daemon=True,
+        )
+        lease._renew_thread = worker
+        worker.start()
+        return True
+
+    def _renew_loop(self, lease: ProfileLockLease, stop: threading.Event) -> None:
+        interval_s = max(0.05, (lease._ttl_ms or self._ttl_ms) / 3000.0)
+        key = self._key(lease.profile_path)
+        while not stop.wait(interval_s):
+            client = self._gateway.get_client()
+            if client is None:
+                lease._lost_event.set()
+                logger.warning(
+                    "profile_lock_renew_lost",
+                    extra={
+                        "profile_path": str(lease.profile_path),
+                        "reason": "redis_unavailable",
+                    },
+                )
+                return
+            try:
+                renewed = client.eval(
+                    _RENEW_LUA,
+                    1,
+                    key,
+                    lease._token.encode("utf-8"),
+                    str(lease._ttl_ms or self._ttl_ms),
+                )
+            except Exception:
+                self._gateway.reset()
+                lease._lost_event.set()
+                logger.warning(
+                    "profile_lock_renew_lost",
+                    extra={
+                        "profile_path": str(lease.profile_path),
+                        "reason": "redis_error",
+                    },
+                    exc_info=True,
+                )
+                return
+            if not renewed:
+                lease._lost_event.set()
+                logger.warning(
+                    "profile_lock_renew_lost",
+                    extra={
+                        "profile_path": str(lease.profile_path),
+                        "reason": "token_mismatch",
+                    },
+                )
+                return
+
 
 # ---------------------------------------------------------------------------
 # File implementation (secondary / alternative)
 # ---------------------------------------------------------------------------
+
 
 class FileProfileLock:
     """fcntl.flock-based profile lock (Linux).
 
     WARNING: Advisory file locks may not be propagated across different container
     filesystems on the same bind mount (Docker Desktop Windows + VirtioFS).
-    Use only after proving on real bind mount via scripts/probe_profile_lock_multiprocess.py.
+    Use only after proving on a real bind mount via
+    scripts/probe_profile_lock_multiprocess.py.
     On Windows (no fcntl) this degrades to no-op with a warning.
 
     Thread-safe: each acquisition opens a separate file descriptor.
@@ -285,7 +391,10 @@ class FileProfileLock:
         except ImportError:
             logger.warning(
                 "profile_lock_file_unavailable",
-                extra={"profile_path": str(profile_path), "reason": "fcntl_not_available"},
+                extra={
+                    "profile_path": str(profile_path),
+                    "reason": "fcntl_not_available",
+                },
             )
             return ProfileLockLease(
                 profile_path=profile_path,
@@ -324,7 +433,7 @@ class FileProfileLock:
                             f"({timeout_ms} ms) para {profile_path}.",
                             code="PROFILE_LOCK_TIMEOUT",
                             retryable=True,
-                        )
+                        ) from None
                     logger.debug(
                         "profile_lock_waiting",
                         extra={
@@ -349,6 +458,7 @@ class FileProfileLock:
             return
         try:
             import fcntl as _fcntl
+
             _fcntl.flock(fd.fileno(), _fcntl.LOCK_UN)
         except Exception:
             pass
@@ -362,10 +472,14 @@ class FileProfileLock:
             extra={"profile_path": str(lease.profile_path), "backend": "file"},
         )
 
+    def retain(self, lease: ProfileLockLease) -> bool:
+        return lease.backend == "file"
+
 
 # ---------------------------------------------------------------------------
 # Factory
 # ---------------------------------------------------------------------------
+
 
 def build_profile_lock(
     mode: str,

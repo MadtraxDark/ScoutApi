@@ -49,6 +49,15 @@ não indexar o modelo concatenado `ryzen75800x3d`. O SKU e seus sufixos são
 mantidos integralmente. As queries genéricas de OPN/título continuam como
 fallback dentro do mesmo budget.
 
+Consultas com atributos localizáveis usam o `query_locale` configurado na
+integração da loja (`StoreConfig`). Por padrão, a metadata deriva `pt-BR`,
+`en-US` ou `es-PY` do país; lojas podem sobrescrever esse locale explicitamente.
+Cada loja recebe sua própria ladder: por exemplo, cor `Rosa` mantém uma query
+`rosa` para pt-BR e prioriza `pink` para en-US. Identificadores, códigos de
+modelo e frases comerciais não são traduzidos. Os aliases de cor restantes
+continuam disponíveis como fallback sem multiplicar a quantidade de queries;
+a ladder preserva seu dedup e o budget existente por loja.
+
 ## Budgets por loja (StoreAttemptBudget)
 
 Cada loja dentro de um `MatchRun` opera sob três budgets independentes
@@ -90,12 +99,40 @@ O `BrowserScheduler` limita o número de slots Camoufox simultâneos:
 - `CAMOUFOX_BROWSER_CAPACITY=1` em produção (decisão C1 — ADR 0039).
 - Fila saturada → `RequestError(code="BROWSER_QUEUE_SATURATED")` em vez de hang.
 - `ProfileLock` (Redis primary, fcntl fallback) previne dois processos abrindo
-  o mesmo diretório de perfil simultaneamente.
+  o mesmo diretório de perfil simultaneamente. A lease Redis permanece retida
+  enquanto a sessão Camoufox warm usa o perfil, com renovação periódica; a
+  sessão fecha após até 10 s ociosa (limitado pelo timeout de aquisição e TTL).
+  Ao fechar ou falhar a retenção, o perfil é liberado/fechado com segurança.
 - `BrowserCircuitBreaker.claim_trial()`: token atômico no estado HALF_OPEN
   garante singleflight (sem thundering herd de launch).
 - Failure domains: circuit por store key; falha de infra (launch) ≠ `NO_MATCH`.
 
-Ver ADR 0037 (launch health + fail-fast) e ADR 0039 (bounded scheduler C1).
+O slot local de execução volta à fila ao fim de cada fetch, mas a lease global
+do perfil acompanha a sessão persistente até seu fechamento. A configuração
+C1 continua limitando a um proprietário Camoufox por perfil. Ver ADR 0037
+(launch health + fail-fast), ADR 0039 (bounded scheduler C1) e ADR 0044
+(lifecycle da lease da sessão warm).
+
+## Evidência semântica experimental (ADR 0043)
+
+Embeddings são opt-in no `match-runner` (`MATCH_EMBEDDINGS_MODE=off` por padrão).
+Shadow mode consulta apenas quando `MatchingEngine` retorna `review` por
+`variant_semantic_uncertain`, depois dos gates determinísticos. O resultado
+resume modelo, similaridade, latência, cache hit e tokens reportados pelo
+provider em `MatchRun`; nenhum vetor é
+persistido. A falha de provider mantém a decisão tradicional. O cache é limitado
+e local ao processo, sem Redis nem vector search.
+
+O modo `active` exige API key e limiar explícito; além disso, só pode promover
+`review` com `brand_model_exact` e `variant_semantic_uncertain`, sem preço
+extremo ou outra razão de conflito. Não habilitar até o benchmark rotulado
+validar precisão, falso positivo e limiar. A habilitação também envia os títulos
+e atributos dos casos elegíveis ao provider configurado; consulte a política de
+retenção aplicável antes de ativar.
+
+Implementação: [`embedding_evidence.py`](../../src/scout_api/modules/matching/embedding_evidence.py),
+provider em [`embedding_provider.py`](../../src/scout_api/modules/matching/embedding_provider.py),
+fixture/runner e [baseline smoke](embedding-acceptance-baseline.md).
 
 ## Hang defense-in-depth (match-runner)
 
@@ -103,7 +140,7 @@ Uma MatchRun travada **não** pode bloquear o único worker indefinidamente.
 
 | Camada | Setting | Default | Efeito |
 |---|---|---|---|
-| Store wall | `MATCH_STORE_WALL_TIMEOUT_SECONDS` | 180 | Deadline absoluto por loja (monotonic). Estouro → store `error` `STORE_WALL_TIMEOUT` (nunca `NO_MATCH`). Run continua. |
+| Store wall | `MATCH_STORE_WALL_TIMEOUT_SECONDS` | 180 | Deadline absoluto por loja (monotonic); no Product Match também limita a espera na fila C1. Estouro → store `error` `STORE_WALL_TIMEOUT` (nunca `NO_MATCH`). Run continua. |
 | Run wall | `MATCH_RUN_WALL_TIMEOUT_SECONDS` | 2700 | Desde claim/processamento (PENDING não conta). Estouro → run `failed` `RUN_WALL_TIMEOUT`. |
 | Watchdog | `MATCH_RUN_WATCHDOG_STALE_SECONDS` | 600 | Sem **progresso real** → `os._exit(78)` + Docker restart + reclaim ADR 0036. |
 | Flag | `MATCH_RUN_WATCHDOG_ENABLED` | true | Rollback operacional. |

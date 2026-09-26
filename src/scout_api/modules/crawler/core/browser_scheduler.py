@@ -23,6 +23,9 @@ import logging
 import threading
 import time
 from collections import deque
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar, Token
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -37,6 +40,23 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# Match workers can temporarily cap a browser queue wait to their own absolute
+# deadline. Context-local state keeps unrelated crawler/browser calls on the
+# configured queue timeout and avoids changing global C1 scheduler settings.
+_queue_deadline: ContextVar[float | None] = ContextVar(
+    "browser_queue_deadline", default=None
+)
+
+
+@contextmanager
+def browser_queue_deadline(deadline_monotonic: float | None) -> Iterator[None]:
+    """Bound browser queue waiting to an operation's monotonic deadline."""
+    token: Token[float | None] = _queue_deadline.set(deadline_monotonic)
+    try:
+        yield
+    finally:
+        _queue_deadline.reset(token)
+
 
 @dataclass
 class _Waiter:
@@ -48,8 +68,8 @@ class _Waiter:
     """
 
     event: threading.Event
-    slot_id: int | None = None      # None until pre-granted by _wake_next_unlocked()
-    enqueue_time: float = 0.0       # time.monotonic() when the waiter was enqueued
+    slot_id: int | None = None  # None until pre-granted by _wake_next_unlocked()
+    enqueue_time: float = 0.0  # time.monotonic() when the waiter was enqueued
 
 
 class BrowserScheduler:
@@ -122,6 +142,11 @@ class BrowserScheduler:
         if self._profile_base_path is None:
             return None
         return self._profile_base_path / f"slot-{slot_id}"
+
+    @property
+    def profile_lock_timeout_ms(self) -> int:
+        """Configured maximum waiter time, used to bound warm-session idle ownership."""
+        return self._profile_lock_timeout_ms
 
     def _wrap_with_profile_lock(self, slot_id: int) -> BrowserSlotLease:
         """Acquire profile lock for ``slot_id`` and return a BrowserSlotLease.
@@ -196,7 +221,19 @@ class BrowserScheduler:
         # lock acquisition AFTER releasing self._lock.
         _immediate_slot_id: int | None = None
         depth: int = 0
+        operation_deadline = _queue_deadline.get()
         with self._lock:
+            # Check under the scheduler lock as well, so an expired Match
+            # deadline cannot take the immediate slot or leave a queued waiter.
+            if (
+                operation_deadline is not None
+                and time.monotonic() >= operation_deadline
+            ):
+                raise RequestError(
+                    "Prazo da loja esgotado antes de adquirir o browser.",
+                    code="BROWSER_QUEUE_TIMEOUT",
+                    retryable=True,
+                )
             slot_id = self._try_immediate_unlocked()
             if slot_id is not None:
                 self._total_acquisitions += 1
@@ -247,11 +284,20 @@ class BrowserScheduler:
         )
 
         # --- Wait loop (no lock held here) ---
+        now = time.monotonic()
         timeout_s = self._timeout_ms / 1000.0
-        deadline = time.monotonic() + timeout_s
+        if operation_deadline is not None:
+            # The configured queue timeout remains the default. For a Match
+            # store, waiting may use its remaining wall budget, but never past
+            # that deadline.
+            timeout_s = max(timeout_s, operation_deadline - now)
+        deadline = now + timeout_s
 
         while True:
             remaining = deadline - time.monotonic()
+
+            if operation_deadline is not None:
+                remaining = min(remaining, operation_deadline - time.monotonic())
 
             # Check cancel before potentially blocking
             if cancel_event is not None and cancel_event.is_set():
@@ -297,6 +343,16 @@ class BrowserScheduler:
 
                 # Race win: self._lock released — safe to acquire profile lock.
                 if _race_slot_id is not None:
+                    if (
+                        operation_deadline is not None
+                        and time.monotonic() >= operation_deadline
+                    ):
+                        self.release(BrowserSlotLease(slot_id=_race_slot_id))
+                        raise RequestError(
+                            "Prazo da loja esgotado aguardando o browser.",
+                            code="BROWSER_QUEUE_TIMEOUT",
+                            retryable=True,
+                        )
                     logger.debug(
                         "browser_slot_acquired_race",
                         extra={
@@ -335,10 +391,18 @@ class BrowserScheduler:
                     "BrowserScheduler invariant violated: "
                     "slot_id must be set before event.set()"
                 )
+                if (
+                    operation_deadline is not None
+                    and time.monotonic() >= operation_deadline
+                ):
+                    self.release(BrowserSlotLease(slot_id=slot_id))
+                    raise RequestError(
+                        "Prazo da loja esgotado aguardando o browser.",
+                        code="BROWSER_QUEUE_TIMEOUT",
+                        retryable=True,
+                    )
                 self._total_acquisitions += 1
-                wait_ms = round(
-                    (time.monotonic() - waiter.enqueue_time) * 1000, 1
-                )
+                wait_ms = round((time.monotonic() - waiter.enqueue_time) * 1000, 1)
                 logger.debug(
                     "browser_slot_acquired_from_queue",
                     extra={
@@ -365,7 +429,11 @@ class BrowserScheduler:
         # Release profile lock BEFORE returning slot to pool.
         # This ensures the next owner can acquire the profile lock immediately
         # after this release without racing against a profile lock still held.
-        if self._profile_lock is not None and lease._profile_lock_lease is not None:
+        if (
+            not lease._profile_lock_retained
+            and self._profile_lock is not None
+            and lease._profile_lock_lease is not None
+        ):
             try:
                 self._profile_lock.release(lease._profile_lock_lease)
             except Exception:
@@ -374,6 +442,7 @@ class BrowserScheduler:
                     extra={"slot_id": lease.slot_id},
                     exc_info=True,
                 )
+            lease._profile_lock_lease = None
 
         with self._lock:
             self._active -= 1
@@ -389,6 +458,39 @@ class BrowserScheduler:
                 },
             )
             self._wake_next_unlocked()
+
+    def retain_profile_lock(self, lease: BrowserSlotLease) -> bool:
+        """Retain profile ownership after releasing the short-lived scheduler slot."""
+        if self._profile_lock is None or lease._profile_lock_lease is None:
+            return False
+        try:
+            retained = self._profile_lock.retain(lease._profile_lock_lease)
+        except Exception:
+            logger.warning(
+                "profile_lock_retain_error",
+                extra={"slot_id": lease.slot_id},
+                exc_info=True,
+            )
+            return False
+        lease._profile_lock_retained = retained
+        return retained
+
+    def release_profile_lock(self, lease: BrowserSlotLease) -> None:
+        """Release a retained profile lease without changing scheduler capacity."""
+        if self._profile_lock is None or lease._profile_lock_lease is None:
+            lease._profile_lock_retained = False
+            return
+        try:
+            self._profile_lock.release(lease._profile_lock_lease)
+        except Exception:
+            logger.warning(
+                "profile_lock_release_error",
+                extra={"slot_id": lease.slot_id},
+                exc_info=True,
+            )
+        finally:
+            lease._profile_lock_lease = None
+            lease._profile_lock_retained = False
 
     def snapshot(self) -> dict[str, object]:
         """Return a point-in-time view of scheduler state for logging/metrics.

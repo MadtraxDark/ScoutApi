@@ -15,6 +15,10 @@ from scout_api.core.config import Settings, get_settings
 from scout_api.core.database import get_session_factory
 from scout_api.core.performance import OperationCategory, timed
 from scout_api.modules.crawler.core.exceptions import ParseError, RequestError
+from scout_api.modules.matching.embedding_evidence import (
+    MatchEmbeddingEvaluator,
+    MatchEmbeddingRuntime,
+)
 from scout_api.modules.matching.identity import identity_reference_item
 from scout_api.modules.matching.match_deadlines import MonotonicDeadline
 from scout_api.modules.matching.match_hang_constants import (
@@ -42,6 +46,8 @@ from scout_api.modules.matching.product_match_service import (
     ProductMatchService,
 )
 from scout_api.modules.matching.schemas import MatchRequest, MatchResponse
+
+_embedding_runtime: MatchEmbeddingRuntime | None = None
 
 logger = logging.getLogger(__name__)
 
@@ -151,9 +157,19 @@ def _execute_match_for_run(
     on_store_outcome: Any,
     skip_stores: frozenset[str] | set[str] | None = None,
     run_deadline: MonotonicDeadline | None = None,
+    embedding_evaluator: MatchEmbeddingEvaluator | None = None,
+    settings: Settings | None = None,
 ) -> MatchResponse:
     """Match using catalog identity first; live reference scrape only as fallback."""
-    match_service = ProductMatchService(session=session)
+    cfg = settings or get_settings()
+    match_service_args: dict[str, Any] = {"session": session}
+    if cfg.match_embeddings_mode != "off" and embedding_evaluator is not None:
+        match_service_args.update(
+            embedding_evaluator=embedding_evaluator,
+            embedding_mode=cfg.match_embeddings_mode,
+            embedding_active_threshold=cfg.match_embeddings_active_similarity_threshold,
+        )
+    match_service = ProductMatchService(**match_service_args)
     product = session.get(CanonicalProduct, product_id)
     run_id_str = str(run_id)
 
@@ -209,6 +225,7 @@ def _execute_match_for_run(
                 "code": exc.code,
             },
         )
+        assert product is not None
         reference = _reference_from_canonical(product)
         return match_service.match_from_item(
             reference,  # type: ignore[arg-type]
@@ -230,6 +247,7 @@ def process_claimed_run(
     *,
     worker_id: str,
     settings: Settings,
+    embedding_runtime: MatchEmbeddingRuntime | None = None,
 ) -> ProductMatchRun:
     """Execute one claimed match run; never raises — status is persisted."""
     run_id = run.id
@@ -370,15 +388,23 @@ def process_claimed_run(
                 "skip_stores": sorted(skip_stores),
             },
         ):
-            response = _execute_match_for_run(
-                session,
-                run_id=run_id,
-                product_id=product_id,
-                reference_url=reference_url,
-                on_store_outcome=on_store_outcome,
-                skip_stores=skip_stores,
-                run_deadline=run_deadline,
-            )
+            execute_kwargs: dict[str, Any] = {
+                "run_id": run_id,
+                "product_id": product_id,
+                "reference_url": reference_url,
+                "on_store_outcome": on_store_outcome,
+                "skip_stores": skip_stores,
+                "run_deadline": run_deadline,
+            }
+            if (
+                settings.match_embeddings_mode != "off"
+                and embedding_runtime is not None
+            ):
+                execute_kwargs.update(
+                    embedding_evaluator=embedding_runtime.new_run(),
+                    settings=settings,
+                )
+            response = _execute_match_for_run(session, **execute_kwargs)
 
         GLOBAL_MATCH_PROGRESS.mark_progress(
             run_id=run_id_str,
@@ -468,12 +494,12 @@ def process_claimed_run(
         GLOBAL_MATCH_PROGRESS.disarm(run_id=run_id_str)
 
 
-
 def sweep_once(
     session: Session,
     *,
     worker_id: str,
     settings: Settings | None = None,
+    embedding_runtime: MatchEmbeddingRuntime | None = None,
 ) -> dict[str, Any]:
     """Reconcile exhausted stale leases, then claim and process due runs."""
     cfg = settings or get_settings()
@@ -493,7 +519,13 @@ def sweep_once(
         row = session.get(ProductMatchRun, run.id)
         if row is None:
             continue
-        process_claimed_run(session, row, worker_id=worker_id, settings=cfg)
+        process_claimed_run(
+            session,
+            row,
+            worker_id=worker_id,
+            settings=cfg,
+            embedding_runtime=embedding_runtime,
+        )
         session.commit()
         processed += 1
 
@@ -570,9 +602,31 @@ def stop_scheduler() -> None:
 
 
 def run_forever(*, settings: Settings | None = None) -> None:
-    global _STOP, _active_watchdog
+    global _STOP, _active_watchdog, _embedding_runtime
     cfg = settings or get_settings()
+    _embedding_runtime = None
     worker_id = new_worker_id()
+    if cfg.match_embeddings_mode != "off":
+        if (
+            cfg.match_embeddings_provider == "openai_compatible"
+            or cfg.match_embeddings_api_key
+        ):
+            try:
+                _embedding_runtime = MatchEmbeddingRuntime(cfg)
+                logger.info(
+                    "match_embedding_runtime_ready",
+                    extra={
+                        "mode": cfg.match_embeddings_mode,
+                        "provider": cfg.match_embeddings_provider,
+                        "model": cfg.match_embeddings_model,
+                        "dimensions": cfg.match_embeddings_dimensions,
+                    },
+                )
+            except Exception:  # noqa: BLE001 - worker keeps baseline available
+                _embedding_runtime = None
+                logger.exception("match_embedding_runtime_unavailable")
+        else:
+            logger.warning("match_embedding_runtime_disabled_missing_credentials")
     signal.signal(signal.SIGINT, _handle_stop)
     signal.signal(signal.SIGTERM, _handle_stop)
     logger.info("match_run_worker_started", extra={"worker_id": worker_id})
@@ -590,7 +644,12 @@ def run_forever(*, settings: Settings | None = None) -> None:
             try:
                 factory = get_session_factory()
                 with factory() as session:
-                    sweep_once(session, worker_id=worker_id, settings=cfg)
+                    sweep_once(
+                        session,
+                        worker_id=worker_id,
+                        settings=cfg,
+                        embedding_runtime=_embedding_runtime,
+                    )
             except Exception:  # noqa: BLE001
                 logger.exception("match_run_worker_sweep_failed")
             time.sleep(interval)
@@ -598,6 +657,9 @@ def run_forever(*, settings: Settings | None = None) -> None:
         watchdog.request_shutdown()
         watchdog.stop()
         _active_watchdog = None
+        if _embedding_runtime is not None:
+            _embedding_runtime.close()
+            _embedding_runtime = None
         logger.info("match_run_worker_stopped", extra={"worker_id": worker_id})
 
 

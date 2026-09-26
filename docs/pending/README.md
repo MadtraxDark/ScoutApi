@@ -82,13 +82,55 @@ Itens resolvidos **não** ficam no índice ativo.
 
 | ID | Título | Status | Tipo | Prioridade | Área |
 |---|---|---|---|---|---|
-| [PENDING-016](PENDING-016-shopee-match-wall-time.md) | Shopee domina wall-time Product Match full-store | OPEN | PERFORMANCE | P1 | crawler/shopee |
-| [PENDING-017](PENDING-017-match-reenable-ml-shopee.md) | Reativar ML/Shopee no Product Match após login estável | OPEN | INCOMPLETE | P1 | matching |
-| [PENDING-019](PENDING-019-pricescout-match-start-failure-smoke.md) | Completar smoke de falhas no start do Product Match | OPEN | TESTING | P2 | frontend/product-match |
-| [PENDING-020](PENDING-020-product-match-monitor-live-smoke.md) | Validar Product Match live em vários monitores reais | IN_PROGRESS | TESTING | P2 | matching/monitor |
-| [PENDING-021](PENDING-021-store-logo-deployment-smoke.md) | Aplicar e validar o fluxo de logos no ambiente integrado | IN_PROGRESS | TESTING | P1 | matching/store-admin |
+| *(nenhuma)* | — | — | — | — | — |
 
-*(pendências ativas: 5)*
+*(pendências ativas: nenhuma)*
+
+Resolvidas em 2026-09-26 por delimitação explícita de escopo ao ambiente local:
+
+- [resolved/PENDING-021-store-logo-deployment-smoke.md](resolved/PENDING-021-store-logo-deployment-smoke.md)
+  — o fluxo local foi validado; não haverá deploy de produção que exija smoke
+  HTTPS.
+- [resolved/PENDING-024-product-match-embeddings-shadow.md](resolved/PENDING-024-product-match-embeddings-shadow.md)
+  — experimento local em shadow concluído com evidência persistida. O corpus é
+  exploratório e não qualifica o modo `active`; ativação e benchmark de
+  produção não fazem parte do escopo.
+
+Arquivadas em 2026-09-25 por decisão explícita do usuário:
+
+- [resolved/PENDING-016-shopee-match-wall-time.md](resolved/PENDING-016-shopee-match-wall-time.md)
+  — Shopee permanece desativada no Product Match; não implica correção do wall-time.
+- [resolved/PENDING-017-match-reenable-ml-shopee.md](resolved/PENDING-017-match-reenable-ml-shopee.md)
+  — Mercado Livre e Shopee permanecem desativadas no Product Match; reativação
+  fora do escopo atual.
+
+Resolvida em 2026-09-25:
+
+- [resolved/PENDING-019-pricescout-match-start-failure-smoke.md](resolved/PENDING-019-pricescout-match-start-failure-smoke.md)
+  — matriz Playwright cobriu erros HTTP/rede, double-click, confirmação tardia
+  e saída de `worker_lost`; Compose isolado provou queda abrupta do worker e
+  reclaim da mesma Run na tentativa 2 após expiração da lease.
+- [resolved/PENDING-025-product-match-camoufox-live-recovery.md](resolved/PENDING-025-product-match-camoufox-live-recovery.md)
+  — imagem atual validada em Docker; lease Redis bloqueou segundo processo no
+  mesmo profile; MatchRun real concluiu sem falha de launch/circuit; queries
+  EN/PT validadas. Visão VIP e AliExpress falharam por fila na wave concorrente,
+  mas passaram no smoke individual; PENDING-026 corrigiu o timeout fixo da fila
+  C1 e PENDING-027 corrigiu os falsos conflitos de marca derivados de IDs URL,
+  com validação concorrente das duas lojas sem timeout.
+
+Resolvida em 2026-09-25:
+
+- [PENDING-026](PENDING-026-match-wave-c1-browser-queue-timeout.md)
+  — deadline da fila C1 limitado ao wall time da loja; 14 testes direcionados
+  e MatchRun live sem `BROWSER_QUEUE_TIMEOUT`.
+- [PENDING-027](PENDING-027-match-c1-store-wall-time.md)
+  — falso título numérico da URL fazia AliExpress rejeitar candidatos antes do
+  scrape e gastar buscas adicionais; corrigido e validado em AliExpress + Visão
+  VIP concorrentes, sem timeout.
+- [resolved/PENDING-020-product-match-monitor-live-smoke.md](resolved/PENDING-020-product-match-monitor-live-smoke.md)
+  — Product Match live validado com código igual, divergente e ausente na
+  referência. Odyssey G30 da Magalu → Terabyte `auto_match` 0.97; conflitos
+  explícitos de variante seguem rejeitados.
 
 Resolvida em 2026-09-24:
 
@@ -105,16 +147,13 @@ Resolvida em 2026-09-23:
   POST via `browser_post` (in-page `fetch` no Camoufox — httpx /
   APIRequestContext = CF 403)
 
-Nota 2026-09-22: Shopee/ML estão com `match_enabled=false` no Match automático
-(PENDING-017). PENDING-016 permanece relevante para quando forem reativadas.
-
 Resolvida em 2026-09-22:
 
 - PENDING-015 Product Match concorrência + benchmark live — arquivo
   apagado; waves 3-fase + scrape budget + owner-thread; subset 8
   (`…004109Z`) cold 277,6s / warm 128,4s / 3 MATCH; full 13
   (`…023048Z`) sem hang cold 1726s / warm 2225s / 2 MATCH / 3 ERROR;
-  follow-up Shopee → PENDING-016
+  follow-up Shopee → [PENDING-016 arquivada](resolved/PENDING-016-shopee-match-wall-time.md)
 
 Resolvida em 2026-09-21:
 
@@ -153,6 +192,11 @@ Resolvida em 2026-09-19:
 
 Arquivo apagado (preferencial) ou pasta [`resolved/`](resolved/) quando arquivado.
 O Git preserva o histórico em qualquer caso.
+
+Resolvida em 2026-09-24 (Redis runtime):
+
+- [`resolved/PENDING-023-redis-runtime-capability-audit.md`](resolved/PENDING-023-redis-runtime-capability-audit.md)
+  — imagem, versão, módulos, memória, eviction, persistência e latência amostral.
 
 Resolvidas em 2026-09-19 (Best Buy Akamai):
 

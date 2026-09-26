@@ -205,6 +205,49 @@ _COLOR_SEARCH_SYNONYMS: dict[str, tuple[str, ...]] = {
     ),
 }
 
+_COLOR_SEARCH_LOCALE_LABELS: dict[str, dict[str, str]] = {
+    "black": {"en": "black", "pt": "preto", "es": "negro"},
+    "white": {"en": "white", "pt": "branco", "es": "blanco"},
+    "blue": {"en": "blue", "pt": "azul", "es": "azul"},
+    "red": {"en": "red", "pt": "vermelho", "es": "rojo"},
+    "green": {"en": "green", "pt": "verde", "es": "verde"},
+    "teal": {"en": "teal", "pt": "verde acinzentado", "es": "verde azulado"},
+    "pink": {"en": "pink", "pt": "rosa", "es": "rosa"},
+    "purple": {"en": "purple", "pt": "roxo", "es": "morado"},
+    "gray": {"en": "gray", "pt": "cinza", "es": "gris"},
+    "gold": {"en": "gold", "pt": "dourado", "es": "dorado"},
+    "silver": {"en": "silver", "pt": "prata", "es": "plateado"},
+    "orange": {"en": "orange", "pt": "laranja", "es": "naranja"},
+}
+
+# Category labels are search vocabulary, not scoring signals. The canonical
+# category stays locale-neutral; each integration's configured search locale
+# selects at most one localized phrase for candidate discovery.
+_CATEGORY_SEARCH_LABELS: dict[str, dict[str, str]] = {
+    "gpu": {"pt": "placa de video", "en": "graphics card", "es": "tarjeta grafica"},
+    "cpu": {"pt": "processador", "en": "processor", "es": "procesador"},
+    "motherboard": {"pt": "placa mae", "en": "motherboard", "es": "placa base"},
+    "monitor": {"pt": "monitor", "en": "monitor", "es": "monitor"},
+    "smartphone": {"pt": "celular", "en": "smartphone", "es": "telefono"},
+    "ssd": {"pt": "ssd", "en": "ssd", "es": "ssd"},
+}
+_CATEGORY_SEARCH_ALIASES = {
+    "graphics_card": "gpu",
+    "graphics card": "gpu",
+    "video_card": "gpu",
+    "video card": "gpu",
+    "placa_de_video": "gpu",
+    "placa de video": "gpu",
+    "processor": "cpu",
+    "processor_cpu": "cpu",
+    "placa_mae": "motherboard",
+    "placa mae": "motherboard",
+    "baseboard": "motherboard",
+    "mobile_phone": "smartphone",
+    "phone": "smartphone",
+    "solid_state_drive": "ssd",
+}
+
 _CONDITION_TOKENS = frozenset(
     {
         "renewed",
@@ -264,6 +307,7 @@ _MODEL_FAMILY_MARKERS: tuple[str, ...] = (
     "playstation",
     "rtx",
     "gtx",
+    "rx",
 )
 
 # Manufacturer part-number shapes frequently published in titles / model fields.
@@ -282,6 +326,15 @@ _MPN_PATTERNS: tuple[re.Pattern[str], ...] = (
     # (e.g. G5070-12S3C). Generic alnum+hyphen forms — not store-specific.
     re.compile(r"\b\d{3}-v\d{3}-\d{3}\b"),
     re.compile(r"\bg\d{4}-\d{1,2}[a-z0-9]{2,4}\b"),
+    # Manufacturer codes such as RX-76PSWFTFY: require a letter+digit mix on
+    # both sides so generation/model strings like RTX-5060 are not treated as
+    # opaque part numbers.
+    re.compile(
+        r"\b(?=[a-z0-9-]{8,}\b)"
+        r"(?=[a-z]{2,5}-[a-z0-9-]*[a-z])"
+        r"(?=[a-z]{2,5}-[a-z0-9-]*\d)"
+        r"[a-z]{2,5}-[a-z0-9-]{4,}\b"
+    ),
     # Motherboard / board marketing PNs (TUF-GAMING-B650M-E-WIFI) and ASUS
     # board SKUs (90MB1FV0-M0EAY0). Require a digit so pure marketing phrases
     # are not treated as identifiers.
@@ -674,6 +727,7 @@ def extract_all_mpn_forms(*texts: str | None) -> list[tuple[str, str]]:
         re.compile(r"\bHX\d{3}[A-Za-z0-9]{4,}\b"),
         re.compile(r"\b\d{3}-V\d{3}-\d{3}\b", re.IGNORECASE),
         re.compile(r"\bG\d{4}-\d{1,2}[A-Za-z0-9]{2,4}\b", re.IGNORECASE),
+        re.compile(r"\b[A-Za-z]{2,5}-[A-Za-z0-9-]{4,}\b"),
     )
     for pattern in _MPN_PATTERNS:
         for match in pattern.finditer(folded):
@@ -905,12 +959,19 @@ def looks_like_mpn(token: str | None) -> bool:
 
 
 def _gpu_signature(text: str | None) -> str | None:
-    folded = fold_text(text or "")
-    match = re.search(r"\b(rtx|gtx)\s*(\d{4})\s*(ti|super)?\b", folded)
-    if not match:
+    chip = extract_gpu_chip(text)
+    return chip[1] if chip else None
+
+
+def _localized_category_search_term(
+    category: str | None, locale: str | None
+) -> str | None:
+    if not category or not locale:
         return None
-    suffix = match.group(3) or ""
-    return f"{match.group(1)}{match.group(2)}{suffix}"
+    folded_category = fold_text(category).replace(" ", "_")
+    canonical = _CATEGORY_SEARCH_ALIASES.get(folded_category, folded_category)
+    labels = _CATEGORY_SEARCH_LABELS.get(canonical)
+    return labels.get(locale.split("-", maxsplit=1)[0].casefold()) if labels else None
 
 
 def _is_wifi_variant_label(text: str | None) -> bool:
@@ -942,6 +1003,18 @@ def _motherboard_board_signature(text: str | None) -> str | None:
     )
     if match:
         return f"{match.group(1)}{match.group(2)}"
+    # Common motherboard board suffixes can be separated by spaces in titles
+    # (e.g. A520M K V2 / A520M DS3H V2). Keep this generic and exclude common
+    # platform/spec tokens so AM4, DDR4, and similar text are not SKU suffixes.
+    spaced = re.search(
+        r"\b([abzhx]\d{3}m?)\s+([a-z]{1,4}\d[a-z0-9]{0,3}|[a-z])"
+        r"(?:\s+v\d+)?\b",
+        folded,
+    )
+    if spaced:
+        suffix = spaced.group(2)
+        if suffix not in {"am4", "am5", "ddr3", "ddr4", "ddr5"}:
+            return f"{spaced.group(1)}{suffix}"
     match = _MOTHERBOARD_BOARD_RE.search(folded)
     if not match:
         return None
@@ -1544,6 +1617,20 @@ def normalize_variant_value(key: str, value: str) -> str:
     text = re.sub(r"\s+", " ", text).strip()
     if not text:
         return text
+    if key == "screen_size":
+        compacted = re.sub(r"\s+", "", text)
+        match = re.fullmatch(
+            r"(\d+(?:\.\d+)?)(?:in|inch|inches|pol|polegadas|\"|')?", compacted
+        )
+        if match:
+            return f"{match.group(1)}in"
+        return compacted
+    if key == "resolution":
+        dimensions = re.search(r"(\d{3,5})\s*x\s*(\d{3,5})", text)
+        if dimensions:
+            return f"{dimensions.group(1)}x{dimensions.group(2)}"
+    if key == "refresh_rate":
+        return re.sub(r"\s+hz\b", "hz", text)
     if key in {"storage", "capacity", "ram", "size", "vram"}:
         # "256 gb" / "256GB" / "12G" → "256gb" / "12gb"
         compacted = re.sub(r"\s+", "", text)
@@ -2119,6 +2206,8 @@ def identity_from_price_item(item: ProductPriceItem) -> ProductIdentity:
     monitor_model_code = None
     model = resolve_model(item.model, item.title)
     if category == "monitor":
+        if attrs.get("size"):
+            attrs["size"] = normalize_variant_value("screen_size", attrs["size"])
         from scout_api.modules.crawler.utils.product_attributes import (
             resolve_product_identity,
         )
@@ -2270,13 +2359,15 @@ def identity_reference_item(
 
 # Prefer color/storage queries before the brand+series-only drop so Amazon
 # SERPs that promote sibling colors still surface the right card early.
-def build_search_queries(identity: ProductIdentity) -> list[str]:
+def build_search_queries(
+    identity: ProductIdentity, *, locale: str | None = None
+) -> list[str]:
     """Ordered SERP queries: GTIN → display MPN → spaced series → title tokens.
 
     Compacted identity tokens (``990evoplus``, ``mzv9s1t0bam``) are weak on
     Amazon-like SERPs; prefer hyphenated PNs and human-spaced model phrases.
-    Color queries emit locale synonyms (``preto`` / ``black``) without dropping
-    critical storage/model attributes.
+    Color queries prefer the integration locale while retaining cross-locale
+    aliases as fallbacks; technical identifiers are never localized.
 
     For discrete GPUs, prefer progressive commercial queries
     (brand + chip + edition + VRAM) before noisy SEO title prefixes.
@@ -2287,6 +2378,21 @@ def build_search_queries(identity: ProductIdentity) -> list[str]:
         text = (raw or "").strip()
         if text and text not in queries:
             queries.append(text)
+
+    def insert_category_context(
+        parts: tuple[str | None, ...] | list[str | None],
+    ) -> None:
+        category_term = _localized_category_search_term(identity.category, locale)
+        base = " ".join(part for part in parts if part)
+        if not category_term or not base:
+            return
+        localized_query = f"{base} {category_term}"
+        if localized_query in queries:
+            return
+        # Keep one category-aware candidate query close to the strong core
+        # queries while leaving identifier and model-only forms available.
+        index = 2 if identity.gtin else 1
+        queries.insert(min(index, len(queries)), localized_query)
 
     add(identity.gtin)
 
@@ -2318,6 +2424,34 @@ def build_search_queries(identity: ProductIdentity) -> list[str]:
         if display not in alias_displays:
             alias_displays.append(display)
 
+    # Monitor model codes are often extracted into their dedicated field while
+    # generic identity resolution reduces ``model`` to the product family.
+    # Keep the exact display code near the top of SERP discovery in that case.
+    if identity.category == "monitor" and identity.monitor_model_code:
+        monitor_code = fold_text(identity.monitor_model_code)
+        if monitor_code:
+            if identity.brand:
+                add(f"{identity.brand} {monitor_code}")
+            add(monitor_code)
+    elif identity.category == "monitor":
+        parsed_monitor = parse_title_identity(identity.title, category="monitor")
+        monitor_family = parsed_monitor.product_line or parsed_monitor.model
+        if monitor_family:
+            monitor_family = monitor_family.casefold().strip()
+            family_parts = [
+                part
+                for part in (
+                    identity.brand,
+                    monitor_family,
+                    identity.variant_attrs.get("screen_size"),
+                    identity.variant_attrs.get("refresh_rate"),
+                )
+                if part
+            ]
+            if identity.brand:
+                add(f"{identity.brand} {monitor_family}")
+            add(" ".join(family_parts))
+
     series = model_search_phrase(model=identity.model, title=identity.title)
     storage = identity.variant_attrs.get("storage") or identity.variant_attrs.get(
         "capacity"
@@ -2341,10 +2475,19 @@ def build_search_queries(identity: ProductIdentity) -> list[str]:
     # surface marketplace siblings for opaque codes while Shadow/VRAM queries
     # rediscover the exact cooler line.
     if gpu:
-        spaced_gpu = re.sub(r"(rtx|gtx)(\d{4})(ti|super)?", r"\1 \2 \3", gpu).strip()
+        spaced_gpu = re.sub(
+            r"(rtx|gtx|rx)(\d{3,4})(ti|super|xt)?", r"\1 \2 \3", gpu
+        ).strip()
         spaced_gpu = re.sub(r"\s+", " ", spaced_gpu).strip()
         capacity = vram or storage
         ladder: list[list[str]] = []
+        core = [p for p in (identity.brand, spaced_gpu) if p]
+        if core:
+            add(" ".join(core))
+        # Preserve a manufacturer's opaque part number early enough to fit
+        # within the per-store search budget after a GTIN/core query.
+        for display in alias_displays:
+            add(display)
         full = [
             p for p in (identity.brand, spaced_gpu, edition, capacity, memory_type) if p
         ]
@@ -2358,14 +2501,18 @@ def build_search_queries(identity: ProductIdentity) -> list[str]:
         for parts in ladder:
             if parts:
                 add(" ".join(parts))
-        for display in alias_displays:
-            add(display)
-            if identity.brand:
-                add(f"{identity.brand} {display}")
+        category_term = _localized_category_search_term(identity.category, locale)
+        if category_term and full:
+            category_query = " ".join((*full, category_term))
+            # The localized query must land inside the five-query store budget.
+            if category_query not in queries:
+                queries.insert(
+                    min(4 if identity.gtin else 3, len(queries)), category_query
+                )
+        if capacity:
+            add(" ".join(p for p in (identity.brand, spaced_gpu, capacity) if p))
         if identity.mpn:
             add(identity.mpn)
-            if identity.brand:
-                add(f"{identity.brand} {identity.mpn}")
         return queries
 
     # --- Motherboard progressive ladder (board code first, SEO noise last) ---
@@ -2409,6 +2556,7 @@ def build_search_queries(identity: ProductIdentity) -> list[str]:
         for parts in ladder_mb:
             if parts:
                 add(" ".join(parts))
+        insert_category_context((identity.brand, family, spaced_board, wifi))
         if identity.mpn:
             add(identity.mpn)
             if identity.brand:
@@ -2451,9 +2599,14 @@ def build_search_queries(identity: ProductIdentity) -> list[str]:
 
     color_labels: list[str] = []
     if color:
-        color_labels.append(color)
         canon = normalize_variant_value("color", color)
         hue = next((word for word in canon.split() if word in _COLOR_HUES), canon)
+        language = (locale or "").replace("_", "-").split("-", 1)[0].lower()
+        preferred = _COLOR_SEARCH_LOCALE_LABELS.get(hue, {}).get(language)
+        if preferred:
+            color_labels.append(preferred)
+        if color not in color_labels:
+            color_labels.append(color)
         synonyms = _COLOR_SEARCH_SYNONYMS.get(canon, ()) + _COLOR_SEARCH_SYNONYMS.get(
             hue, (canon,)
         )
@@ -2490,4 +2643,6 @@ def build_search_queries(identity: ProductIdentity) -> list[str]:
         filtered = [tok for tok in tokens if tok not in _SEARCH_TITLE_NOISE]
         window = filtered[:8] if filtered else tokens[:8]
         add(" ".join(window))
+    if series:
+        insert_category_context((identity.brand, series))
     return queries

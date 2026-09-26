@@ -510,6 +510,9 @@ class MatchCandidateLog(Base):
     decision: Mapped[str | None] = mapped_column(String(32), nullable=True)
     confidence: Mapped[Decimal | None] = mapped_column(Numeric(5, 4), nullable=True)
     reasons: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
+    embedding_evidence: Mapped[dict[str, Any] | None] = mapped_column(
+        JSON, nullable=True
+    )
     duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     store_run: Mapped[MatchStoreRun] = relationship(back_populates="candidates")
