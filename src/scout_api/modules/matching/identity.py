@@ -974,6 +974,75 @@ def _localized_category_search_term(
     return labels.get(locale.split("-", maxsplit=1)[0].casefold()) if labels else None
 
 
+def _title_search_phrase(identity: ProductIdentity, locale: str | None) -> str | None:
+    """Normalize title order, localizing an explicit category in place."""
+    title = fold_text(identity.title)
+    if not title:
+        return None
+    # Exact manufacturer identifiers are valuable, but work better as their
+    # own fallback query than appended to the natural title phrase.
+    for _normalized, display in extract_all_mpn_forms(
+        identity.mpn_display,
+        identity.mpn,
+        identity.model,
+        identity.title,
+        *identity.mpn_aliases,
+    ):
+        title = re.sub(
+            rf"(?<![a-z0-9]){re.escape(fold_text(display))}(?![a-z0-9])", " ", title
+        )
+
+    # Ignore bus-width noise, while keeping the rest of the title and its token
+    # boundaries. In particular, don't compact family/model tokens together.
+    title = re.sub(r"\b\d+\s*-\s*bits?\b", " ", title)
+    category_key = fold_text(identity.category or "").replace(" ", "_")
+    category_key = _CATEGORY_SEARCH_ALIASES.get(category_key, category_key)
+    category_labels = _CATEGORY_SEARCH_LABELS.get(category_key, {})
+    explicit_category: str | None = None
+    for label in sorted(category_labels.values(), key=len, reverse=True):
+        folded_label = fold_text(label)
+        if re.search(rf"(?<![a-z0-9]){re.escape(folded_label)}(?![a-z0-9])", title):
+            explicit_category = folded_label
+            break
+    localized_category = _localized_category_search_term(identity.category, locale)
+    if explicit_category and localized_category:
+        title = re.sub(
+            rf"(?<![a-z0-9]){re.escape(explicit_category)}(?![a-z0-9])",
+            fold_text(localized_category),
+            title,
+            count=1,
+        )
+
+    protected_category_tokens = (
+        set(fold_text(localized_category or explicit_category or "").split())
+        if explicit_category
+        else set()
+    )
+    title = re.sub(r"\b\d+(?:[.,]\d+)?\s*(?:ghz|mhz|khz|hz|mah|mp)\b", " ", title)
+    title = re.sub(r"\b\d+(?:[.,]\d+)?\s*(?:\"|pol(?:egadas)?|inch(?:es)?)", " ", title)
+    title = re.sub(r"\b\d+\s*gb\s*ram\b", " ", title)
+    title = re.sub(r"\b\d+(?:[+x]\d+){1,}(?:mp)?\b", " ", title)
+    title = re.sub(r"[^a-z0-9-]+", " ", title)
+    title = re.sub(r"(?<![a-z0-9])-(?![a-z0-9])", " ", title)
+    title = re.sub(r"\s+", " ", title).strip()
+    tokens: list[str] = []
+    seen: set[str] = set()
+    for token in title.split():
+        is_category_token = token in protected_category_tokens
+        if not is_category_token and (
+            token in _SEARCH_TITLE_NOISE
+            or re.fullmatch(r"\d+[-]?(?:core|threads?)", token)
+        ):
+            continue
+        if token not in seen:
+            tokens.append(token)
+            seen.add(token)
+    # Keep a bounded title window; exact identifiers have their own dedicated
+    # ladder entries below and must not push the natural query out of budget.
+    phrase = " ".join(tokens[:16]).strip()
+    return phrase or None
+
+
 def _is_wifi_variant_label(text: str | None) -> bool:
     if not text:
         return False
@@ -1734,10 +1803,6 @@ _SEARCH_TITLE_NOISE: frozenset[str] = frozenset(
     {
         "placa",
         "video",
-        "geforce",
-        "nvidia",
-        "amd",
-        "radeon",
         "ray",
         "tracing",
         "dlss",
@@ -1745,6 +1810,8 @@ _SEARCH_TITLE_NOISE: frozenset[str] = frozenset(
         "mhz",
         "bit",
         "bits",
+        "cache",
+        "100mb",
         "pcie",
         "pci",
         "express",
@@ -2362,15 +2429,15 @@ def identity_reference_item(
 def build_search_queries(
     identity: ProductIdentity, *, locale: str | None = None
 ) -> list[str]:
-    """Ordered SERP queries: GTIN → display MPN → spaced series → title tokens.
+    """Ordered SERP queries: natural title → identifiers → progressive variants.
 
     Compacted identity tokens (``990evoplus``, ``mzv9s1t0bam``) are weak on
     Amazon-like SERPs; prefer hyphenated PNs and human-spaced model phrases.
     Color queries prefer the integration locale while retaining cross-locale
     aliases as fallbacks; technical identifiers are never localized.
 
-    For discrete GPUs, prefer progressive commercial queries
-    (brand + chip + edition + VRAM) before noisy SEO title prefixes.
+    The title-derived query leads when it contains useful product terms. The
+    specialized ladders then progressively relax it and retain exact identifiers.
     """
     queries: list[str] = []
 
@@ -2386,7 +2453,7 @@ def build_search_queries(
         base = " ".join(part for part in parts if part)
         if not category_term or not base:
             return
-        localized_query = f"{base} {category_term}"
+        localized_query = f"{category_term} {base}"
         if localized_query in queries:
             return
         # Keep one category-aware candidate query close to the strong core
@@ -2394,6 +2461,7 @@ def build_search_queries(
         index = 2 if identity.gtin else 1
         queries.insert(min(index, len(queries)), localized_query)
 
+    add(_title_search_phrase(identity, locale))
     add(identity.gtin)
 
     # CPU catalogs often normalize the model field to a glued token (e.g.
@@ -2503,7 +2571,7 @@ def build_search_queries(
                 add(" ".join(parts))
         category_term = _localized_category_search_term(identity.category, locale)
         if category_term and full:
-            category_query = " ".join((*full, category_term))
+            category_query = " ".join((category_term, *full))
             # The localized query must land inside the five-query store budget.
             if category_query not in queries:
                 queries.insert(

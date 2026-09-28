@@ -204,7 +204,7 @@ def test_ssd_series_mismatch_870_vs_990_rejects() -> None:
     assert any(r.code == "critical_conflict" for r in score.reasons)
 
 
-def test_mpn_query_precedes_title_tokens() -> None:
+def test_natural_title_query_leads_and_mpn_remains_exact_fallback() -> None:
     identity = identity_from_price_item(
         _item(
             title="SSD Samsung 990 EVO Plus 1TB - MZ-V9S1T0B/AM",
@@ -216,7 +216,8 @@ def test_mpn_query_precedes_title_tokens() -> None:
     queries = build_search_queries(identity)
     assert identity.mpn == "mzv9s1t0bam"
     assert identity.mpn_display == "MZ-V9S1T0B/AM"
-    assert queries[0] == "MZ-V9S1T0B/AM"
+    assert queries[0] == "ssd samsung 990 evo plus 1tb"
+    assert "MZ-V9S1T0B/AM" in queries
     assert any(q == "samsung 990 evo plus 1tb" for q in queries)
     assert any("mzv9s1t0bam" in q for q in queries)
 
@@ -1345,7 +1346,7 @@ def test_gpu_query_generation_progressive_not_full_title() -> None:
     assert "2557" not in joined
     assert "192" not in joined
     assert "dlss" not in joined
-    assert queries[0].casefold().startswith("msi rtx 5070")
+    assert queries[0].casefold().startswith("placa de video msi")
 
 
 def test_rx7600_query_generation_preserves_mpn_and_localizes_category() -> None:
@@ -1373,6 +1374,11 @@ def test_rx7600_query_generation_preserves_mpn_and_localizes_category() -> None:
     assert identity.model == "rx7600"
     assert "RX-76PSWFTFY" in pt_budget
     assert "RX-76PSWFTFY" in en_budget
+    assert (
+        pt_queries[0] == "placa de video xfx radeon rx 7600 speedster swft210 8gb gddr6"
+    )
+    assert "radeonrx7600" not in pt_queries
+    assert en_queries[0].startswith("graphics card xfx radeon rx 7600")
     assert any("rx 7600" in query.casefold() for query in pt_budget)
     assert any("rx 7600" in query.casefold() for query in en_budget)
     assert any("placa de video" in query.casefold() for query in pt_budget)
@@ -1409,7 +1415,7 @@ def test_category_context_uses_canonical_category_and_integration_locale() -> No
     examples = (
         (
             "cpu",
-            "AMD Ryzen 7 5800X3D AM4",
+            "Processador AMD Ryzen 7 5800X3D",
             "AMD",
             "Ryzen 7 5800X3D",
             "processador",
@@ -1467,8 +1473,25 @@ def test_category_context_uses_canonical_category_and_integration_locale() -> No
 
         assert pt_term in pt_queries
         assert en_term in en_queries
+        pt_first = build_search_queries(identity, locale="pt-BR")[0]
+        if category == "motherboard":
+            assert pt_first == "placa mae asus tuf gaming b650m-e wifi"
+        if category == "cpu":
+            assert pt_first == "processador amd ryzen 7 5800x3d"
         if pt_term != en_term:
             assert pt_term not in en_queries
+
+    phone = identity_from_price_item(
+        _item(
+            title="Apple iPhone 15 128GB Rosa",
+            brand="Apple",
+            model="iPhone 15",
+            metadata={"category": "smartphone"},
+        )
+    )
+    phone_query = build_search_queries(phone, locale="pt-BR")[0]
+    assert phone_query == "apple iphone 15 128gb rosa"
+    assert not phone_query.startswith("celular")
 
 
 def test_motherboard_model_suffix_conflict_rejects_different_boards() -> None:
@@ -2338,9 +2361,8 @@ def test_long_smartphone_title_does_not_drive_raw_serp_query() -> None:
     assert identity.variant_attrs.get("storage") == "256gb"
     assert identity.variant_attrs.get("color") == "titanio preto"
     queries = build_search_queries(identity)
-    # SEARCH stays broad (family) before capacity-colored refinements — Magento
-    # SERPs often bury S-series when ``256gb`` dominates the query token set.
-    assert queries[0] == "samsung galaxy s25 ultra"
+    # Explicit category stays in its title position; promotional detail is removed.
+    assert queries[0] == "celular samsung galaxy s25 ultra 5g 256gb titanio preto"
     assert "samsung galaxy s25 ultra 256gb" in queries
     assert any(q == "samsung galaxy s25 ultra" for q in queries)
     assert any("256gb" in q and "preto" in q for q in queries)
@@ -2372,7 +2394,12 @@ def test_smartphone_marketing_noise_does_not_change_identity() -> None:
     assert base.model == noisy.model == "galaxys25ultra"
     assert base.variant_attrs.get("storage") == noisy.variant_attrs.get("storage")
     assert normalize_title(base.title).split()[:4] != []  # smoke
-    assert build_search_queries(base)[0] == build_search_queries(noisy)[0]
+    assert (
+        build_search_queries(base)[0] == "samsung galaxy s25 ultra 256gb titanio preto"
+    )
+    assert build_search_queries(noisy)[0] == (
+        "celular samsung galaxy s25 ultra 5g 256gb titanio preto"
+    )
 
 
 def test_galaxy_model_suffix_conflict_and_queries() -> None:
@@ -2924,7 +2951,10 @@ def test_cpu_queries_use_spaced_model_and_keep_suffix() -> None:
         )
     )
     queries = build_search_queries(identity)
-    assert queries[:2] == ["amd ryzen 7 5800x3d", "ryzen 7 5800x3d"]
+    assert queries[:2] == [
+        "processador amd ryzen 7 5800x3d am4",
+        "amd ryzen 7 5800x3d",
+    ]
     assert not any(query.endswith("5800x") for query in queries)
 
 
