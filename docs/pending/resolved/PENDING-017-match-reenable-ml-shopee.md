@@ -1,11 +1,18 @@
 # PENDING-017 — Reativar Mercado Livre e Shopee no Product Match
 
-- Status: OPEN
+- Status: RESOLVED
 - Tipo: INCOMPLETE
 - Prioridade: P1
 - Área: matching / mercadolivre / shopee
 - Origem: 2026-09-22 — exclusão temporária do fluxo “Buscar preço em outras lojas”
-- Atualizado: 2026-09-22
+- Atualizado: 2026-09-25
+
+## Encerramento de escopo (2026-09-25)
+
+O usuário decidiu manter Mercado Livre e Shopee desativadas no Product Match e
+remover suas pendências da lista ativa. Este arquivamento não significa que a
+instabilidade de login foi corrigida. `match_enabled=false` permanece
+deliberado nas duas lojas. Reabrir somente com novo pedido para reativação.
 
 ## Contexto
 

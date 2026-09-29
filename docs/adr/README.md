@@ -64,6 +64,10 @@ Política de quando criar/atualizar docs:
 | [0040](0040-matching-multilingual-attributes.md) | Canonicalização multilíngue de atributos no Product Match | Accepted |
 | [0041](0041-store-admin-metadata.md) | Metadados administrativos de lojas registradas | Accepted |
 | [0042](0042-store-logo-media-processing.md) | Upload e otimização assíncrona de logos | Accepted |
+| [0043](0043-product-match-semantic-embedding-evidence.md) | Evidência semântica experimental no Product Match | Accepted |
+| [0044](0044-camoufox-profile-lock-warm-session-lifecycle.md) | ProfileLock acompanha a sessão Camoufox persistente | Accepted |
+| [0045](0045-self-hosted-product-match-embeddings-provider.md) | Provider self-hosted para embeddings do Product Match | Accepted |
+| [0046](0046-product-match-embedding-cache-redis-l2.md) | Cache L2 de embeddings do Product Match em Redis | Accepted |
 
 ## Quando criar ADR
 

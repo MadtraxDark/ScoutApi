@@ -63,6 +63,7 @@ def candidate_to_view(row: MatchCandidateLog) -> MatchCandidateLogView:
         decision=row.decision,
         confidence=row.confidence,
         reasons=_as_str_list(row.reasons),
+        embedding_evidence=row.embedding_evidence,
         duration_ms=row.duration_ms,
     )
 

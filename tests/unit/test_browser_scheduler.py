@@ -16,6 +16,7 @@ import pytest
 from scout_api.modules.crawler.core.browser_scheduler import (
     BrowserScheduler,
     BrowserSlotLease,
+    browser_queue_deadline,
 )
 from scout_api.modules.crawler.core.exceptions import RequestError
 
@@ -252,3 +253,68 @@ def test_queue_timeout() -> None:
     )
 
     sched.release(lease1)
+
+
+def test_match_queue_wait_uses_store_deadline_instead_of_global_queue_timeout() -> None:
+    """Match pode esperar além de 60 s, mas só até seu deadline individual."""
+    sched = BrowserScheduler(capacity=1, queue_capacity=2, queue_timeout_ms=40)
+    active = sched.acquire()
+    acquired = threading.Event()
+    result: dict[str, str | None] = {"error": None}
+
+    def worker() -> None:
+        try:
+            with browser_queue_deadline(time.monotonic() + 1.0):
+                lease = sched.acquire()
+            acquired.set()
+            sched.release(lease)
+        except RequestError as exc:
+            result["error"] = exc.code
+
+    thread = threading.Thread(target=worker, daemon=True)
+    thread.start()
+    time.sleep(0.12)  # Excede o timeout padrão de 40 ms.
+    assert not acquired.is_set()
+    sched.release(active)
+    assert acquired.wait(1.0)
+    thread.join(1.0)
+    assert result["error"] is None
+
+
+def test_match_queue_deadline_removes_waiter_without_granting_browser() -> None:
+    """Deadline do Match cancela espera enfileirada sem consumir o slot depois."""
+    sched = BrowserScheduler(capacity=1, queue_capacity=2, queue_timeout_ms=1_000)
+    active = sched.acquire()
+    result: dict[str, str | None] = {"error": None}
+
+    def worker() -> None:
+        try:
+            with browser_queue_deadline(time.monotonic() + 0.12):
+                lease = sched.acquire()
+            sched.release(lease)
+        except RequestError as exc:
+            result["error"] = exc.code
+
+    thread = threading.Thread(target=worker, daemon=True)
+    thread.start()
+    thread.join(1.0)
+    assert not thread.is_alive()
+    assert result["error"] == "BROWSER_QUEUE_TIMEOUT"
+    assert sched.snapshot()["depth"] == 0
+
+    sched.release(active)
+    lease = sched.acquire()
+    sched.release(lease)
+
+
+def test_expired_match_deadline_does_not_take_free_slot_or_enqueue() -> None:
+    sched = BrowserScheduler(capacity=1, queue_capacity=2, queue_timeout_ms=1_000)
+    with browser_queue_deadline(time.monotonic() - 0.01):
+        with pytest.raises(RequestError) as excinfo:
+            sched.acquire()
+
+    assert excinfo.value.code == "BROWSER_QUEUE_TIMEOUT"
+    snapshot = sched.snapshot()
+    assert snapshot["active"] == 0
+    assert snapshot["depth"] == 0
+    assert snapshot["total_acquisitions"] == 0

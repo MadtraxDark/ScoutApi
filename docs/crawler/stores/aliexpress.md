@@ -90,6 +90,9 @@ Currency comes from the price payload (`originalPrice.currency` /
 - Prefer captured search JSON (`data-aliexpress-search`) → `/item/{id}.html` links
   → embedded item ids
 - Candidate retrieval is separate from Product Match scoring
+- `/item/{numeric-id}.html` is not a title hint. If the SERP omits a title, keep
+  identity unknown and let the normal PDP scrape/matcher evaluate the offer;
+  never infer the candidate brand from the numeric item ID.
 
 ## Fetch strategy
 

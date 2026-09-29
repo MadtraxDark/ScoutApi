@@ -27,12 +27,24 @@ class StoreConfig:
     # User-facing label (never the catalog slug). Catalog dict key stays snake_case.
     display_name: str = ""
 
+    # Locale preferred by the store's search integration for localized query
+    # attributes. Product identifiers and model phrases remain unchanged.
+    search_locale: str | None = None
+
     # Valid markets belong to the integration. Empty uses its configured default.
     supported_country_currency_pairs: tuple[tuple[str, str], ...] = ()
 
     @property
     def market_pairs(self) -> tuple[tuple[str, str], ...]:
         return self.supported_country_currency_pairs or ((self.country, self.currency),)
+
+    @property
+    def query_locale(self) -> str:
+        if self.search_locale:
+            return self.search_locale
+        return {"BR": "pt-BR", "US": "en-US", "PY": "es-PY"}.get(
+            self.country.upper(), "en"
+        )
 
     @property
     def default_include_images(self) -> bool:

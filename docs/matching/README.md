@@ -37,17 +37,54 @@ Fonte de Search: `matching/search_adapters/registry.py` — **não** `supports_s
 
 ## Geração de queries
 
-`ProductIdentity` gera queries progressivas a partir de identificadores e frases
-comerciais reconhecidas. Quando não há frase específica para a categoria, um
-modelo estruturado alfanumérico (letras e números) também é preservado como
-chave de descoberta; a validação posterior continua sob responsabilidade do
-matcher e dos gates de variante.
+`ProductIdentity` começa pela normalização conservadora do título original:
+mantém a ordem dos termos, remove ruído comercial/técnico conhecido e separa
+identificadores exatos em queries próprias. A escada seguinte reduz a frase com
+marca, família/modelo e atributos relevantes. Um modelo estruturado
+alfanumérico também é preservado como chave de descoberta; a validação posterior
+continua sob responsabilidade do matcher e dos gates de variante.
 
-Para CPU, a escada começa também com consultas de modelo em forma legível (por
+A categoria só faz parte da query principal quando aparece explicitamente no
+título. Nesse caso, o locale da integração substitui o rótulo da categoria na
+mesma posição (por exemplo, `Placa de Video XFX Radeon RX 7600` vira
+`graphics card xfx radeon rx 7600` em `en-US`). Categoria inferida pelos
+metadados não é inserida na query principal; continua disponível nas variantes
+de descoberta já existentes. Assim, `Apple iPhone 15 128GB Rosa` não ganha um
+prefixo `celular` por inferência.
+
+Para CPU, a escada inclui também consultas de modelo em forma legível (por
 exemplo, `amd ryzen 7 5800x3d` e `ryzen 7 5800x3d`) porque SERPs de lojas podem
 não indexar o modelo concatenado `ryzen75800x3d`. O SKU e seus sufixos são
-mantidos integralmente. As queries genéricas de OPN/título continuam como
-fallback dentro do mesmo budget.
+mantidos integralmente. As queries genéricas de OPN continuam como fallback
+dentro do mesmo budget.
+
+Consultas com atributos localizáveis usam o `query_locale` configurado na
+integração da loja (`StoreConfig`). Por padrão, a metadata deriva `pt-BR`,
+`en-US` ou `es-PY` do país; lojas podem sobrescrever esse locale explicitamente.
+Cada loja recebe sua própria ladder: por exemplo, cor `Rosa` mantém uma query
+`rosa` para pt-BR e prioriza `pink` para en-US. Identificadores, códigos de
+modelo e frases comerciais não são traduzidos. Os aliases de cor restantes
+continuam disponíveis como fallback sem multiplicar a quantidade de queries;
+a ladder preserva seu dedup e o budget existente por loja.
+
+### Verificação live de queries (2026-09-26)
+
+Foram comparadas buscas GET read-only para RX 7600 nas SERPs da KaBuM e Amazon
+Brasil, com limite de 10 candidatos por query. Na KaBuM, as queries antiga,
+natural, reduzida e curta retornaram 10 candidatos cada; nenhuma listou XFX
+RX 7600 SWFT210 nos dez primeiros. Tempos observados: 7,59 s, 1,77 s, 2,07 s
+e 1,28 s, respectivamente (a primeira chamada inclui aquecimento).
+
+Query antiga: `xfx rx 7600 speedster swft210 8gb gddr6 placa de video`.
+Query natural: `placa de video xfx radeon rx 7600 speedster swft210 8gb gddr6`.
+
+Na Amazon Brasil, as queries antiga e natural retornaram 10 candidatos em
+1,61 s e 1,60 s. Ambas encontraram XFX SWFT210 RX 7600 em primeiro lugar e
+ASRock RX 7600 em segundo. A listagem XFX retornada usa o código
+`RX-76PSWFTFA`; o código de referência `RX-76PSWFTFY` não apareceu. Portanto,
+esta amostra não mostra melhora de ranking entre as duas formas da query e não
+confirma o SKU exato; ela só confirma recuperação da família XFX RX 7600.
+Resultados de uma SERP são observacionais e não substituem benchmark rotulado.
 
 ## Budgets por loja (StoreAttemptBudget)
 
@@ -90,12 +127,40 @@ O `BrowserScheduler` limita o número de slots Camoufox simultâneos:
 - `CAMOUFOX_BROWSER_CAPACITY=1` em produção (decisão C1 — ADR 0039).
 - Fila saturada → `RequestError(code="BROWSER_QUEUE_SATURATED")` em vez de hang.
 - `ProfileLock` (Redis primary, fcntl fallback) previne dois processos abrindo
-  o mesmo diretório de perfil simultaneamente.
+  o mesmo diretório de perfil simultaneamente. A lease Redis permanece retida
+  enquanto a sessão Camoufox warm usa o perfil, com renovação periódica; a
+  sessão fecha após até 10 s ociosa (limitado pelo timeout de aquisição e TTL).
+  Ao fechar ou falhar a retenção, o perfil é liberado/fechado com segurança.
 - `BrowserCircuitBreaker.claim_trial()`: token atômico no estado HALF_OPEN
   garante singleflight (sem thundering herd de launch).
 - Failure domains: circuit por store key; falha de infra (launch) ≠ `NO_MATCH`.
 
-Ver ADR 0037 (launch health + fail-fast) e ADR 0039 (bounded scheduler C1).
+O slot local de execução volta à fila ao fim de cada fetch, mas a lease global
+do perfil acompanha a sessão persistente até seu fechamento. A configuração
+C1 continua limitando a um proprietário Camoufox por perfil. Ver ADR 0037
+(launch health + fail-fast), ADR 0039 (bounded scheduler C1) e ADR 0044
+(lifecycle da lease da sessão warm).
+
+## Evidência semântica experimental (ADR 0043)
+
+Embeddings são opt-in no `match-runner` (`MATCH_EMBEDDINGS_MODE=off` por padrão).
+Shadow mode consulta apenas quando `MatchingEngine` retorna `review` por
+`variant_semantic_uncertain`, depois dos gates determinísticos. O resultado
+resume modelo, similaridade, latência, cache hit e tokens reportados pelo
+provider em `MatchRun`; nenhum vetor é
+persistido. A falha de provider mantém a decisão tradicional. O cache é limitado
+e local ao processo, sem Redis nem vector search.
+
+O modo `active` exige API key e limiar explícito; além disso, só pode promover
+`review` com `brand_model_exact` e `variant_semantic_uncertain`, sem preço
+extremo ou outra razão de conflito. Não habilitar até o benchmark rotulado
+validar precisão, falso positivo e limiar. A habilitação também envia os títulos
+e atributos dos casos elegíveis ao provider configurado; consulte a política de
+retenção aplicável antes de ativar.
+
+Implementação: [`embedding_evidence.py`](../../src/scout_api/modules/matching/embedding_evidence.py),
+provider em [`embedding_provider.py`](../../src/scout_api/modules/matching/embedding_provider.py),
+fixture/runner e [baseline smoke](embedding-acceptance-baseline.md).
 
 ## Hang defense-in-depth (match-runner)
 
@@ -103,7 +168,7 @@ Uma MatchRun travada **não** pode bloquear o único worker indefinidamente.
 
 | Camada | Setting | Default | Efeito |
 |---|---|---|---|
-| Store wall | `MATCH_STORE_WALL_TIMEOUT_SECONDS` | 180 | Deadline absoluto por loja (monotonic). Estouro → store `error` `STORE_WALL_TIMEOUT` (nunca `NO_MATCH`). Run continua. |
+| Store wall | `MATCH_STORE_WALL_TIMEOUT_SECONDS` | 180 | Deadline absoluto por loja (monotonic); no Product Match também limita a espera na fila C1. Estouro → store `error` `STORE_WALL_TIMEOUT` (nunca `NO_MATCH`). Run continua. |
 | Run wall | `MATCH_RUN_WALL_TIMEOUT_SECONDS` | 2700 | Desde claim/processamento (PENDING não conta). Estouro → run `failed` `RUN_WALL_TIMEOUT`. |
 | Watchdog | `MATCH_RUN_WATCHDOG_STALE_SECONDS` | 600 | Sem **progresso real** → `os._exit(78)` + Docker restart + reclaim ADR 0036. |
 | Flag | `MATCH_RUN_WATCHDOG_ENABLED` | true | Rollback operacional. |

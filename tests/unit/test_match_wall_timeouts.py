@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from unittest.mock import MagicMock
 
 import pytest
@@ -138,6 +139,116 @@ def test_store_wall_timeout_is_error_not_no_match(
     assert resp.errors
     assert resp.errors[0].code == FAILURE_CODE_STORE_WALL_TIMEOUT
     assert search.search.call_count == 0
+
+
+def test_browser_queue_expiry_maps_to_store_wall_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    search = MagicMock()
+    search.is_search_supported.return_value = True
+
+    def queue_until_store_deadline(*_args, **_kwargs):  # noqa: ANN002, ANN003
+        time.sleep(0.04)
+        raise RequestError(
+            "deadline da loja expirou na fila", code="BROWSER_QUEUE_TIMEOUT"
+        )
+
+    search.search.side_effect = queue_until_store_deadline
+    outcomes: list[MatchStoreOutcome] = []
+    monkeypatch.setattr(
+        "scout_api.modules.matching.product_match_service.get_settings",
+        lambda: Settings(
+            match_store_wall_timeout_seconds=0.01,
+            match_run_wall_timeout_seconds=2700.0,
+            match_store_concurrency=1,
+            match_search_query_budget=5,
+            match_external_attempt_budget=12,
+            match_browser_navigation_budget=8,
+        ),
+    )
+    monkeypatch.setattr(
+        "scout_api.modules.matching.product_match_service.eligible_match_store_keys",
+        lambda: ["amazon_br"],
+    )
+    monkeypatch.setattr(
+        "scout_api.modules.matching.product_match_service.split_stores_for_match_waves",
+        lambda stores: (list(stores), [], []),
+    )
+    tracker = MatchProgressTracker()
+    tracker.arm(run_id="queue-deadline", worker_id="test")
+    service = ProductMatchService(search_service=search, scrape_service=MagicMock())
+
+    response = service.match_from_item(
+        _ref_item(),
+        stores=["amazon_br"],
+        persist=False,
+        on_store_outcome=outcomes.append,
+        run_deadline=MonotonicDeadline.start(timeout_seconds=2700.0),
+        progress_tracker=tracker,
+        run_id="queue-deadline",
+    )
+
+    assert outcomes[0].error_code == FAILURE_CODE_STORE_WALL_TIMEOUT
+    assert response.errors[0].code == FAILURE_CODE_STORE_WALL_TIMEOUT
+
+
+def test_browser_queue_expiry_during_candidate_scrape_maps_to_store_wall_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    search = MagicMock()
+    search.is_search_supported.return_value = True
+    search.search.return_value = [
+        SearchCandidate(
+            store="amazon_br",
+            title="Samsung Galaxy S25 Ultra",
+            url="https://www.amazon.com.br/dp/B0TEST",
+        )
+    ]
+    scrape = MagicMock()
+
+    def queue_until_store_deadline(*_args, **_kwargs):  # noqa: ANN002, ANN003
+        time.sleep(0.04)
+        raise RequestError(
+            "deadline da loja expirou na fila", code="BROWSER_QUEUE_TIMEOUT"
+        )
+
+    scrape.scrape.side_effect = queue_until_store_deadline
+    outcomes: list[MatchStoreOutcome] = []
+    monkeypatch.setattr(
+        "scout_api.modules.matching.product_match_service.get_settings",
+        lambda: Settings(
+            match_store_wall_timeout_seconds=0.01,
+            match_run_wall_timeout_seconds=2700.0,
+            match_store_concurrency=1,
+            match_search_query_budget=5,
+            match_external_attempt_budget=12,
+            match_browser_navigation_budget=8,
+        ),
+    )
+    monkeypatch.setattr(
+        "scout_api.modules.matching.product_match_service.eligible_match_store_keys",
+        lambda: ["amazon_br"],
+    )
+    monkeypatch.setattr(
+        "scout_api.modules.matching.product_match_service.split_stores_for_match_waves",
+        lambda stores: (list(stores), [], []),
+    )
+    tracker = MatchProgressTracker()
+    tracker.arm(run_id="scrape-queue-deadline", worker_id="test")
+    service = ProductMatchService(search_service=search, scrape_service=scrape)
+
+    response = service.match_from_item(
+        _ref_item(),
+        stores=["amazon_br"],
+        persist=False,
+        on_store_outcome=outcomes.append,
+        run_deadline=MonotonicDeadline.start(timeout_seconds=2700.0),
+        progress_tracker=tracker,
+        run_id="scrape-queue-deadline",
+    )
+
+    assert outcomes[0].error_code == FAILURE_CODE_STORE_WALL_TIMEOUT
+    assert response.errors[0].code == FAILURE_CODE_STORE_WALL_TIMEOUT
 
 
 def test_run_wall_timeout_fails_run_not_completed(

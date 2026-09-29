@@ -256,6 +256,60 @@ def test_notification_idempotent_on_complete(session: Session) -> None:
     assert count == 1
 
 
+def test_finalize_completed_repairs_stale_store_completion_aggregate(
+    session: Session,
+) -> None:
+    from scout_api.modules.matching.models import MatchStoreRun
+
+    principal = _principal()
+    product = _product(session, owner=principal.id)
+    run = ProductMatchRun(
+        product_id=product.id,
+        status="running",
+        requested_by=principal.id,
+        reference_url="https://example.com/p",
+        started_at=datetime.now(UTC),
+        last_activity_at=datetime.now(UTC),
+        stores_total=2,
+        stores_completed=1,
+        matches_found=1,
+    )
+    session.add(run)
+    session.flush()
+    session.add_all(
+        [
+            MatchStoreRun(
+                run_id=run.id,
+                store="amazon",
+                store_display_name="Amazon",
+                status="match",
+                queries=[],
+                matched_reasons=[],
+            ),
+            MatchStoreRun(
+                run_id=run.id,
+                store="kabum",
+                store_display_name="KaBuM!",
+                status="no_match",
+                queries=[],
+                matched_reasons=[],
+            ),
+        ]
+    )
+    session.flush()
+
+    MatchRunService(session).finalize_completed(
+        run,
+        matches_found=1,
+        no_matches=1,
+        errors=0,
+        stores_total=2,
+        stores_completed=1,
+    )
+
+    assert run.stores_completed == 2
+
+
 def test_notification_unread_and_mark_read(session: Session) -> None:
     user_id = uuid.uuid4()
     row = UserNotification(

@@ -295,7 +295,8 @@ class MatchRunService:
         run.no_matches = no_matches
         run.errors = errors
         run.stores_total = stores_total
-        run.stores_completed = stores_completed
+        terminal_stores = len(self._runs.terminal_store_keys(run.id))
+        run.stores_completed = max(stores_completed, terminal_stores)
         run.failure_code = None
         run.failure_message = None
         run.worker_id = None
@@ -511,6 +512,7 @@ class MatchRunService:
                     confidence=cand.get("confidence"),
                     reasons=list(cand.get("reasons") or []),
                     duration_ms=cand.get("duration_ms"),
+                    embedding_evidence=cand.get("embedding_evidence"),
                 )
 
         # Aggregates

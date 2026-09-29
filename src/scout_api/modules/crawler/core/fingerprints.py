@@ -67,8 +67,9 @@ def title_hint_from_url(url: str | None) -> str | None:
     """Best-effort product title from a PDP URL slug when SERP omits title text.
 
     Magalu-style paths ``/{slug}/p/{id}/`` expose a readable slug even when the
-    search card has no title in static HTML. Used for cheap prefilter/ranking —
-    not as a substitute for PDP extraction.
+    search card has no title in static HTML. Opaque numeric item IDs are not
+    titles. Used for cheap prefilter/ranking — not as a substitute for PDP
+    extraction.
     """
     if not url:
         return None
@@ -83,6 +84,9 @@ def title_hint_from_url(url: str | None) -> str | None:
             slug = parts[index - 1]
     if slug is None and parts:
         leaf = parts[-1]
+        numeric_id = leaf.removesuffix(".html").removesuffix(".htm")
+        if numeric_id.isdigit() and len(numeric_id) >= 9:
+            return None
         if leaf.lower() not in {"dp", "gp", "product"} and len(leaf) > 8:
             slug = leaf
     if not slug:

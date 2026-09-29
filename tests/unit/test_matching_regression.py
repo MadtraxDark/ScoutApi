@@ -204,7 +204,7 @@ def test_ssd_series_mismatch_870_vs_990_rejects() -> None:
     assert any(r.code == "critical_conflict" for r in score.reasons)
 
 
-def test_mpn_query_precedes_title_tokens() -> None:
+def test_natural_title_query_leads_and_mpn_remains_exact_fallback() -> None:
     identity = identity_from_price_item(
         _item(
             title="SSD Samsung 990 EVO Plus 1TB - MZ-V9S1T0B/AM",
@@ -216,7 +216,8 @@ def test_mpn_query_precedes_title_tokens() -> None:
     queries = build_search_queries(identity)
     assert identity.mpn == "mzv9s1t0bam"
     assert identity.mpn_display == "MZ-V9S1T0B/AM"
-    assert queries[0] == "MZ-V9S1T0B/AM"
+    assert queries[0] == "ssd samsung 990 evo plus 1tb"
+    assert "MZ-V9S1T0B/AM" in queries
     assert any(q == "samsung 990 evo plus 1tb" for q in queries)
     assert any("mzv9s1t0bam" in q for q in queries)
 
@@ -297,6 +298,153 @@ def test_monitor_model_code_extraction_supports_varied_manufacturer_formats() ->
         )
     )
     assert no_model_code.monitor_model_code is None
+
+
+def test_monitor_without_model_code_keeps_readable_family_serp_query() -> None:
+    identity = identity_from_price_item(
+        _item(
+            title=(
+                'Monitor Gamer Samsung Odyssey G30 24" Led Full HD 144Hz '
+                "1ms HDMI/DP FreeSync"
+            ),
+            brand="Samsung",
+            model="Odyssey G30",
+            metadata={
+                "category": "monitor",
+                "specifications": {
+                    "screen_size": '24"',
+                    "resolution": "FHD",
+                    "refresh_rate": "144Hz",
+                    "panel": "VA",
+                },
+            },
+        )
+    )
+
+    queries = build_search_queries(identity)
+
+    assert identity.monitor_model_code is None
+    assert "samsung odyssey g30" in queries
+
+
+def test_monitor_screen_size_normalizes_inch_notation() -> None:
+    reference = identity_from_price_item(
+        _item(
+            title='Samsung Odyssey G30 24" 144Hz',
+            brand="Samsung",
+            metadata={
+                "category": "monitor",
+                "specifications": {"screen_size": '24"', "size": '24"'},
+            },
+        )
+    )
+    candidate = identity_from_price_item(
+        _item(
+            title="Samsung Odyssey G30 24 Pol 144Hz LS24BG300ELMZD",
+            brand="Samsung",
+            metadata={
+                "category": "monitor",
+                "specifications": {"screen_size": "24", "size": "24"},
+            },
+        )
+    )
+
+    score = MatchingEngine().score(reference, candidate)
+
+    assert (
+        reference.variant_attrs["screen_size"] == candidate.variant_attrs["screen_size"]
+    )
+    assert reference.variant_attrs["size"] == candidate.variant_attrs["size"]
+    assert score.decision != "reject"
+
+
+def test_monitor_different_screen_sizes_still_reject() -> None:
+    reference = identity_from_price_item(
+        _item(
+            title='Samsung Odyssey G30 24" 144Hz',
+            brand="Samsung",
+            metadata={
+                "category": "monitor",
+                "specifications": {"screen_size": '24"', "size": '24"'},
+            },
+        )
+    )
+    candidate = identity_from_price_item(
+        _item(
+            title="Samsung Odyssey G30 27 Pol 144Hz",
+            brand="Samsung",
+            metadata={
+                "category": "monitor",
+                "specifications": {"screen_size": "27", "size": "27"},
+            },
+        )
+    )
+
+    score = MatchingEngine().score(reference, candidate)
+
+    assert score.decision == "reject"
+    assert any(reason.code == "variant_mismatch" for reason in score.reasons)
+
+
+def test_monitor_resolution_normalizes_explicit_dimensions() -> None:
+    reference = identity_from_price_item(
+        _item(
+            title="Samsung Odyssey G30 Full HD",
+            brand="Samsung",
+            metadata={
+                "category": "monitor",
+                "specifications": {"resolution": "FHD (1920x1080)"},
+            },
+        )
+    )
+    candidate = identity_from_price_item(
+        _item(
+            title="Samsung Odyssey G30 Full HD",
+            brand="Samsung",
+            metadata={
+                "category": "monitor",
+                "specifications": {"resolution": "1920 x 1080 pixels"},
+            },
+        )
+    )
+
+    score = MatchingEngine().score(reference, candidate)
+
+    assert (
+        reference.variant_attrs["resolution"] == candidate.variant_attrs["resolution"]
+    )
+    assert score.decision != "reject"
+
+
+def test_monitor_refresh_rate_normalizes_space_before_hz() -> None:
+    reference = identity_from_price_item(
+        _item(
+            title="Samsung Odyssey G30 144Hz",
+            brand="Samsung",
+            metadata={
+                "category": "monitor",
+                "specifications": {"refresh_rate": "144Hz"},
+            },
+        )
+    )
+    candidate = identity_from_price_item(
+        _item(
+            title="Samsung Odyssey G30 144 Hz",
+            brand="Samsung",
+            metadata={
+                "category": "monitor",
+                "specifications": {"refresh_rate": "144 Hz"},
+            },
+        )
+    )
+
+    score = MatchingEngine().score(reference, candidate)
+
+    assert (
+        reference.variant_attrs["refresh_rate"]
+        == candidate.variant_attrs["refresh_rate"]
+    )
+    assert score.decision != "reject"
 
 
 def test_monitor_model_code_mismatch_rejects_similar_titles() -> None:
@@ -1198,7 +1346,186 @@ def test_gpu_query_generation_progressive_not_full_title() -> None:
     assert "2557" not in joined
     assert "192" not in joined
     assert "dlss" not in joined
-    assert queries[0].casefold().startswith("msi rtx 5070")
+    assert queries[0].casefold().startswith("placa de video msi")
+
+
+def test_rx7600_query_generation_preserves_mpn_and_localizes_category() -> None:
+    identity = identity_from_price_item(
+        _item(
+            store="pichau",
+            title=(
+                "Placa de Video XFX Radeon RX 7600 Speedster SWFT210, 8GB, "
+                "GDDR6, 128-bit, RX-76PSWFTFY"
+            ),
+            brand="XFX",
+            model="Radeon RX 7600",
+            sku="RX-76PSWFTFY",
+            gtin="0840191500725",
+            metadata={"category": "gpu"},
+        )
+    )
+
+    pt_queries = build_search_queries(identity, locale="pt-BR")
+    en_queries = build_search_queries(identity, locale="en-US")
+    pt_budget = pt_queries[:5]
+    en_budget = en_queries[:5]
+
+    assert identity.mpn_display == "RX-76PSWFTFY"
+    assert identity.model == "rx7600"
+    assert "RX-76PSWFTFY" in pt_budget
+    assert "RX-76PSWFTFY" in en_budget
+    assert (
+        pt_queries[0] == "placa de video xfx radeon rx 7600 speedster swft210 8gb gddr6"
+    )
+    assert "radeonrx7600" not in pt_queries
+    assert en_queries[0].startswith("graphics card xfx radeon rx 7600")
+    assert any("rx 7600" in query.casefold() for query in pt_budget)
+    assert any("rx 7600" in query.casefold() for query in en_budget)
+    assert any("placa de video" in query.casefold() for query in pt_budget)
+    assert any("graphics card" in query.casefold() for query in en_budget)
+    assert not any("placa de video" in query.casefold() for query in en_budget)
+
+    ordinary_gpu_model = identity_from_price_item(
+        _item(
+            title="Placa de Video GeForce RTX-5060 8GB",
+            brand="NVIDIA",
+            model="GeForce RTX-5060",
+            metadata={"category": "gpu"},
+        )
+    )
+    assert ordinary_gpu_model.mpn_display is None
+
+    rx7600xt = identity_from_price_item(
+        _item(
+            title="Placa de Video XFX Radeon RX 7600 XT 8GB",
+            brand="XFX",
+            model="Radeon RX 7600 XT",
+            metadata={"category": "gpu"},
+        )
+    )
+    score = MatchingEngine().score(identity, rx7600xt)
+    assert score.decision == "reject"
+    assert any(
+        reason.code == "critical_conflict" and "gpu_mismatch" in reason.detail
+        for reason in score.reasons
+    )
+
+
+def test_category_context_uses_canonical_category_and_integration_locale() -> None:
+    examples = (
+        (
+            "cpu",
+            "Processador AMD Ryzen 7 5800X3D",
+            "AMD",
+            "Ryzen 7 5800X3D",
+            "processador",
+            "processor",
+        ),
+        (
+            "motherboard",
+            "Placa Mae ASUS TUF GAMING B650M-E WIFI",
+            "ASUS",
+            "B650M-E",
+            "placa mae",
+            "motherboard",
+        ),
+        (
+            "monitor",
+            "Monitor ASUS VG259Q5A Gaming Monitor",
+            "ASUS",
+            "VG259Q5A",
+            "monitor",
+            "monitor",
+        ),
+        (
+            "smartphone",
+            "Apple iPhone 15 128GB",
+            "Apple",
+            "iPhone 15",
+            "celular",
+            "smartphone",
+        ),
+        (
+            "ssd",
+            "SSD Samsung 990 EVO Plus 1TB M.2",
+            "Samsung",
+            "990 EVO Plus",
+            "ssd",
+            "ssd",
+        ),
+    )
+
+    for category, title, brand, model, pt_term, en_term in examples:
+        identity = identity_from_price_item(
+            _item(
+                title=title,
+                brand=brand,
+                model=model,
+                metadata={"category": category},
+            )
+        )
+        pt_queries = " ".join(
+            build_search_queries(identity, locale="pt-BR")[:5]
+        ).casefold()
+        en_queries = " ".join(
+            build_search_queries(identity, locale="en-US")[:5]
+        ).casefold()
+
+        assert pt_term in pt_queries
+        assert en_term in en_queries
+        pt_first = build_search_queries(identity, locale="pt-BR")[0]
+        if category == "motherboard":
+            assert pt_first == "placa mae asus tuf gaming b650m-e wifi"
+        if category == "cpu":
+            assert pt_first == "processador amd ryzen 7 5800x3d"
+        if pt_term != en_term:
+            assert pt_term not in en_queries
+
+    phone = identity_from_price_item(
+        _item(
+            title="Apple iPhone 15 128GB Rosa",
+            brand="Apple",
+            model="iPhone 15",
+            metadata={"category": "smartphone"},
+        )
+    )
+    phone_query = build_search_queries(phone, locale="pt-BR")[0]
+    assert phone_query == "apple iphone 15 128gb rosa"
+    assert not phone_query.startswith("celular")
+
+
+def test_motherboard_model_suffix_conflict_rejects_different_boards() -> None:
+    reference = identity_from_price_item(
+        _item(
+            store="pichau",
+            product_id="a520m-k-v2",
+            title="Placa-Mae Gigabyte A520M K V2 A520 AM4 mATX DDR4",
+            brand="Gigabyte",
+            model="A520M K V2",
+            metadata={"category": "motherboard"},
+        )
+    )
+    candidate = identity_from_price_item(
+        _item(
+            store="kabum",
+            product_id="a520m-ds3h-v2",
+            title=(
+                "Placa-Mae Gigabyte A520M DS3H V2, AMD, Micro ATX, DDR4, "
+                "Preto - A520M DS3H V2"
+            ),
+            brand="Gigabyte",
+            model="A520M DS3H V2",
+            metadata={"category": "motherboard"},
+        )
+    )
+
+    score = MatchingEngine().score(reference, candidate)
+
+    assert score.decision == "reject"
+    assert any(
+        reason.code == "critical_conflict" and "motherboard_mismatch" in reason.detail
+        for reason in score.reasons
+    )
 
 
 def test_gpu_same_product_different_titles_match() -> None:
@@ -2034,9 +2361,8 @@ def test_long_smartphone_title_does_not_drive_raw_serp_query() -> None:
     assert identity.variant_attrs.get("storage") == "256gb"
     assert identity.variant_attrs.get("color") == "titanio preto"
     queries = build_search_queries(identity)
-    # SEARCH stays broad (family) before capacity-colored refinements — Magento
-    # SERPs often bury S-series when ``256gb`` dominates the query token set.
-    assert queries[0] == "samsung galaxy s25 ultra"
+    # Explicit category stays in its title position; promotional detail is removed.
+    assert queries[0] == "celular samsung galaxy s25 ultra 5g 256gb titanio preto"
     assert "samsung galaxy s25 ultra 256gb" in queries
     assert any(q == "samsung galaxy s25 ultra" for q in queries)
     assert any("256gb" in q and "preto" in q for q in queries)
@@ -2068,7 +2394,12 @@ def test_smartphone_marketing_noise_does_not_change_identity() -> None:
     assert base.model == noisy.model == "galaxys25ultra"
     assert base.variant_attrs.get("storage") == noisy.variant_attrs.get("storage")
     assert normalize_title(base.title).split()[:4] != []  # smoke
-    assert build_search_queries(base)[0] == build_search_queries(noisy)[0]
+    assert (
+        build_search_queries(base)[0] == "samsung galaxy s25 ultra 256gb titanio preto"
+    )
+    assert build_search_queries(noisy)[0] == (
+        "celular samsung galaxy s25 ultra 5g 256gb titanio preto"
+    )
 
 
 def test_galaxy_model_suffix_conflict_and_queries() -> None:
@@ -2211,6 +2542,15 @@ def test_phone_wearable_kit_is_bundle_reject() -> None:
     bare = SearchCandidate(url=url, title=None, product_id="238922200")
     enriched = enrich_candidate_title(bare)
     assert enriched.title and "ultra" in enriched.title.casefold()
+
+    aliexpress_url = "https://pt.aliexpress.com/item/1005012492913541.html"
+    assert title_hint_from_url(aliexpress_url) is None
+    opaque = SearchCandidate(
+        url=aliexpress_url,
+        title=None,
+        product_id="1005012492913541",
+    )
+    assert enrich_candidate_title(opaque).title is None
 
     ranked = rank_candidates_for_query(
         [
@@ -2611,7 +2951,10 @@ def test_cpu_queries_use_spaced_model_and_keep_suffix() -> None:
         )
     )
     queries = build_search_queries(identity)
-    assert queries[:2] == ["amd ryzen 7 5800x3d", "ryzen 7 5800x3d"]
+    assert queries[:2] == [
+        "processador amd ryzen 7 5800x3d am4",
+        "amd ryzen 7 5800x3d",
+    ]
     assert not any(query.endswith("5800x") for query in queries)
 
 
