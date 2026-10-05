@@ -89,7 +89,7 @@ def test_drive_inmemory_upload_download_delete(drive: InMemoryDriveStorage) -> N
     )
     assert drive.download_bytes(file_id) == b"abc"
     drive.delete_file(file_id)
-    with pytest.raises(DriveClientError, match="DRIVE_FILE_NOT_FOUND"):
+    with pytest.raises(DriveClientError, match="Storage file not found"):
         drive.download_bytes(file_id)
     drive.delete_file("missing")  # idempotent
 
@@ -155,6 +155,66 @@ def test_google_drive_delete_404_is_ok() -> None:
     service.files.return_value.delete.return_value.execute.side_effect = http_err
     client = GoogleDriveClient(service=service)
     client.delete_file("gone")
+
+
+@pytest.mark.parametrize(
+    ("http_status", "reason", "availability", "code", "retryable"),
+    [
+        (404, "notFound", "not_found", "storage_not_found", False),
+        (
+            403,
+            "insufficientFilePermissions",
+            "permission_denied",
+            "storage_permission_denied",
+            False,
+        ),
+        (
+            403,
+            "userRateLimitExceeded",
+            "temporarily_unavailable",
+            "storage_unavailable",
+            True,
+        ),
+        (429, "", "temporarily_unavailable", "storage_unavailable", True),
+        (503, "", "temporarily_unavailable", "storage_unavailable", True),
+        (401, "", "storage_error", "storage_credentials_invalid", False),
+    ],
+)
+def test_drive_http_errors_are_classified_without_exposing_provider_details(
+    http_status: int,
+    reason: str,
+    availability: str,
+    code: str,
+    retryable: bool,
+) -> None:
+    import json
+
+    from googleapiclient.errors import HttpError
+
+    from scout_api.modules.images.drive_client import _drive_http_error
+
+    response = MagicMock()
+    response.status = http_status
+    content = json.dumps({"error": {"errors": [{"reason": reason}]}}).encode()
+    failure = _drive_http_error(HttpError(response, content))
+    assert failure.availability == availability
+    assert failure.code == code
+    assert failure.retryable is retryable
+    assert "Google" not in str(failure)
+
+
+def test_expired_drive_oauth_grant_is_non_retryable_storage_error() -> None:
+    from google.auth.exceptions import GoogleAuthError
+
+    from scout_api.modules.images.drive_client import _drive_transport_error
+
+    failure = _drive_transport_error(
+        GoogleAuthError("invalid_grant: Token has been expired or revoked.")
+    )
+    assert failure.availability == "storage_error"
+    assert failure.code == "storage_credentials_invalid"
+    assert failure.retryable is False
+    assert "expired or revoked" not in str(failure)
 
 
 @pytest.mark.parametrize(
@@ -296,6 +356,14 @@ def test_display_url_fallback_rules(
     assert ready.display_url == ready.optimized_url
     assert ready.optimized_url and "variant=optimized" in ready.optimized_url
 
+    row.optimized_drive_file_id = None
+    session.flush()
+    missing_optimized_file = to_image_view(row)
+    assert missing_optimized_file.image_status == "ready"
+    assert missing_optimized_file.optimized_url is None
+    assert missing_optimized_file.display_url == missing_optimized_file.original_url
+    assert missing_optimized_file.image_warning_code == "conversion_failed"
+
     row.optimized_status = "failed"
     session.flush()
     failed = to_image_view(row)
@@ -305,6 +373,57 @@ def test_display_url_fallback_rules(
     session.flush()
     processing = to_image_view(row)
     assert processing.display_url == processing.original_url
+
+    drive.delete_file(row.original_drive_file_id)
+    with pytest.raises(RequestError) as failure:
+        svc.get_content(product_id, row.id, viewer=_OWNER, variant="original")
+    assert failure.value.code == "IMAGE_STORAGE_NOT_FOUND"
+    assert failure.value.retryable is False
+
+
+def test_image_availability_distinguishes_missing_processing_and_broken_reference(
+    session: Session,
+) -> None:
+    from scout_api.modules.images.repository import ProductImageRepository
+
+    product = (
+        ProductRegistrationService(session)
+        .register(
+            ProductRegisterRequest(title="State", gtin="7891991010863"),
+            owner=_OWNER,
+        )
+        .product
+    )
+    row = ProductImageRepository(session).create(
+        product_id=product.id,
+        source_url="https://cdn.example/image.png",
+        position=0,
+        is_main=True,
+        original_status="pending",
+    )
+    pending = to_image_view(row)
+    assert pending.image_status == "processing"
+    assert pending.image_error_code is None
+
+    row.original_status = "ready"
+    row.original_drive_file_id = ""
+    invalid = to_image_view(row)
+    assert invalid.image_status == "invalid_reference"
+    assert invalid.image_error_code == "invalid_reference"
+
+
+def test_product_without_images_has_explicit_missing_image_status(
+    session: Session,
+) -> None:
+    reg = ProductRegistrationService(session)
+    product = reg.register(
+        ProductRegisterRequest(title="Sem foto", gtin="7891991010863"),
+        owner=_OWNER,
+    ).product
+    view = reg.get_product(product.id, viewer=_OWNER)
+    assert view is not None
+    assert view.primary_image_url is None
+    assert view.primary_image_status == "missing"
 
 
 def test_approval_persists_only_selected(

@@ -141,6 +141,35 @@ cookie) — ver [ADR 0035](../adr/0035-media-access-cookie.md).
 **Nunca** colocar access token na query string. **Nunca** apontar o FE para
 URLs `drive.google.com`.
 
+### Disponibilidade e diagnóstico
+
+`ProductImageView` e `ProductView` expõem `image_status` /
+`primary_image_status`, `image_error_code` e `image_retryable`. Estados de
+metadata: `ready`, `missing`, `processing`, `invalid_reference` e
+`storage_error`. Um produto sem linha de imagem tem status `missing` e código
+`image_not_configured`. Quando AVIF falha, a original continua `ready` e
+`image_warning_code=conversion_failed`; o detalhe retornado é uma mensagem
+segura, nunca a exceção interna.
+
+Se o download do conteúdo falhar, o proxy responde JSON com `detail.code`,
+`detail.image_status`, mensagem amigável e `detail.retryable`:
+
+| `image_status` | Significado | Retry |
+|---|---|---|
+| `not_found` | Arquivo referenciado não existe mais | Não |
+| `permission_denied` | Storage recusou acesso ao arquivo | Não |
+| `temporarily_unavailable` | Timeout, quota/limite ou storage indisponível | Sim |
+| `storage_error` | Falha sem classificação mais específica | Conforme resposta |
+| `invalid_reference` | Linha marcada pronta sem ID de arquivo | Não |
+| `processing` | Original ainda não pronta | Sim, com espera moderada |
+
+O frontend que receber `onError` em `<img>` deve substituir a imagem por estado
+visual acessível e, se precisar distinguir uma falha conhecida do backend,
+consultar a resposta JSON do endpoint de conteúdo. Repetir apenas após ação do
+usuário e somente se `retryable=true`; não fazer polling ou retry infinito.
+Os logs de falha incluem `image_id`, produto, provider, código normalizado,
+status HTTP e retryability, sem Drive file ID, URL assinada ou credenciais.
+
 Falha de AVIF: original permanece; `optimized_status=failed`; retry via
 `POST .../retry-optimization` (reusa original; não rebaixa URL).
 

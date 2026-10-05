@@ -169,3 +169,14 @@ Regras:
 
 Origens explícitas (`CORS_ALLOWED_ORIGINS`), `credentials=true`, métodos
 `GET, POST, PATCH, DELETE, OPTIONS`, headers `Authorization, Content-Type, Accept`.
+
+### Estado visual de imagens (contrato de disponibilidade)
+
+Consumir `primary_image_status` / `image_status`, `*_error_code` e
+`*_retryable`; não inferir a causa só pelo `null` da URL. Distinguir produto sem
+imagem (`missing`), processamento, referência inválida e falha no storage.
+Após `onError`, substituir `<img>` quebrada por um estado visual acessível.
+Para uma causa conhecida, usar `detail.image_status` e `detail.retryable` da
+resposta JSON do proxy. Exibir retry manual apenas quando recuperável e
+remover o estado de erro após sucesso. `image_warning_code=conversion_failed`
+indica que a original continua disponível; não exibir exceções internas.

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import json
 import logging
 import threading
 from typing import Any, Protocol
@@ -10,6 +11,7 @@ from typing import Any, Protocol
 import google_auth_httplib2
 import googleapiclient.http
 import httplib2
+from google.auth.exceptions import GoogleAuthError
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
@@ -46,7 +48,88 @@ class DriveNotConfiguredError(RuntimeError):
 
 
 class DriveClientError(RuntimeError):
-    """Wrapped Drive API failure."""
+    """Sanitized storage failure with a stable, provider-neutral category."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        availability: str = "storage_error",
+        code: str = "storage_error",
+        retryable: bool = False,
+        http_status: int | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.availability = availability
+        self.code = code
+        self.retryable = retryable
+        self.http_status = http_status
+
+
+def _drive_http_error(exc: HttpError) -> DriveClientError:
+    status = getattr(getattr(exc, "resp", None), "status", None)
+    reason = ""
+    try:
+        payload = json.loads(exc.content.decode("utf-8", errors="replace"))
+        errors = payload.get("error", {}).get("errors", [])
+        reason = " ".join(str(item.get("reason", "")) for item in errors).casefold()
+    except (AttributeError, TypeError, ValueError):
+        pass
+    if status == 404:
+        return DriveClientError(
+            "Storage file not found",
+            availability="not_found",
+            code="storage_not_found",
+            http_status=status,
+        )
+    if status == 403 and any(
+        term in reason for term in ("quota", "ratelimit", "userlimit", "dailylimit")
+    ):
+        return DriveClientError(
+            "Storage quota temporarily unavailable",
+            availability="temporarily_unavailable",
+            code="storage_unavailable",
+            retryable=True,
+            http_status=status,
+        )
+    if status == 403:
+        return DriveClientError(
+            "Storage access denied",
+            availability="permission_denied",
+            code="storage_permission_denied",
+            http_status=status,
+        )
+    if status == 401:
+        return DriveClientError(
+            "Storage credentials rejected",
+            code="storage_credentials_invalid",
+            http_status=status,
+        )
+    if status == 429 or (isinstance(status, int) and status >= 500):
+        return DriveClientError(
+            "Storage temporarily unavailable",
+            availability="temporarily_unavailable",
+            code="storage_unavailable",
+            retryable=True,
+            http_status=status,
+        )
+    return DriveClientError("Storage request failed", http_status=status)
+
+
+def _drive_transport_error(exc: BaseException) -> DriveClientError:
+    if isinstance(exc, GoogleAuthError) and any(
+        reason in str(exc).casefold()
+        for reason in ("invalid_grant", "invalid_client", "unauthorized_client")
+    ):
+        return DriveClientError(
+            "Storage credentials are invalid", code="storage_credentials_invalid"
+        )
+    return DriveClientError(
+        "Storage temporarily unavailable",
+        availability="temporarily_unavailable",
+        code="storage_unavailable",
+        retryable=True,
+    )
 
 
 class GoogleDriveClient:
@@ -158,8 +241,10 @@ class GoogleDriveClient:
             }
             created = self._drive().files().create(body=meta, fields="id").execute()
             return str(created["id"])
-        except (HttpError, OSError) as exc:
-            raise DriveClientError(f"Falha ao garantir pasta Drive: {exc}") from exc
+        except HttpError as exc:
+            raise _drive_http_error(exc) from exc
+        except (OSError, httplib2.HttpLib2Error, GoogleAuthError, TimeoutError) as exc:
+            raise _drive_transport_error(exc) from exc
 
     def upload_bytes(
         self,
@@ -179,8 +264,10 @@ class GoogleDriveClient:
                 .execute()
             )
             return str(created["id"])
-        except (HttpError, OSError) as exc:
-            raise DriveClientError(f"Falha no upload Drive: {exc}") from exc
+        except HttpError as exc:
+            raise _drive_http_error(exc) from exc
+        except (OSError, httplib2.HttpLib2Error, GoogleAuthError, TimeoutError) as exc:
+            raise _drive_transport_error(exc) from exc
 
     def download_bytes(self, file_id: str) -> bytes:
         try:
@@ -192,11 +279,9 @@ class GoogleDriveClient:
                 _, done = downloader.next_chunk()
             return buffer.getvalue()
         except HttpError as exc:
-            if getattr(exc, "resp", None) is not None and exc.resp.status == 404:
-                raise DriveClientError("DRIVE_FILE_NOT_FOUND") from exc
-            raise DriveClientError(f"Falha no download Drive: {exc}") from exc
-        except OSError as exc:
-            raise DriveClientError(f"Falha no download Drive: {exc}") from exc
+            raise _drive_http_error(exc) from exc
+        except (OSError, httplib2.HttpLib2Error, GoogleAuthError, TimeoutError) as exc:
+            raise _drive_transport_error(exc) from exc
 
     def delete_file(self, file_id: str) -> None:
         """Idempotent delete: missing file is success."""
@@ -207,9 +292,9 @@ class GoogleDriveClient:
             if status == 404:
                 logger.info("Drive file already absent: %s", file_id[:8])
                 return
-            raise DriveClientError(f"Falha ao excluir arquivo Drive: {exc}") from exc
-        except OSError as exc:
-            raise DriveClientError(f"Falha ao excluir arquivo Drive: {exc}") from exc
+            raise _drive_http_error(exc) from exc
+        except (OSError, httplib2.HttpLib2Error, GoogleAuthError, TimeoutError) as exc:
+            raise _drive_transport_error(exc) from exc
 
 
 class InMemoryDriveStorage:
@@ -246,7 +331,12 @@ class InMemoryDriveStorage:
 
     def download_bytes(self, file_id: str) -> bytes:
         if file_id not in self.files:
-            raise DriveClientError("DRIVE_FILE_NOT_FOUND")
+            raise DriveClientError(
+                "Storage file not found",
+                availability="not_found",
+                code="storage_not_found",
+                http_status=404,
+            )
         return self.files[file_id][1]
 
     def delete_file(self, file_id: str) -> None:

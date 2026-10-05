@@ -87,6 +87,7 @@ Itens resolvidos **não** ficam no índice ativo.
 | [PENDING-019](PENDING-019-pricescout-match-start-failure-smoke.md) | Completar smoke de falhas no start do Product Match | OPEN | TESTING | P2 | frontend/product-match |
 | [PENDING-020](PENDING-020-product-match-monitor-live-smoke.md) | Validar Product Match live em vários monitores reais | IN_PROGRESS | TESTING | P2 | matching/monitor |
 | [PENDING-021](PENDING-021-store-logo-deployment-smoke.md) | Aplicar e validar o fluxo de logos no ambiente integrado | IN_PROGRESS | TESTING | P1 | matching/store-admin |
+| [PENDING-023](PENDING-023-image-availability-frontend.md) | Implementar e validar estados de disponibilidade de imagem no PriceScout | IN_PROGRESS | INCOMPLETE | P1 | frontend/images |
 
 *(pendências ativas: 5)*
 

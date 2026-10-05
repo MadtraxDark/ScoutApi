@@ -448,6 +448,18 @@ class ProductView(BaseModel):
             "Prefira este campo na listagem; não espere optimized_status."
         ),
     )
+    primary_image_status: Literal[
+        "ready",
+        "missing",
+        "processing",
+        "temporarily_unavailable",
+        "permission_denied",
+        "not_found",
+        "storage_error",
+        "invalid_reference",
+    ] = "missing"
+    primary_image_error_code: str | None = None
+    primary_image_retryable: bool = False
 
 
 class ProductUpdateRequest(BaseModel):

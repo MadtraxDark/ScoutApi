@@ -8,10 +8,18 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, HttpUrl
 
-OriginalStatus = Literal[
-    "pending", "downloading", "ready", "failed", "deleting"
-]
+OriginalStatus = Literal["pending", "downloading", "ready", "failed", "deleting"]
 OptimizedStatus = Literal["pending", "processing", "ready", "failed"]
+ImageAvailability = Literal[
+    "ready",
+    "missing",
+    "processing",
+    "temporarily_unavailable",
+    "permission_denied",
+    "not_found",
+    "storage_error",
+    "invalid_reference",
+]
 
 
 class ApprovedImageInput(BaseModel):
@@ -59,6 +67,10 @@ class ProductImageView(BaseModel):
     original_url: str | None = None
     optimized_url: str | None = None
     display_url: str | None = None
+    image_status: ImageAvailability
+    image_error_code: str | None = None
+    image_retryable: bool = False
+    image_warning_code: str | None = None
     original_status: OriginalStatus
     optimized_status: OptimizedStatus
     original_width: int | None = None

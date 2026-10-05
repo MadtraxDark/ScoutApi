@@ -330,6 +330,6 @@ class ImagePipeline:
             try:
                 self._drive.delete_file(file_id)
             except DriveClientError as exc:
-                if "DRIVE_FILE_NOT_FOUND" in str(exc):
+                if exc.availability == "not_found":
                     continue
                 raise

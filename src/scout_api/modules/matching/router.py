@@ -36,7 +36,11 @@ from scout_api.modules.auth.schemas import AuthenticatedPrincipal, UserRole
 from scout_api.modules.crawler.core.exceptions import ParseError, RequestError
 from scout_api.modules.crawler.schemas import CrawlErrorResponse
 from scout_api.modules.crawler.stores import STORE_CONFIGS
-from scout_api.modules.images.drive_client import get_drive_storage
+from scout_api.modules.images.drive_client import (
+    DriveClientError,
+    DriveNotConfiguredError,
+    get_drive_storage,
+)
 from scout_api.modules.matching.match_run_serializers import (
     match_run_to_detail,
     match_run_to_status,
@@ -504,7 +508,15 @@ def get_store_logo(
 ) -> Response:
     row = session.get(StoreMetadata, store_key) if session is not None else None
     if row is None:
-        raise HTTPException(status_code=404, detail="Logo não encontrada")
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "code": "IMAGE_NOT_CONFIGURED",
+                "message": "Esta loja não possui uma logo cadastrada.",
+                "image_status": "missing",
+                "retryable": False,
+            },
+        )
     if row.logo_svg:
         data = row.logo_svg.encode("utf-8")
         content_type = "image/svg+xml"
@@ -512,12 +524,68 @@ def get_store_logo(
     else:
         file_id = row.logo_optimized_file_id or row.logo_original_file_id
         if not file_id:
-            raise HTTPException(status_code=404, detail="Logo não encontrada")
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "code": "IMAGE_NOT_CONFIGURED",
+                    "message": "Esta loja não possui uma logo cadastrada.",
+                    "image_status": "missing",
+                    "retryable": False,
+                },
+            )
         try:
             data = get_drive_storage(get_settings()).download_bytes(file_id)
-        except Exception as exc:
+        except (DriveClientError, DriveNotConfiguredError) as exc:
+            if isinstance(exc, DriveClientError):
+                image_status = exc.availability
+                retryable = exc.retryable
+            else:
+                image_status = "storage_error"
+                retryable = False
+            status_code, code, message = {
+                "not_found": (
+                    status.HTTP_404_NOT_FOUND,
+                    "IMAGE_STORAGE_NOT_FOUND",
+                    "A logo cadastrada não foi encontrada no armazenamento.",
+                ),
+                "permission_denied": (
+                    status.HTTP_403_FORBIDDEN,
+                    "IMAGE_STORAGE_PERMISSION_DENIED",
+                    "O sistema não tem acesso à logo cadastrada.",
+                ),
+                "temporarily_unavailable": (
+                    status.HTTP_503_SERVICE_UNAVAILABLE,
+                    "IMAGE_STORAGE_UNAVAILABLE",
+                    "O armazenamento de imagens está temporariamente indisponível.",
+                ),
+            }.get(
+                image_status,
+                (
+                    status.HTTP_502_BAD_GATEWAY,
+                    "IMAGE_STORAGE_ERROR",
+                    "Não foi possível acessar a logo cadastrada.",
+                ),
+            )
+            logger.warning(
+                "store_logo_delivery_failed",
+                extra={
+                    "store_key": store_key,
+                    "entity_type": "store",
+                    "entity_id": store_key,
+                    "storage_provider": "drive",
+                    "error_code": code,
+                    "image_status": image_status,
+                    "retryable": retryable,
+                },
+            )
             raise HTTPException(
-                status_code=503, detail="Logo temporariamente indisponível"
+                status_code=status_code,
+                detail={
+                    "code": code,
+                    "message": message,
+                    "image_status": image_status,
+                    "retryable": retryable,
+                },
             ) from exc
         content_type = (
             "image/avif"

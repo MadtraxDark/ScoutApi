@@ -49,12 +49,12 @@ def to_image_view(row: ProductImage) -> ProductImageView:
     product_id = row.canonical_product_id
     original_url = (
         content_path(product_id, row.id, variant="original")
-        if row.original_status == "ready"
+        if row.original_status == "ready" and row.original_drive_file_id
         else None
     )
     optimized_url = (
         content_path(product_id, row.id, variant="optimized")
-        if row.optimized_status == "ready"
+        if row.optimized_status == "ready" and row.optimized_drive_file_id
         else None
     )
     if row.optimized_status == "ready" and optimized_url:
@@ -63,6 +63,28 @@ def to_image_view(row: ProductImage) -> ProductImageView:
         display_url = original_url
     else:
         display_url = None
+    if row.optimized_status == "ready" and row.optimized_drive_file_id:
+        image_status = "ready"
+        image_error_code = None
+    elif row.original_status == "ready":
+        if row.original_drive_file_id:
+            image_status = "ready"
+            image_error_code = None
+        else:
+            image_status = "invalid_reference"
+            image_error_code = "invalid_reference"
+    elif row.original_status in {"pending", "downloading"}:
+        image_status = "processing"
+        image_error_code = None
+    elif row.original_status == "failed":
+        image_status = "storage_error"
+        image_error_code = "storage_error"
+    else:
+        image_status = "processing"
+        image_error_code = None
+    optimized_failed = row.optimized_status == "failed" or (
+        row.optimized_status == "ready" and not row.optimized_drive_file_id
+    )
     return ProductImageView(
         image_id=row.id,
         product_id=product_id,
@@ -72,11 +94,24 @@ def to_image_view(row: ProductImage) -> ProductImageView:
         original_url=original_url,
         optimized_url=optimized_url,
         display_url=display_url,
+        image_status=image_status,
+        image_error_code=image_error_code,
+        image_retryable=image_status == "storage_error",
+        image_warning_code=(
+            "conversion_failed"
+            if image_status == "ready" and optimized_failed
+            else None
+        ),
         original_status=row.original_status,  # type: ignore[arg-type]
         optimized_status=row.optimized_status,  # type: ignore[arg-type]
         original_width=row.original_width,
         original_height=row.original_height,
-        optimized_error=row.optimized_error,
+        optimized_error=(
+            "A versão otimizada não pôde ser gerada; "
+            "a imagem original segue disponível."
+            if row.original_status == "ready" and optimized_failed
+            else None
+        ),
         created_at=row.created_at,
         updated_at=row.updated_at,
     )
@@ -89,6 +124,42 @@ def primary_display_url(images: list[ProductImageView]) -> str | None:
     main = next((img for img in images if img.is_main), None)
     chosen = main or images[0]
     return chosen.display_url
+
+
+def _image_storage_error(
+    exc: DriveClientError, *, product_id: UUID, image_id: UUID
+) -> RequestError:
+    public_code = {
+        "not_found": "IMAGE_STORAGE_NOT_FOUND",
+        "permission_denied": "IMAGE_STORAGE_PERMISSION_DENIED",
+        "temporarily_unavailable": "IMAGE_STORAGE_UNAVAILABLE",
+    }.get(exc.availability, "IMAGE_STORAGE_ERROR")
+    logger.error(
+        "image_delivery_failed image_id=%s entity_type=product entity_id=%s "
+        "storage_provider=drive error_code=%s http_status=%s retryable=%s",
+        image_id,
+        product_id,
+        exc.code,
+        exc.http_status,
+        exc.retryable,
+    )
+    message = {
+        "IMAGE_STORAGE_NOT_FOUND": (
+            "A imagem cadastrada não foi encontrada no armazenamento."
+        ),
+        "IMAGE_STORAGE_PERMISSION_DENIED": (
+            "A imagem existe, mas o sistema não conseguiu acessá-la."
+        ),
+        "IMAGE_STORAGE_UNAVAILABLE": (
+            "Não foi possível carregar a imagem no momento. Tente novamente mais tarde."
+        ),
+    }.get(public_code, "Não foi possível acessar a imagem cadastrada.")
+    return RequestError(
+        message,
+        code=public_code,
+        retryable=exc.retryable,
+        upstream_status=exc.http_status,
+    )
 
 
 class ProductImageService:
@@ -275,18 +346,22 @@ class ProductImageService:
                     code="INVALID_REQUEST",
                 )
             if row.optimized_status == "ready":
-                data = self._drive.download_bytes(row.optimized_drive_file_id)
+                try:
+                    data = self._drive.download_bytes(row.optimized_drive_file_id)
+                except DriveClientError as exc:
+                    raise _image_storage_error(
+                        exc, product_id=product_id, image_id=image_id
+                    ) from exc
                 ctype = row.optimized_mime_type or "image/avif"
                 etag = row.original_sha256 or str(row.id)
                 logger.info(
                     "media_content product_id=%s image_id=%s original_status=%s "
                     "optimized_status=%s selected_source=optimized "
-                    "media_file_id=%s media_response_status=200 content_type=%s",
+                    "storage_provider=drive media_response_status=200 content_type=%s",
                     product_id,
                     image_id,
                     row.original_status,
                     row.optimized_status,
-                    row.optimized_drive_file_id,
                     ctype,
                 )
                 return data, ctype, f'"{etag}-avif"'
@@ -298,18 +373,22 @@ class ProductImageService:
             )
 
         if row.original_status == "ready" and row.original_drive_file_id:
-            data = self._drive.download_bytes(row.original_drive_file_id)
+            try:
+                data = self._drive.download_bytes(row.original_drive_file_id)
+            except DriveClientError as exc:
+                raise _image_storage_error(
+                    exc, product_id=product_id, image_id=image_id
+                ) from exc
             ctype = row.original_mime_type or "application/octet-stream"
             etag = row.original_sha256 or str(row.id)
             logger.info(
                 "media_content product_id=%s image_id=%s original_status=%s "
                 "optimized_status=%s selected_source=original "
-                "media_file_id=%s media_response_status=200 content_type=%s",
+                "storage_provider=drive media_response_status=200 content_type=%s",
                 product_id,
                 image_id,
                 row.original_status,
                 row.optimized_status,
-                row.original_drive_file_id,
                 ctype,
             )
             return data, ctype, f'"{etag}-original"'
@@ -321,9 +400,15 @@ class ProductImageService:
             row.original_status,
             row.optimized_status,
         )
+        if row.original_status == "ready" and not row.original_drive_file_id:
+            raise RequestError(
+                "A referência da imagem está inválida.",
+                code="IMAGE_INVALID_REFERENCE",
+            )
         raise RequestError(
-            "Imagem ainda não disponível",
-            code="INVALID_REQUEST",
+            "A imagem ainda está sendo processada.",
+            code="IMAGE_PROCESSING",
+            retryable=True,
         )
 
     def cleanup_product_images(self, product_id: UUID) -> None:

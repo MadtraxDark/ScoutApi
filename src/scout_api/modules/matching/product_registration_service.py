@@ -569,6 +569,10 @@ def _to_product_view(
         if value not in seen:
             seen.add(value)
             unique_gtins.append(value)
+    image_items = list(images or [])
+    main_image = next((item for item in image_items if item.is_main), None)
+    if main_image is None and image_items:
+        main_image = image_items[0]
     return ProductView(
         id=product.id,
         title=product.title,
@@ -580,8 +584,13 @@ def _to_product_view(
         created_at=product.created_at,
         updated_at=product.updated_at,
         listings=[_to_listing_view(item, session=session) for item in listings],
-        images=list(images or []),
-        primary_image_url=primary_display_url(list(images or [])),
+        images=image_items,
+        primary_image_url=primary_display_url(image_items),
+        primary_image_status=main_image.image_status if main_image else "missing",
+        primary_image_error_code=(
+            main_image.image_error_code if main_image else "image_not_configured"
+        ),
+        primary_image_retryable=main_image.image_retryable if main_image else False,
     )
 
 

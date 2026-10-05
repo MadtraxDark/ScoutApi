@@ -67,8 +67,22 @@ def _http_error(exc: RequestError) -> HTTPException:
         "PRODUCT_NOT_FOUND": status.HTTP_404_NOT_FOUND,
         "FORBIDDEN": status.HTTP_403_FORBIDDEN,
         "INVALID_REQUEST": status.HTTP_422_UNPROCESSABLE_ENTITY,
+        "IMAGE_PROCESSING": status.HTTP_425_TOO_EARLY,
+        "IMAGE_INVALID_REFERENCE": status.HTTP_424_FAILED_DEPENDENCY,
+        "IMAGE_STORAGE_NOT_FOUND": status.HTTP_404_NOT_FOUND,
+        "IMAGE_STORAGE_PERMISSION_DENIED": status.HTTP_403_FORBIDDEN,
+        "IMAGE_STORAGE_UNAVAILABLE": status.HTTP_503_SERVICE_UNAVAILABLE,
+        "IMAGE_STORAGE_ERROR": status.HTTP_502_BAD_GATEWAY,
         "STORAGE_ERROR": status.HTTP_502_BAD_GATEWAY,
         "UPSTREAM_ERROR": status.HTTP_502_BAD_GATEWAY,
+    }
+    image_status_map = {
+        "IMAGE_PROCESSING": "processing",
+        "IMAGE_INVALID_REFERENCE": "invalid_reference",
+        "IMAGE_STORAGE_NOT_FOUND": "not_found",
+        "IMAGE_STORAGE_PERMISSION_DENIED": "permission_denied",
+        "IMAGE_STORAGE_UNAVAILABLE": "temporarily_unavailable",
+        "IMAGE_STORAGE_ERROR": "storage_error",
     }
     return HTTPException(
         status_code=code_map.get(exc.code, status.HTTP_400_BAD_REQUEST),
@@ -76,6 +90,11 @@ def _http_error(exc: RequestError) -> HTTPException:
             "code": exc.code,
             "message": str(exc),
             "retryable": bool(getattr(exc, "retryable", False)),
+            **(
+                {"image_status": image_status_map[exc.code]}
+                if exc.code in image_status_map
+                else {}
+            ),
         },
     )
 
