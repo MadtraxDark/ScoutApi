@@ -12,15 +12,17 @@ Prerequisites:
 
 Do **not** reuse the Web client used by Supabase Auth / PriceScout login.
 
-Outputs refresh token + root folder id to paste into .env (never commit).
+Use --write-env to persist credentials locally without printing secrets.
 Scope: https://www.googleapis.com/auth/drive.file
 """
 
 from __future__ import annotations
 
+import argparse
 import os
 import socket
 import sys
+import tempfile
 from pathlib import Path
 
 SCOPE = "https://www.googleapis.com/auth/drive.file"
@@ -31,6 +33,39 @@ REDIRECT_URIS = (
     f"http://127.0.0.1:{OAUTH_PORT}/",
     f"http://localhost:{OAUTH_PORT}/",
 )
+
+
+def _write_env_values(env_path: Path, values: dict[str, str]) -> None:
+    """Replace only selected keys atomically, without backups containing secrets."""
+    for key, value in values.items():
+        if any(char in value for char in ("\n", "\r", '"', "\\", "$")):
+            raise ValueError(f"Valor inválido para {key}")
+    content = env_path.read_text(encoding="utf-8") if env_path.exists() else ""
+    lines = []
+    remaining = dict(values)
+    for line in content.splitlines():
+        key = line.partition("=")[0].strip()
+        if key in values:
+            if key in remaining:
+                lines.append(f'{key}="{remaining.pop(key)}"')
+        else:
+            lines.append(line)
+    lines.extend(f'{key}="{value}"' for key, value in remaining.items())
+    temporary: str | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", dir=env_path.parent, delete=False
+        ) as handle:
+            temporary = handle.name
+            handle.write("\n".join(lines) + "\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        if env_path.exists():
+            os.chmod(temporary, env_path.stat().st_mode)
+        os.replace(temporary, env_path)
+    finally:
+        if temporary and os.path.exists(temporary):
+            os.unlink(temporary)
 
 
 def _load_dotenv() -> None:
@@ -62,6 +97,13 @@ def _port_in_use(port: int) -> bool:
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--write-env",
+        action="store_true",
+        help="Salva token e pasta no .env sem imprimir credenciais.",
+    )
+    args = parser.parse_args()
     _load_dotenv()
     client_id = os.environ.get("GOOGLE_DRIVE_CLIENT_ID", "").strip()
     client_secret = os.environ.get("GOOGLE_DRIVE_CLIENT_SECRET", "").strip()
@@ -117,6 +159,8 @@ def main() -> int:
             access_type="offline",
             prompt="consent",
             open_browser=True,
+            timeout_seconds=300,
+            authorization_prompt_message="",
         )
     except OSError as exc:
         print(
@@ -136,6 +180,13 @@ def main() -> int:
         )
         return 1
 
+    if creds is None:
+        print(
+            "Consentimento não concluído em 300 segundos. Tente novamente.",
+            file=sys.stderr,
+        )
+        return 1
+
     if not creds.refresh_token:
         print(
             "Nenhum refresh_token retornado. Revogue o acesso do app em "
@@ -148,10 +199,7 @@ def main() -> int:
     service = build("drive", "v3", credentials=creds, cache_discovery=False)
 
     def ensure_folder(name: str, parent_id: str | None = None) -> str:
-        q = (
-            f"name = '{name}' and mimeType = '{FOLDER_MIME}' "
-            f"and trashed = false"
-        )
+        q = f"name = '{name}' and mimeType = '{FOLDER_MIME}' and trashed = false"
         if parent_id:
             q += f" and '{parent_id}' in parents"
         else:
@@ -171,8 +219,26 @@ def main() -> int:
         created = service.files().create(body=body, fields="id").execute()
         return str(created["id"])
 
-    pricescout = ensure_folder("PriceScout")
-    products = ensure_folder("products", parent_id=pricescout)
+    products = os.environ.get("GOOGLE_DRIVE_ROOT_FOLDER_ID", "").strip()
+    if products:
+        # Renewal must retain the storage root used by existing catalog images.
+        service.files().get(fileId=products, fields="id").execute()
+    else:
+        pricescout = ensure_folder("PriceScout")
+        products = ensure_folder("products", parent_id=pricescout)
+
+    if args.write_env:
+        env_path = Path(__file__).resolve().parents[1] / ".env"
+        _write_env_values(
+            env_path,
+            {
+                "GOOGLE_DRIVE_REFRESH_TOKEN": creds.refresh_token,
+                "GOOGLE_DRIVE_ROOT_FOLDER_ID": products,
+            },
+        )
+        print("Autorização renovada e salva no .env; credenciais não exibidas.")
+        print("Recrie api e image-optimizer para aplicar a configuração.")
+        return 0
 
     print("# Cole no .env (nunca commitar valores reais):")
     print(f"GOOGLE_DRIVE_REFRESH_TOKEN={creds.refresh_token}")

@@ -76,6 +76,29 @@ reclamado pelo worker.
 
 Não use o Google OAuth do login Supabase do usuário para storage.
 
+### Recuperar `storage_credentials_invalid`
+
+Se imagens e logos retornarem `502` e o refresh OAuth responder `invalid_grant`
+(token expirado ou revogado), renove o consentimento da **conta dedicada**:
+
+```powershell
+python scripts/google_drive_oauth_bootstrap.py --write-env
+docker compose up -d --no-deps --force-recreate api image-optimizer
+```
+
+O modo `--write-env` grava o novo token diretamente no `.env`, sem exibir
+credenciais, e valida/preserva a pasta já configurada. Não basta `restart`:
+o ambiente dos containers só muda ao recriá-los. Verifique a leitura das
+imagens existentes e dos logos; um upload que falhou antes de persistir a
+imagem precisa ser reenviado pela seleção aprovada no frontend.
+
+No Google Cloud, confira o estado de publicação do app OAuth dedicado.
+Apps externos em **Testing** emitem refresh tokens de sete dias para o scope
+Drive. Para uso contínuo, configure o estado apropriado antes de gerar um
+novo token. Expiração e revogação exigem novo consentimento; retries ou
+relogin no PriceScout não restauram essa autorização.
+Fonte: [expiração OAuth do Google](https://developers.google.com/identity/protocols/oauth2#expiration).
+
 ## Organização no Drive
 
 ```text
