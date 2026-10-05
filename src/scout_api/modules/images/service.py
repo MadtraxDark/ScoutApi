@@ -23,8 +23,10 @@ from scout_api.modules.images.schemas import (
     AddProductImageRequest,
     ApprovedImageInput,
     GalleryPatchRequest,
+    ImageAvailability,
     ProductImageListResponse,
     ProductImageView,
+    ProductImportStatus,
 )
 from scout_api.modules.matching.repository import MatchingRepository
 
@@ -46,10 +48,14 @@ def content_path(
 
 
 def to_image_view(row: ProductImage) -> ProductImageView:
+    display_url: str | None
+    image_status: ImageAvailability
     product_id = row.canonical_product_id
     original_url = (
         content_path(product_id, row.id, variant="original")
         if row.original_status == "ready" and row.original_drive_file_id
+        else row.source_url
+        if row.original_status in {"pending", "downloading"}
         else None
     )
     optimized_url = (
@@ -62,7 +68,7 @@ def to_image_view(row: ProductImage) -> ProductImageView:
     elif row.original_status == "ready":
         display_url = original_url
     else:
-        display_url = None
+        display_url = original_url
     if row.optimized_status == "ready" and row.optimized_drive_file_id:
         image_status = "ready"
         image_error_code = None
@@ -220,6 +226,45 @@ class ProductImageService:
         rows = self._pipeline.persist_approved(product_id, images)
         return [to_image_view(row) for row in rows]
 
+    def register_references(
+        self,
+        product_id: UUID,
+        images: list[ApprovedImageInput],
+        *,
+        owner: AuthenticatedPrincipal,
+    ) -> list[ProductImageView]:
+        self._require_product(product_id, owner)
+        MatchingRepository(self._session).lock_canonical(product_id)
+        rows = self._pipeline.register_references(product_id, images)
+        return [to_image_view(row) for row in rows]
+
+    def import_status(
+        self, product_id: UUID, *, viewer: AuthenticatedPrincipal
+    ) -> ProductImportStatus:
+        self._require_product(product_id, viewer)
+        rows = self._repo.list_for_product(product_id)
+        counts = dict(pending=0, processing=0, ready=0, error=0)
+        for row in rows:
+            if row.original_status == "failed" or row.optimized_status == "failed":
+                counts["error"] += 1
+            elif row.optimized_status == "ready":
+                counts["ready"] += 1
+            elif (
+                row.original_status == "downloading"
+                or row.optimized_status == "processing"
+            ):
+                counts["processing"] += 1
+            else:
+                counts["pending"] += 1
+        return ProductImportStatus(
+            product_id=product_id,
+            images_registered=len(rows),
+            pending=counts["pending"],
+            processing=counts["processing"],
+            ready=counts["ready"],
+            error=counts["error"],
+        )
+
     def add_image(
         self,
         product_id: UUID,
@@ -308,10 +353,13 @@ class ProductImageService:
                 code="PRODUCT_NOT_FOUND",
             )
         if row.original_status != "ready":
-            raise RequestError(
-                "Original não está ready",
-                code="INVALID_REQUEST",
-            )
+            from scout_api.modules.images.claim import schedule_optimization
+
+            if row.original_status == "failed":
+                row.original_status = "pending"
+                schedule_optimization(row)
+                self._session.flush()
+            return to_image_view(row)
         # Reuse persisted original — never re-download.
         self._pipeline.enqueue_optimization(row.id)
         if sync:

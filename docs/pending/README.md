@@ -148,6 +148,8 @@ Resolvida em 2026-09-19:
 - PENDING-010 Validação live Mercado Livre (Docker + curl_cffi) — arquivo
   apagado; live `/crawl*` + `/match` multi-loja OK (ADR 0025)
 
+- [PENDING-030 — Preview frio Magazine Luiza](PENDING-030-cold-preview-browser-duration.md) — OPEN / PERFORMANCE / P2; browser_fetch de 61,1 s, cache de 51 ms.
+
 ## Resolvidas
 
 Arquivo apagado (preferencial) ou pasta [`resolved/`](resolved/) quando arquivado.

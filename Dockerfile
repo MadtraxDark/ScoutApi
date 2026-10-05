@@ -51,6 +51,13 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     && chmod +x /docker-entrypoint.sh \
     && chown -R app:app /app /home/app
 
+# Recent Camoufox fetch also installs fpgen's model in its package data.
+# Keep only that data directory writable by the existing non-root build user.
+RUN if [ -d /usr/local/lib/python3.12/site-packages/fpgen ]; then \
+        mkdir -p /usr/local/lib/python3.12/site-packages/fpgen/data \
+        && chown -R app:app /usr/local/lib/python3.12/site-packages/fpgen/data; \
+    fi
+
 USER app
 
 RUN python -m camoufox fetch

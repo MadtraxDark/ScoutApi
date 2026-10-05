@@ -180,3 +180,17 @@ Para uma causa conhecida, usar `detail.image_status` e `detail.retryable` da
 resposta JSON do proxy. Exibir retry manual apenas quando recuperável e
 remover o estado de erro após sucesso. `image_warning_code=conversion_failed`
 indica que a original continua disponível; não exibir exceções internas.
+
+## Importação com referências pendentes (ADR 0048)
+
+O frontend envia imagens aprovadas em `POST /products.images` (`source_url`,
+`position`, `is_main`) e conclui após a resposta de persistência. Não encadeia
+uploads individuais, não espera AVIF e não aumenta timeouts.
+Detalhes e estados: [product-images.md](../persistence/product-images.md).
+No detalhe, polling visível da galeria a cada 3 segundos só enquanto há estados
+pendentes; atualiza mídia sem sobrescrever os campos de edição do usuário.
+Falha posterior de imagem não transforma produto salvo em importação falha.
+
+A importação respeita o limite atual de 20 imagens por produto: preview com mais
+URLs envia as primeiras 20 URLs únicas e informa explicitamente a quantidade
+excedente na mensagem de conclusão. Não aumenta o limite de persistência.

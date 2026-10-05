@@ -257,6 +257,24 @@ class GoogleDriveClient:
         media = MediaIoBaseUpload(io.BytesIO(data), mimetype=mime_type, resumable=False)
         body = {"name": name, "parents": [parent_id]}
         try:
+            # UUID filenames are stable across retries, including a crash after upload.
+            safe_name = name.replace("\\", "\\\\").replace("'", "\\'")
+            result = (
+                self._drive()
+                .files()
+                .list(
+                    q=(
+                        f"name = '{safe_name}' and '{parent_id}' in parents "
+                        "and trashed = false"
+                    ),
+                    spaces="drive",
+                    fields="files(id)",
+                    pageSize=1,
+                )
+                .execute()
+            )
+            if result.get("files"):
+                return str(result["files"][0]["id"])
             created = (
                 self._drive()
                 .files()

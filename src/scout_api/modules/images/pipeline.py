@@ -52,6 +52,45 @@ class ImagePipeline:
         self._repo = ProductImageRepository(session)
         self._schedule_avif = schedule_avif
 
+    def register_references(
+        self, product_id: UUID, images: list[ApprovedImageInput]
+    ) -> list[ProductImage]:
+        """Persist approved sources and durable jobs without external I/O."""
+        existing = {
+            row.source_url: row for row in self._repo.list_for_product(product_id)
+        }
+        sources = {str(image.source_url) for image in images}
+        if len(set(existing) | sources) > self._settings.image_max_per_product:
+            raise RequestError(
+                "Máximo de imagens por produto excedido", code="INVALID_REQUEST"
+            )
+        if sum(image.is_main for image in images) > 1:
+            raise RequestError("No máximo uma imagem principal", code="INVALID_REQUEST")
+        results = []
+        for index, approved in enumerate(
+            sorted(images, key=lambda image: image.position)
+        ):
+            source = str(approved.source_url)
+            row = existing.get(source)
+            if row is None:
+                row = self._repo.create(
+                    product_id=product_id,
+                    source_url=source,
+                    position=approved.position,
+                    is_main=approved.is_main
+                    or (
+                        index == 0
+                        and not existing
+                        and not any(image.is_main for image in images)
+                    ),
+                    original_status="pending",
+                    optimized_status="pending",
+                    optimization_next_attempt_at=utcnow(),
+                )
+                existing[source] = row
+            results.append(row)
+        return results
+
     def persist_approved(
         self,
         product_id: UUID,
@@ -123,21 +162,49 @@ class ImagePipeline:
             original_status="downloading",
             optimized_status="pending",
         )
+        return self.preserve_original(row, keep_reference=False)
+
+    def preserve_original(
+        self, row: ProductImage, *, keep_reference: bool = True
+    ) -> ProductImage:
+        """Worker stage: preserve original before any AVIF conversion."""
+        product_id = row.canonical_product_id
+        source_url = row.source_url
+        if row.original_status == "ready" and row.original_drive_file_id:
+            return row
         try:
             download_started = time.perf_counter()
             downloaded = self._downloader.download(source_url)
             original_download_ms = int((time.perf_counter() - download_started) * 1000)
             dup = self._repo.find_by_sha256(product_id, downloaded.sha256)
             if dup is not None and dup.id != row.id:
-                # Drop the placeholder and reuse existing.
-                self._repo.delete(row)
+                if not keep_reference:
+                    self._repo.delete(row)
+                    if self._schedule_avif and dup.optimized_status not in {
+                        "ready",
+                        "processing",
+                    }:
+                        self.enqueue_optimization(dup.id)
+                    return dup
+                # Keep registered identity stable; reuse the preserved file.
+                for field in (
+                    "original_drive_file_id",
+                    "original_filename",
+                    "original_mime_type",
+                    "original_size_bytes",
+                    "original_width",
+                    "original_height",
+                ):
+                    setattr(row, field, getattr(dup, field))
+                row.original_status = "ready"
+                self._session.flush()
                 if (
                     self._schedule_avif
                     and dup.original_status == "ready"
                     and dup.optimized_status not in {"ready", "processing"}
                 ):
-                    self.enqueue_optimization(dup.id)
-                return dup
+                    self.enqueue_optimization(row.id)
+                return row
 
             products_folder = self._drive.ensure_folder(
                 "products", parent_id=self._root_folder_id()
@@ -178,7 +245,10 @@ class ImagePipeline:
                 (time.perf_counter() - enqueue_started) * 1000
             )
             logger.info(
-                "image_original_ready",
+                "image_original_ready download_ms=%s upload_ms=%s enqueue_ms=%s",
+                original_download_ms,
+                original_upload_ms,
+                optimization_enqueue_ms,
                 extra={
                     "image_id": str(row.id),
                     "product_id": str(product_id),
@@ -192,12 +262,16 @@ class ImagePipeline:
         except (RequestError, DriveNotConfiguredError, DriveClientError) as exc:
             row.original_status = "failed"
             row.optimized_status = "failed"
-            row.optimized_error = str(exc)[:500]
+            row.optimized_error = "original_processing_failed"
             release_claim(row)
             self._session.flush()
             if isinstance(exc, RequestError):
                 raise
-            raise RequestError(str(exc), code="STORAGE_ERROR") from exc
+            raise RequestError(
+                "Falha ao preservar imagem original",
+                code="STORAGE_ERROR",
+                retryable=getattr(exc, "retryable", False),
+            ) from exc
 
     def _root_folder_id(self) -> str:
         if isinstance(self._drive, GoogleDriveClient):
@@ -257,6 +331,22 @@ class ImagePipeline:
             self._session.flush()
             return image
 
+        reused = self._repo.find_ready_optimization(image)
+        if reused is not None:
+            for field in (
+                "optimized_drive_file_id",
+                "optimized_mime_type",
+                "optimized_size_bytes",
+                "optimized_width",
+                "optimized_height",
+            ):
+                setattr(image, field, getattr(reused, field))
+            image.optimized_status = "ready"
+            image.optimized_error = None
+            release_claim(image)
+            self._session.flush()
+            return image
+
         if not already_claimed:
             image.optimized_status = "processing"
             image.optimized_error = None
@@ -301,7 +391,9 @@ class ImagePipeline:
             release_claim(image)
             self._session.flush()
             logger.info(
-                "avif_ready",
+                "avif_ready conversion_ms=%s upload_ms=%s",
+                conversion_ms,
+                upload_ms,
                 extra={
                     "image_id": str(image.id),
                     "product_id": str(image.canonical_product_id),
@@ -312,10 +404,10 @@ class ImagePipeline:
                 },
             )
             return image
-        except Exception as exc:
-            logger.exception("AVIF failed for image %s", image.id)
+        except Exception:
+            logger.error("AVIF failed for image %s", image.id)
             image.optimized_status = "failed"
-            image.optimized_error = str(exc)[:500]
+            image.optimized_error = "conversion_failed"
             release_claim(image)
             self._session.flush()
             return image

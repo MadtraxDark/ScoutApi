@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from scout_api.modules.images.models import ProductImage
@@ -14,6 +14,17 @@ from scout_api.modules.images.models import ProductImage
 class ProductImageRepository:
     def __init__(self, session: Session) -> None:
         self._session = session
+
+    def lock_processing(self, product_id: uuid.UUID) -> None:
+        """Coordinate workers without locking the product row used by imports."""
+        if self._session.get_bind().dialect.name == "postgresql":
+            self._session.execute(
+                select(
+                    func.pg_advisory_xact_lock(
+                        func.hashtextextended(f"product-images:{product_id}", 0)
+                    )
+                )
+            )
 
     def list_for_product(self, product_id: uuid.UUID) -> list[ProductImage]:
         stmt = (
@@ -55,9 +66,7 @@ class ProductImageRepository:
             stmt = stmt.where(ProductImage.canonical_product_id == product_id)
         return self._session.scalars(stmt).first()
 
-    def find_by_sha256(
-        self, product_id: uuid.UUID, sha256: str
-    ) -> ProductImage | None:
+    def find_by_sha256(self, product_id: uuid.UUID, sha256: str) -> ProductImage | None:
         stmt = (
             select(ProductImage)
             .where(ProductImage.canonical_product_id == product_id)
@@ -68,6 +77,17 @@ class ProductImageRepository:
 
     def count_for_product(self, product_id: uuid.UUID) -> int:
         return len(self.list_for_product(product_id))
+
+    def find_ready_optimization(self, image: ProductImage) -> ProductImage | None:
+        return self._session.scalars(
+            select(ProductImage).where(
+                ProductImage.canonical_product_id == image.canonical_product_id,
+                ProductImage.id != image.id,
+                ProductImage.original_drive_file_id == image.original_drive_file_id,
+                ProductImage.optimized_status == "ready",
+                ProductImage.optimized_drive_file_id.is_not(None),
+            )
+        ).first()
 
     def create(
         self,

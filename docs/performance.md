@@ -163,3 +163,5 @@ causa, evidências, comandos/arquivos, investigação, soluções, done conditio
 - remover testes importantes;
 - registrar secrets;
 - aceitar 10 minutos como “normal” sem investigação.
+
+- [Investigação e medições da importação de imagens (2026-10-05)](performance/import-images-2026-10-05.md).

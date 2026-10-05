@@ -7,52 +7,39 @@ Integração FE: [pricescout.md](../integration/pricescout.md).
 
 ## Princípio
 
+Decisão vigente para importação: [ADR 0048](../adr/0048-import-image-references-before-original-preservation.md).
+
 ```text
-Crawler encontra candidatas
-  → PriceScout revisa / seleciona / ordena / define principal
-  → ScoutApiV2 baixa só as aprovadas
-  → original no Drive + metadata no Postgres
-  → API retorna sucesso (optimized_status=pending é válido)
-  → AVIF em background (fila PostgreSQL)
-  → quando ready, display_url passa a preferir AVIF
+Crawler encontra candidatas → PriceScout aprova
+  → POST /products com images
+  → produto + referências + jobs pending no PostgreSQL
+  → commit → resposta HTTP
+  → worker baixa/valida/hash → original no Drive → checkpoint
+  → worker converte AVIF → AVIF no Drive → ready
 ```
 
-**SALVAR PRODUTO ≠ CONVERTER AVIF.**  
-O original torna a imagem utilizável. O AVIF só otimiza.
-
-**EXTERNAL CANDIDATE IMAGE ≠ CATALOG PRODUCT IMAGE.**  
-Upload no Drive só ocorre **após aprovação**.
+Salvar produto não aguarda preservação original nem otimização.
+Upload só ocorre após aprovação. Preview `/crawl` não cadastra imagens.
 
 ## Dois caminhos
 
-### SAVE PATH (bloqueante para o cadastro)
+### Importação (síncrono)
 
-```text
-Product
-  → download seguro + validate
-  → persist original (Drive)
-  → ProductImage (original_status=ready, optimized_status=pending)
-  → HTTP 200/201 sucesso
-```
+Identidade, listing/oferta, referências de imagens e criação de jobs na mesma
+transação. `register_saved` commita antes de retornar sucesso.
+`register_references` não usa downloader, Drive, Pillow ou optimizer.
+Logs: `product_import_stage` (`image_references`, `product_view`) e
+`product_import_saved` (`registration_ms`, `commit_ms`, `images`).
 
-Métricas neste caminho: `product_save_ms`, `original_download_ms`,
-`original_upload_ms`, `optimization_enqueue_ms`.
+### Background
 
-**`avif_conversion_ms` NÃO entra neste caminho.**
+O worker PostgreSQL existente reclama imagens `pending` e originais pendentes,
+preserva original e commita antes da AVIF. Leases expirados permitem recovery.
+`image_original_ready` registra download/upload/enqueue em ms no texto do log;
+`avif_ready` registra conversão/upload. O request não aguarda nenhum deles.
 
-### BACKGROUND PATH (pós-processamento)
-
-```text
-original ready
-  → claim (lease + SKIP LOCKED)
-  → AVIF convert + upload
-  → optimized_status=ready
-```
-
-Métricas: `avif_conversion_ms`, `avif_upload_ms`, `compression_ratio`.
-
-Recovery: após restart, `pending` ou `processing` com lease expirado é
-reclamado pelo worker.
+Adição individual em `POST /products/{id}/images` mantém o contrato anterior
+de original síncrono; PriceScout não usa esse endpoint durante a importação.
 
 ## Conta dedicada
 
@@ -126,8 +113,8 @@ hash, dimensões, `position`, `is_main`, e lease do job AVIF.
 | `original_status` | `pending`, `downloading`, `ready`, `failed`, `deleting` |
 | `optimized_status` | `pending`, `processing`, `ready`, `failed` |
 
-Estado válido após cadastro: `original_status=ready` +
-`optimized_status=pending`.
+Estado válido após importação: `original_status=pending` +
+`optimized_status=pending`. Depois da preservação: original `ready` + AVIF `processing`.
 
 ### Lease do job (ADR 0031)
 
@@ -198,18 +185,18 @@ Falha de AVIF: original permanece; `optimized_status=failed`; retry via
 
 ## Pipeline detalhado
 
-1. Validar URL (http/https) + SSRF (DNS→IP, redirects revalidados).
-2. Download com limite de bytes/timeout/redirects.
-3. Validar conteúdo real (Pillow), não só `Content-Type`.
-4. SHA-256; dedup por `(product_id, sha256)`.
-5. Upload original → `original_status=ready`.
-6. Enfileirar AVIF (`optimized_status=pending` + `next_attempt_at`).
-7. Responder sucesso do cadastro.
-8. Worker claim → convert → upload AVIF → `ready`.
+1. Request registra URLs aprovadas, posição/principal e jobs `pending`; commit.
+2. Worker valida URL/SSRF (DNS→IP, redirects revalidados), baixa com limites,
+   valida conteúdo com Pillow, calcula SHA-256 e reutiliza original por hash.
+3. Upload original com nome UUID; original `ready` é checkpoint persistido.
+4. Conversão e upload AVIF; `display_url` passa a preferir AVIF quando `ready`.
+5. Original não é apagada pela conversão. Erros de imagem não desfazem produto.
 
-Atomicidade de originais no import: falha de **original** aborta a
-transação do request (produto/imagens do batch não commitam). Falha de
-**AVIF** é independente e nunca invalida o cadastro já commitado.
+`GET /products/{id}/import-status`: `saved`, `images_registered`, `pending`,
+`processing`, `ready`, `error`. Exige `products:read` e ownership; galeria também.
+`POST .../retry-optimization` reagenda original com falha, ou apenas AVIF quando
+original já está pronta. Jobs pendentes sobrevivem a restart e worker ausente.
+Falhas terminais precisam de retry explícito; não há retry automático infinito.
 
 ## CRUD
 

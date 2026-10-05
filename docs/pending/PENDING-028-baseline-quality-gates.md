@@ -51,3 +51,12 @@ nova política, contrato HTTP, segurança e frontend passaram separadamente.
 
 Suíte rápida, `ruff check .`, `ruff format --check .` e `mypy src` passam,
 sem reduzir cobertura ou suprimir falhas reais.
+
+## Atualização — importação de imagens (2026-10-05)
+
+As três falhas Amazon foram novamente reproduzidas no baseline HEAD.
+Mypy após a correção: 37 erros em 9 arquivos (baseline 41/11); imagens sem
+novos erros. Ruff e formato dos arquivos da importação passaram. TypeScript
+do PriceScout e 10 testes direcionados passaram; lint global ainda tem
+set-state-in-effect preexistente no admin. Detalhes e números da suíte em
+[relatório de importação](../performance/import-images-2026-10-05.md).

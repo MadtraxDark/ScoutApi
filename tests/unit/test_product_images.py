@@ -47,6 +47,42 @@ _OWNER = AuthenticatedPrincipal(
 )
 
 
+@pytest.mark.parametrize("count", [1, 5, 10, 20])
+def test_registration_only_persists_image_references(
+    session: Session, count: int
+) -> None:
+    import time
+
+    def slow_download(_url: str):
+        time.sleep(10)
+        raise AssertionError("O request não deve baixar imagens")
+
+    request = ProductRegisterRequest(
+        title="Produto de teste",
+        gtin="7891991010863",
+        images=[
+            ApprovedImageInput(
+                source_url=f"https://cdn.example/{i}.png", position=i, is_main=i == 0
+            )
+            for i in range(count)
+        ],
+    )
+    started = time.perf_counter()
+    with patch.object(
+        ImageDownloader, "download", side_effect=slow_download
+    ) as download:
+        response = ProductRegistrationService(session).register(request, owner=_OWNER)
+    elapsed = time.perf_counter() - started
+    assert elapsed < 2
+    download.assert_not_called()
+    session.commit()
+    assert len(response.product.images) == count
+    assert all(image.original_status == "pending" for image in response.product.images)
+    assert all(image.display_url for image in response.product.images)
+    repeated = ProductRegistrationService(session).register(request, owner=_OWNER)
+    assert len(repeated.product.images) == count
+
+
 def _png_bytes(color: tuple[int, int, int] = (255, 0, 0), size: int = 32) -> bytes:
     buf = io.BytesIO()
     Image.new("RGB", (size, size), color).save(buf, format="PNG")
@@ -483,7 +519,7 @@ def test_reorder_main_delete(session: Session, drive: InMemoryDriveStorage) -> N
 
         from scout_api.modules.images.downloader import DownloadedImage
 
-        data = _png_bytes(color=(hash(url) % 200, 10, 10))
+        data = _png_bytes(color=(20 if url.endswith("/a.png") else 40, 10, 10))
         return DownloadedImage(
             data=data,
             content_type="image/png",
@@ -607,6 +643,270 @@ def _fake_download_side_effect(png: bytes):
         )
 
     return fake_download
+
+
+def test_original_job_survives_restart_and_avif_failure(
+    session: Session, drive: InMemoryDriveStorage
+) -> None:
+    from datetime import timedelta
+
+    from scout_api.core.config import Settings
+    from scout_api.modules.images.claim import claim_due_optimizations, utcnow
+    from scout_api.modules.images.repository import ProductImageRepository
+    from scout_api.modules.images.worker import process_claimed_image
+
+    response = ProductRegistrationService(session).register_saved(
+        ProductRegisterRequest(
+            title="Recovery",
+            gtin="7891991010863",
+            images=[
+                ApprovedImageInput(
+                    source_url="https://cdn.example/a.png", position=0, is_main=True
+                )
+            ],
+        ),
+        owner=_OWNER,
+    )
+    session.expire_all()
+    row = ProductImageRepository(session).list_for_product(response.product.id)[0]
+    assert row.original_status == "pending"  # No worker: catalog already committed.
+    claimed = claim_due_optimizations(session, worker_id="stopped")
+    assert len(claimed) == 1
+    session.commit()
+    row.optimization_claim_expires_at = utcnow() - timedelta(seconds=1)
+    session.commit()
+    session.expire_all()
+    resumed = claim_due_optimizations(session, worker_id="restarted")
+    assert len(resumed) == 1
+    session.commit()
+    with (
+        patch.object(
+            ImageDownloader,
+            "download",
+            side_effect=_fake_download_side_effect(_png_bytes()),
+        ),
+        patch.object(
+            AvifOptimizer, "convert", side_effect=RuntimeError("conversion fails")
+        ),
+    ):
+        process_claimed_image(session, resumed[0], drive=drive, settings=Settings())
+    session.commit()
+    session.expire_all()
+    recovered = ProductImageRepository(session).get(row.id)
+    assert recovered.original_status == "ready"
+    assert recovered.optimized_status == "failed"
+    assert drive.download_bytes(recovered.original_drive_file_id) == _png_bytes()
+    assert to_image_view(recovered).display_url == to_image_view(recovered).original_url
+    assert ProductRegistrationService(session).get_product(
+        response.product.id, viewer=_OWNER
+    )
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [RequestError("indisponível", code="UPSTREAM_ERROR"), ValueError("unexpected")],
+)
+def test_original_failure_keeps_product_and_can_retry(
+    session: Session, drive: InMemoryDriveStorage, failure: Exception
+) -> None:
+    from scout_api.core.config import Settings
+    from scout_api.modules.images.claim import claim_due_optimizations
+    from scout_api.modules.images.worker import process_claimed_image
+
+    response = ProductRegistrationService(session).register_saved(
+        ProductRegisterRequest(
+            title="Retry",
+            gtin="7891991010863",
+            images=[
+                ApprovedImageInput(source_url="https://cdn.example/a.png", position=0)
+            ],
+        ),
+        owner=_OWNER,
+    )
+    claimed = claim_due_optimizations(session, worker_id="worker")
+    session.commit()
+    with patch.object(
+        ImageDownloader,
+        "download",
+        side_effect=failure,
+    ):
+        process_claimed_image(session, claimed[0], drive=drive, settings=Settings())
+    session.commit()
+    service = ProductImageService(session, drive=drive)
+    status = service.import_status(response.product.id, viewer=_OWNER)
+    assert status.saved and status.error == 1
+    service.retry_optimization(response.product.id, claimed[0].id, owner=_OWNER)
+    session.commit()
+    resumed = claim_due_optimizations(session, worker_id="worker-retry")
+    assert len(resumed) == 1
+    with patch.object(
+        ImageDownloader,
+        "download",
+        side_effect=_fake_download_side_effect(_png_bytes()),
+    ):
+        process_claimed_image(session, resumed[0], drive=drive, settings=Settings())
+    session.commit()
+    assert service.import_status(response.product.id, viewer=_OWNER).ready == 1
+
+
+def test_http_registration_never_calls_image_pipeline(session: Session) -> None:
+    import time
+
+    from fastapi.testclient import TestClient
+
+    from scout_api.main import app
+    from scout_api.modules.auth.deps import require_authenticated_user
+    from scout_api.modules.matching.router import get_registration_service
+
+    overrides = dict(app.dependency_overrides)
+    app.dependency_overrides[get_registration_service] = lambda: (
+        ProductRegistrationService(session)
+    )
+    app.dependency_overrides[require_authenticated_user] = lambda: _OWNER
+    try:
+
+        def slow_download(_url: str):
+            time.sleep(10)
+            raise AssertionError("HTTP aguardou o download")
+
+        started = time.perf_counter()
+        with patch.object(
+            ImageDownloader, "download", side_effect=slow_download
+        ) as download:
+            response = TestClient(app).post(
+                "/products",
+                json={
+                    "title": "HTTP isolated test",
+                    "gtin": "7891991010863",
+                    "images": [
+                        {"source_url": "https://cdn.example/a.png", "position": 0}
+                    ],
+                },
+            )
+        assert response.status_code == 200, response.text
+        assert time.perf_counter() - started < 2
+        download.assert_not_called()
+        assert response.json()["product"]["images"][0]["original_status"] == "pending"
+    finally:
+        app.dependency_overrides.clear()
+        app.dependency_overrides.update(overrides)
+
+
+def test_drive_retry_reuses_uploaded_uuid_file() -> None:
+    service = MagicMock()
+    service.files.return_value.list.return_value.execute.return_value = {
+        "files": [{"id": "existing"}]
+    }
+    client = GoogleDriveClient(service=service)
+    assert (
+        client.upload_bytes(
+            name="stable-uuid.avif",
+            parent_id="folder",
+            data=b"avif",
+            mime_type="image/avif",
+        )
+        == "existing"
+    )
+    service.files.return_value.create.assert_not_called()
+
+
+def test_background_deduplicates_original_and_avif(
+    session: Session, drive: InMemoryDriveStorage
+) -> None:
+    from scout_api.core.config import Settings
+    from scout_api.modules.images.claim import claim_due_optimizations
+    from scout_api.modules.images.worker import process_claimed_image
+
+    response = ProductRegistrationService(session).register_saved(
+        ProductRegisterRequest(
+            title="Dedup",
+            gtin="7891991010863",
+            images=[
+                ApprovedImageInput(
+                    source_url=f"https://cdn.example/{i}.png", position=i
+                )
+                for i in range(2)
+            ],
+        ),
+        owner=_OWNER,
+    )
+    claimed = claim_due_optimizations(session, worker_id="worker")
+    session.commit()
+    with patch.object(
+        ImageDownloader,
+        "download",
+        side_effect=_fake_download_side_effect(_png_bytes()),
+    ):
+        for row in claimed:
+            process_claimed_image(session, row, drive=drive, settings=Settings())
+            session.commit()
+    assert len(drive.files) == 2  # One original and one AVIF, shared by references.
+    assert (
+        ProductImageService(session, drive=drive)
+        .import_status(response.product.id, viewer=_OWNER)
+        .ready
+        == 2
+    )
+
+
+def test_pending_original_survives_closed_database_engine(
+    tmp_path, drive: InMemoryDriveStorage
+) -> None:
+    from datetime import timedelta
+
+    from scout_api.core.config import Settings
+    from scout_api.modules.images.claim import claim_due_optimizations, utcnow
+    from scout_api.modules.images.worker import process_claimed_image
+
+    url = f"sqlite:///{tmp_path / 'restart.sqlite3'}"
+    engine = create_engine(url)
+    create_all(engine)
+    with Session(engine) as api_session:
+        response = ProductRegistrationService(api_session).register_saved(
+            ProductRegisterRequest(
+                title="Restart",
+                gtin="7891991010863",
+                images=[
+                    ApprovedImageInput(
+                        source_url="https://cdn.example/a.png", position=0
+                    )
+                ],
+            ),
+            owner=_OWNER,
+        )
+        product_id = response.product.id
+        claimed = claim_due_optimizations(api_session, worker_id="crashed-worker")
+        assert len(claimed) == 1
+        api_session.commit()
+    engine.dispose()
+    reopened = create_engine(url)
+    with Session(reopened) as worker_session:
+        assert ProductRegistrationService(worker_session).get_product(
+            product_id, viewer=_OWNER
+        )
+        jobs = claim_due_optimizations(
+            worker_session,
+            worker_id="restarted-worker",
+            now=utcnow() + timedelta(seconds=301),
+        )
+        assert len(jobs) == 1
+        worker_session.commit()
+        with patch.object(
+            ImageDownloader,
+            "download",
+            side_effect=_fake_download_side_effect(_png_bytes()),
+        ):
+            process_claimed_image(
+                worker_session, jobs[0], drive=drive, settings=Settings()
+            )
+        worker_session.commit()
+        assert (
+            ProductImageService(worker_session, drive=drive)
+            .import_status(product_id, viewer=_OWNER)
+            .ready
+            == 1
+        )
+    reopened.dispose()
 
 
 def test_save_does_not_wait_for_slow_avif(

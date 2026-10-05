@@ -78,6 +78,17 @@ def process_claimed_image(
             category=OperationCategory.EXTERNAL_TOOL,
             context={"image_id": str(image_id), "attempt": attempt},
         ):
+            if image.original_status != "ready":
+                ProductImageRepository(session).lock_processing(product_id)
+                image.original_status = "downloading"
+                session.flush()
+                session.commit()
+                # Release the image row before slow I/O as well as the product row.
+                ProductImageRepository(session).lock_processing(product_id)
+                pipeline.preserve_original(image)
+                # Checkpoint the original independently of optimization.
+                session.commit()
+            ProductImageRepository(session).lock_processing(product_id)
             pipeline.optimize_now(image, already_claimed=True)
         finished = utcnow()
         duration_ms = int((finished - started).total_seconds() * 1000)
@@ -102,10 +113,12 @@ def process_claimed_image(
             },
         )
         return image
-    except Exception as exc:  # noqa: BLE001
-        logger.exception("image_optimization_failed image_id=%s", image_id)
+    except Exception:  # noqa: BLE001
+        logger.error("image_optimization_failed image_id=%s", image_id)
+        if image.original_status != "ready":
+            image.original_status = "failed"
         image.optimized_status = "failed"
-        image.optimized_error = str(exc)[:500]
+        image.optimized_error = "image_processing_failed"
         release_claim(image)
         session.flush()
         return image

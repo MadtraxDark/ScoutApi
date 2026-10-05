@@ -65,6 +65,14 @@ class MatchingRepository:
         )
         return self._session.scalars(stmt).first()
 
+    def lock_canonical(self, canonical_id: uuid.UUID) -> None:
+        """Serialize gallery registration, including an initially empty gallery."""
+        self._session.execute(
+            select(CanonicalProduct.id)
+            .where(CanonicalProduct.id == canonical_id)
+            .with_for_update()
+        ).first()
+
     def get_listing(self, listing_id: uuid.UUID) -> StoreListing | None:
         stmt = (
             select(StoreListing)
@@ -518,9 +526,7 @@ class MatchingRepository:
             listing.canonical_product_id = canonical.id
 
         listing.product_id = item.product_id
-        listing.sku = (
-            item.sku.strip() if item.sku and item.sku.strip() else listing.sku
-        )
+        listing.sku = item.sku.strip() if item.sku and item.sku.strip() else listing.sku
         listing.gtin = item.gtin
         listing.url = item.url
         listing.canonical_url = item.canonical_url

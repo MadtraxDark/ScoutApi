@@ -234,7 +234,7 @@ def register_product(
     ],
 ) -> ProductRegisterResponse:
     try:
-        return service.register(payload, owner=principal)
+        return service.register_saved(payload, owner=principal)
     except RequestError as exc:
         raise HTTPException(
             status_code=_status_for_request_error(exc),

@@ -55,3 +55,5 @@ Governança de documentação: [`.cursor/rules/documentation-governance.mdc`](..
 | Shopping China | [`crawler/stores/shoppingchina.md`](crawler/stores/shoppingchina.md) |
 | Visão VIP | [`crawler/stores/visaovip.md`](crawler/stores/visaovip.md) |
 | Amazon (BR/US) | [`crawler/stores/amazon.md`](crawler/stores/amazon.md) |
+
+- [Investigação e medições da importação de imagens (2026-10-05)](performance/import-images-2026-10-05.md).

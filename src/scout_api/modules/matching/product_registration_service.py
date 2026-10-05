@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+import time
 from decimal import Decimal
 from uuid import UUID
 
@@ -53,6 +55,25 @@ class ProductRegistrationService:
 
     def __init__(self, session: Session) -> None:
         self._session = session
+
+    def register_saved(
+        self,
+        request: ProductRegisterRequest,
+        *,
+        owner: AuthenticatedPrincipal,
+    ) -> ProductRegisterResponse:
+        """Commit mandatory catalog state before HTTP success can be sent."""
+        started = time.perf_counter()
+        response = self.register(request, owner=owner)
+        registered = time.perf_counter()
+        self._session.commit()
+        logging.getLogger(__name__).info(
+            "product_import_saved registration_ms=%.1f commit_ms=%.1f images=%s",
+            (registered - started) * 1000,
+            (time.perf_counter() - registered) * 1000,
+            len(response.product.images),
+        )
+        return response
 
     def register(
         self,
@@ -221,8 +242,14 @@ class ProductRegistrationService:
         *,
         owner: AuthenticatedPrincipal,
     ) -> None:
+        started = time.perf_counter()
         image_service = ProductImageService(self._session)
-        image_service.persist_approved(product_id, images, owner=owner)
+        image_service.register_references(product_id, images, owner=owner)
+        logging.getLogger(__name__).info(
+            "product_import_stage stage=image_references duration_ms=%.1f count=%s",
+            (time.perf_counter() - started) * 1000,
+            len(images),
+        )
 
     def get_product(
         self,
@@ -230,6 +257,7 @@ class ProductRegistrationService:
         *,
         viewer: AuthenticatedPrincipal | None = None,
     ) -> ProductView | None:
+        started = time.perf_counter()
         repo = MatchingRepository(self._session)
         canonical = repo.get_canonical(product_id)
         if canonical is None:
@@ -247,9 +275,14 @@ class ProductRegistrationService:
                 product_id
             )
         ]
-        return _to_product_view(
+        view = _to_product_view(
             canonical, listings, images=images, session=self._session
         )
+        logging.getLogger(__name__).info(
+            "product_import_stage stage=product_view duration_ms=%.1f",
+            (time.perf_counter() - started) * 1000,
+        )
+        return view
 
     def list_products(
         self,

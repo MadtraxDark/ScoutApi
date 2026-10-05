@@ -61,6 +61,36 @@ class FakeOfferScrapeService:
         )
 
 
+def test_preview_does_not_register_or_process_catalog_images() -> None:
+    from unittest.mock import patch
+
+    from scout_api.modules.images.pipeline import ImagePipeline
+    from scout_api.modules.matching.product_registration_service import (
+        ProductRegistrationService,
+    )
+
+    app.dependency_overrides[get_product_scrape_service] = FakeScrapeService
+    try:
+        with (
+            patch.object(ImagePipeline, "persist_approved") as persist,
+            patch.object(ImagePipeline, "register_references") as register,
+            patch.object(ProductRegistrationService, "register_saved") as save,
+        ):
+            response = TestClient(app).post(
+                "/crawl",
+                json={
+                    "url": "https://www.magazineluiza.com.br/p/240590700",
+                    "include_images": True,
+                },
+            )
+        assert response.status_code == 200
+        persist.assert_not_called()
+        register.assert_not_called()
+        save.assert_not_called()
+    finally:
+        app.dependency_overrides.pop(get_product_scrape_service, None)
+
+
 def test_crawl_endpoint_returns_normalized_product() -> None:
     app.dependency_overrides[get_product_scrape_service] = FakeScrapeService
     try:

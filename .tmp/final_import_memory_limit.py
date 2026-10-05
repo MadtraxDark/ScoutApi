@@ -1,0 +1,2 @@
+﻿from pathlib import Path
+p=Path('../PriceScout/memory/working/importacao-imagens-background.md');s=p.read_text(encoding='utf-8');s+='\n- completed: preview real com 25 URLs; envio limitado às primeiras 20 URLs únicas\n  com mensagem explícita, conforme limite atual do catálogo. Teste cobre excedentes.\n- limitation: preview frio real levou 61,3 s; cache 51 ms, sem efeitos no catálogo\n  ou Drive. ScoutApiV2 PENDING-030 acompanha a duração do browser_fetch.\n';p.write_text(s,encoding='utf-8')

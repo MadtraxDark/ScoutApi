@@ -1,0 +1,1 @@
+"""USA store search adapters."""

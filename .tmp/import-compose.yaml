@@ -1,0 +1,6 @@
+services:
+  api:
+    image: scoutapiv2-import-final
+  image-optimizer:
+    image: scoutapiv2-import-final
+

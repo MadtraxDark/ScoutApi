@@ -34,6 +34,7 @@ from scout_api.modules.images.schemas import (
     GalleryPatchRequest,
     ProductImageListResponse,
     ProductImageView,
+    ProductImportStatus,
 )
 from scout_api.modules.images.service import ProductImageService
 
@@ -117,6 +118,25 @@ def list_images(
 ) -> ProductImageListResponse:
     try:
         return service.list_images(product_id, viewer=principal)
+    except RequestError as exc:
+        raise _http_error(exc) from exc
+
+
+@router.get(
+    "/products/{product_id}/import-status",
+    response_model=ProductImportStatus,
+    tags=["Imagens"],
+    dependencies=[Depends(require_permission("products:read"))],
+)
+def import_status(
+    product_id: UUID,
+    service: Annotated[ProductImageService, Depends(get_image_service)],
+    principal: Annotated[
+        AuthenticatedPrincipal, Depends(require_permission("products:read"))
+    ],
+) -> ProductImportStatus:
+    try:
+        return service.import_status(product_id, viewer=principal)
     except RequestError as exc:
         raise _http_error(exc) from exc
 

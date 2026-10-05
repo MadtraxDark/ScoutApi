@@ -1,0 +1,1 @@
+"""Paraguay store search adapters."""

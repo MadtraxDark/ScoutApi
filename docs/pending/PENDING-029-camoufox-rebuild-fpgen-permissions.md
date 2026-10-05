@@ -69,3 +69,12 @@ até reparar esta lacuna. API não exige serviço pago ou alteração de banco.
 
 Build oficial limpo passa sob usuário correto, API inicia saudável e o runtime
 Camoufox permanece validado sem aumento de capacidade ou mudança não testada.
+
+## Atualização — investigação da importação (2026-10-05)
+
+Dockerfile concede ownership somente a fpgen/data ao usuário app. Build oficial
+api + image-optimizer passou; ensure_fpgen_model foi validado sob app. O bloqueio
+de permissão está corrigido. Permanece aberta somente a validação/pin do runtime
+Camoufox novo; execução local conserva 0.5.6 da imagem validada. Não implantar
+browser novo sem evidência exigida pelo projeto. Ver relatório de desempenho
+[importação](../performance/import-images-2026-10-05.md).

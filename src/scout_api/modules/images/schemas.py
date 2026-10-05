@@ -83,3 +83,13 @@ class ProductImageView(BaseModel):
 class ProductImageListResponse(BaseModel):
     items: list[ProductImageView] = Field(default_factory=list)
     count: int
+
+
+class ProductImportStatus(BaseModel):
+    product_id: UUID
+    saved: bool = True
+    images_registered: int
+    pending: int
+    processing: int
+    ready: int
+    error: int

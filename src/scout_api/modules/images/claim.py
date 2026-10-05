@@ -8,6 +8,7 @@ from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import Select, and_, or_, select, update
 from sqlalchemy.orm import Session
+from sqlalchemy.sql.elements import ColumnElement
 
 from scout_api.core.config import Settings, get_settings
 from scout_api.modules.images.models import ProductImage
@@ -19,7 +20,7 @@ def utcnow() -> datetime:
     return datetime.now(UTC)
 
 
-def _due_filter(*, now: datetime) -> object:
+def _due_filter(*, now: datetime) -> ColumnElement[bool]:
     lease_expired = and_(
         ProductImage.optimized_status == "processing",
         or_(
@@ -39,8 +40,13 @@ def _due_filter(*, now: datetime) -> object:
         ),
     )
     return and_(
-        ProductImage.original_status == "ready",
-        ProductImage.original_drive_file_id.is_not(None),
+        or_(
+            ProductImage.original_status.in_(["pending", "downloading"]),
+            and_(
+                ProductImage.original_status == "ready",
+                ProductImage.original_drive_file_id.is_not(None),
+            ),
+        ),
         or_(pending_due, lease_expired),
     )
 
@@ -142,7 +148,7 @@ def _claim_portable(
             update(ProductImage)
             .where(
                 ProductImage.id == image.id,
-                ProductImage.original_status == "ready",
+                _due_filter(now=now),
                 or_(
                     ProductImage.optimized_status == "pending",
                     ProductImage.optimized_status == "processing",
@@ -160,6 +166,7 @@ def _claim_portable(
                 optimization_claim_expires_at=claim_expires,
                 optimization_attempts=int(image.optimization_attempts or 0) + 1,
             )
+            .execution_options(synchronize_session=False)
         )
         if int(result.rowcount or 0) == 1:  # type: ignore[attr-defined]
             session.refresh(image)
