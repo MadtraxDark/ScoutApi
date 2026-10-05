@@ -1,11 +1,18 @@
 # PENDING-016 — Shopee domina wall-time do Product Match full-store
 
-- Status: OPEN
+- Status: RESOLVED
 - Tipo: PERFORMANCE
 - Prioridade: P1
 - Área: crawler/shopee / matching
 - Origem: 2026-09-22 — pós PENDING-015 (bench full 13-store `…023048Z`)
-- Atualizado: 2026-09-22
+- Atualizado: 2026-09-25
+
+## Encerramento de escopo (2026-09-25)
+
+O usuário decidiu manter Shopee desativada no Product Match e remover suas
+pendências da lista ativa. Este arquivamento **não** corrige o wall-time nem
+representa validação de auth; `match_enabled=false` permanece deliberado.
+Reabrir somente com novo pedido para reativação/investigação dessa loja.
 
 ## Contexto
 

@@ -1,4 +1,4 @@
-"""TDD — ProfileLock: NullProfileLock, RedisProfileLock, FileProfileLock, BrowserScheduler integration.
+"""TDD — ProfileLock implementations and BrowserScheduler integration.
 
 Testa:
   1. NullProfileLock — acquire / release sem erros, warn emitido
@@ -29,17 +29,20 @@ from scout_api.modules.crawler.core.profile_lock import (
     RedisProfileLock,
     build_profile_lock,
 )
-
+from scout_api.modules.crawler.services.html_fetcher import _WarmBrowserSession
 
 # ---------------------------------------------------------------------------
 # Helpers / fakes
 # ---------------------------------------------------------------------------
 
+
 class _FakeRedis:
     """Minimal in-memory Redis fake for lock tests."""
 
     def __init__(self) -> None:
-        self._data: dict[bytes, tuple[bytes, float | None]] = {}  # key → (value, expiry_monotonic)
+        self._data: dict[
+            bytes, tuple[bytes, float | None]
+        ] = {}  # key → (value, expiry_monotonic)
         self._lock = threading.Lock()
 
     def _is_expired(self, key: bytes) -> bool:
@@ -92,7 +95,7 @@ class _FakeRedis:
         return count
 
     def eval(self, script: bytes | str, num_keys: int, *args: bytes | str) -> int:
-        """Execute compare-and-delete Lua script (inlined)."""
+        """Execute compare-and-delete/renew Lua scripts (inlined)."""
         key = args[0] if isinstance(args[0], bytes) else args[0].encode()
         token = args[1] if isinstance(args[1], bytes) else args[1].encode()
         with self._lock:
@@ -100,6 +103,13 @@ class _FakeRedis:
             if entry is None or self._is_expired(key):
                 return 0
             if entry[0] == token:
+                if "pexpire" in str(script).casefold():
+                    ttl_ms = int(args[2])
+                    self._data[key] = (
+                        entry[0],
+                        time.monotonic() + ttl_ms / 1000.0,
+                    )
+                    return 1
                 del self._data[key]
                 return 1
             return 0
@@ -125,6 +135,7 @@ def _make_gateway(fake_redis: _FakeRedis | None = None) -> MagicMock:
 # 1. NullProfileLock
 # ---------------------------------------------------------------------------
 
+
 def test_null_lock_acquire_release_no_error() -> None:
     lock = NullProfileLock()
     lease = lock.acquire(Path("/tmp/slot-0"), timeout_ms=1_000)
@@ -135,6 +146,7 @@ def test_null_lock_acquire_release_no_error() -> None:
 
 def test_null_lock_emits_warning(caplog: pytest.LogCaptureFixture) -> None:
     import logging
+
     lock = NullProfileLock()
     with caplog.at_level(logging.WARNING, logger="scout_api"):
         lock.acquire(Path("/tmp/slot-0"), timeout_ms=1_000)
@@ -144,6 +156,7 @@ def test_null_lock_emits_warning(caplog: pytest.LogCaptureFixture) -> None:
 # ---------------------------------------------------------------------------
 # 2. RedisProfileLock — exclusivity
 # ---------------------------------------------------------------------------
+
 
 def test_redis_lock_exclusivity_second_caller_blocks() -> None:
     """While A holds the Redis lock, B must not acquire within timeout."""
@@ -230,6 +243,7 @@ def test_redis_lock_compare_and_delete_only_owner_releases() -> None:
 # 3. RedisProfileLock — fail-open when Redis unavailable
 # ---------------------------------------------------------------------------
 
+
 def test_redis_lock_failopen_when_redis_unavailable() -> None:
     """If Redis is down, acquire fails-open (no error, backend=redis_failopen)."""
     gw = _make_gateway(fake_redis=None)
@@ -260,6 +274,7 @@ def test_redis_lock_failopen_release_is_noop() -> None:
 # ---------------------------------------------------------------------------
 # 4. FileProfileLock — on Linux with real fcntl; skip on Windows
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture()
 def tmp_profile(tmp_path: Path) -> Path:
@@ -323,8 +338,14 @@ def test_file_lock_windows_noop() -> None:
     with patch.dict("sys.modules", {"fcntl": None}):
         lock = FileProfileLock()
         # Force ImportError path by mocking fcntl import
-        with patch("builtins.__import__", side_effect=lambda name, *a, **kw:
-                   (_ for _ in ()).throw(ImportError()) if name == "fcntl" else __import__(name, *a, **kw)):
+        with patch(
+            "builtins.__import__",
+            side_effect=lambda name, *a, **kw: (
+                (_ for _ in ()).throw(ImportError())
+                if name == "fcntl"
+                else __import__(name, *a, **kw)
+            ),
+        ):
             try:
                 lease = lock.acquire(Path("/tmp/slot-0"), timeout_ms=500)
                 assert "noop" in lease.backend or lease.backend == "file"
@@ -336,6 +357,7 @@ def test_file_lock_windows_noop() -> None:
 # ---------------------------------------------------------------------------
 # 5. BrowserScheduler — lease contains profile_lock_lease when lock configured
 # ---------------------------------------------------------------------------
+
 
 def test_scheduler_lease_has_profile_lock_lease() -> None:
     """With profile_lock configured, BrowserSlotLease._profile_lock_lease is set."""
@@ -371,6 +393,7 @@ def test_scheduler_no_profile_lock_lease_when_not_configured() -> None:
 # 6. BrowserScheduler — profile lock released on slot release
 # ---------------------------------------------------------------------------
 
+
 def test_scheduler_releases_profile_lock_on_release() -> None:
     """When the lease is released, the profile lock is also released."""
     fake = _FakeRedis()
@@ -397,9 +420,129 @@ def test_scheduler_releases_profile_lock_on_release() -> None:
     sched.release(lease_b)
 
 
+def test_warm_session_holds_profile_lock_until_close_and_renews_ttl() -> None:
+    fake = _FakeRedis()
+    gw = _make_gateway(fake)
+    profile_base = Path("/mnt/profiles")
+    lock_a = RedisProfileLock(gw, ttl_ms=90)
+    lock_b = RedisProfileLock(gw, ttl_ms=90)
+    sched_a = BrowserScheduler(
+        capacity=1,
+        queue_capacity=0,
+        queue_timeout_ms=0,
+        profile_lock=lock_a,
+        profile_base_path=profile_base,
+        profile_lock_timeout_ms=100,
+    )
+    sched_b = BrowserScheduler(
+        capacity=1,
+        queue_capacity=0,
+        queue_timeout_ms=0,
+        profile_lock=lock_b,
+        profile_base_path=profile_base,
+        profile_lock_timeout_ms=100,
+    )
+    lease = sched_a.acquire()
+
+    class _Context:
+        closed = False
+
+        def __enter__(self) -> object:
+            return object()
+
+        def __exit__(self, *args: object) -> None:
+            self.closed = True
+
+    cm = _Context()
+    session = _WarmBrowserSession(
+        cm=cm,
+        browser=object(),
+        fingerprint="locale=pt-BR",
+        on_idle=lambda expired, generation: expired.close(generation=generation),
+    )
+    sched_a.retain_profile_lock(lease)
+    session.retain_profile_ownership(
+        scheduler=sched_a,
+        slot_lease=lease,
+        idle_timeout_s=1.0,
+    )
+    sched_a.release(lease)
+
+    assert sched_a.snapshot()["active"] == 0
+    until = time.monotonic() + 0.22
+    while time.monotonic() < until:
+        session.touch()
+        time.sleep(0.04)
+    assert lease._profile_lock_retained
+    assert lease._profile_lock_lease is not None
+    assert lease._profile_lock_lease._renew_thread is not None
+    assert lease._profile_lock_lease._renew_thread.is_alive()
+    assert fake.get(RedisProfileLock._key(profile_base / "slot-0")) is not None
+    with pytest.raises(RequestError) as exc_info:
+        lock_b.acquire(profile_base / "slot-0", timeout_ms=100)
+    assert exc_info.value.code == "PROFILE_LOCK_TIMEOUT"
+    session.close()
+    assert cm.closed
+    lease_b = sched_b.acquire()
+    sched_b.release(lease_b)
+
+
+def test_warm_session_idle_expiration_releases_profile_lock() -> None:
+    fake = _FakeRedis()
+    gw = _make_gateway(fake)
+    profile_base = Path("/mnt/profiles")
+    lock = RedisProfileLock(gw, ttl_ms=500)
+    sched = BrowserScheduler(
+        capacity=1,
+        queue_capacity=0,
+        queue_timeout_ms=0,
+        profile_lock=lock,
+        profile_base_path=profile_base,
+        profile_lock_timeout_ms=100,
+    )
+    waiter = BrowserScheduler(
+        capacity=1,
+        queue_capacity=0,
+        queue_timeout_ms=0,
+        profile_lock=RedisProfileLock(gw, ttl_ms=500),
+        profile_base_path=profile_base,
+        profile_lock_timeout_ms=100,
+    )
+    lease = sched.acquire()
+
+    class _Context:
+        closed = threading.Event()
+
+        def __enter__(self) -> object:
+            return object()
+
+        def __exit__(self, *args: object) -> None:
+            self.closed.set()
+
+    cm = _Context()
+    session = _WarmBrowserSession(
+        cm=cm,
+        browser=object(),
+        fingerprint="locale=pt-BR",
+        on_idle=lambda expired, generation: expired.close(generation=generation),
+    )
+    sched.retain_profile_lock(lease)
+    session.retain_profile_ownership(
+        scheduler=sched,
+        slot_lease=lease,
+        idle_timeout_s=0.06,
+    )
+    sched.release(lease)
+
+    assert cm.closed.wait(0.5)
+    lease_waiter = waiter.acquire()
+    waiter.release(lease_waiter)
+
+
 # ---------------------------------------------------------------------------
 # 7. BrowserScheduler — profile lock timeout returns slot to pool
 # ---------------------------------------------------------------------------
+
 
 def test_scheduler_profile_lock_timeout_returns_slot_to_pool() -> None:
     """If profile lock times out, the scheduler slot is returned to the pool."""
@@ -433,6 +576,7 @@ def test_scheduler_profile_lock_timeout_returns_slot_to_pool() -> None:
 # ---------------------------------------------------------------------------
 # 8. build_profile_lock — factory
 # ---------------------------------------------------------------------------
+
 
 def test_build_profile_lock_redis_mode() -> None:
     gw = _make_gateway()

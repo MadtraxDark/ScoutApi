@@ -23,7 +23,7 @@ Governança de documentação: [`.cursor/rules/documentation-governance.mdc`](..
 | Crawler — contratos e erros | [`crawler/contracts.md`](crawler/contracts.md) |
 | Identidade brand / model / variant | [`crawler/product-identity.md`](crawler/product-identity.md) + [ADR 0026](adr/0026-product-identity-brand-model-variant.md) + [ADR 0027](adr/0027-category-profile-product-identity.md) |
 | Crawler — lojas | [`crawler/stores/`](crawler/stores/) |
-| Product Match / Store Search | [`matching/README.md`](matching/README.md) + [ADR 0038](adr/0038-pdp-search-capability-split.md) |
+| Product Match / Store Search | [`matching/README.md`](matching/README.md) + [investigação de embeddings](matching/embeddings-architecture-investigation.md) + [ADR 0038](adr/0038-pdp-search-capability-split.md) + [ADR 0043](adr/0043-product-match-semantic-embedding-evidence.md) |
 | Proxy Cost Mode | [`.cursor/rules/proxy-cost-mode.mdc`](../.cursor/rules/proxy-cost-mode.mdc) + [ADR 0014](adr/0014-cost-aware-proxy-routing.md) |
 | Challenge/CAPTCHA (obrigatório resolver) | [`.cursor/rules/captcha-challenge-resolution.mdc`](../.cursor/rules/captcha-challenge-resolution.mdc) + [ADR 0017](adr/0017-captcha-challenge-resolution.md) |
 | Auth bypass / login wall (obrigatório) | [`.cursor/rules/auth-wall-resolution.mdc`](../.cursor/rules/auth-wall-resolution.mdc) + [ADR 0018](adr/0018-auth-wall-bypass.md) |

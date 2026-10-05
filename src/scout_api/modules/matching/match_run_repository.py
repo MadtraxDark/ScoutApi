@@ -161,6 +161,7 @@ class MatchRunRepository:
         confidence: Any,
         reasons: list[Any],
         duration_ms: int | None,
+        embedding_evidence: dict[str, Any] | None = None,
     ) -> MatchCandidateLog:
         # Cap evidence size — keep last 40 candidates per store.
         if len(store_run.candidates) >= 40:
@@ -174,6 +175,7 @@ class MatchRunRepository:
             decision=decision,
             confidence=confidence,
             reasons=list(reasons or [])[:20],
+            embedding_evidence=embedding_evidence,
             duration_ms=duration_ms,
         )
         self._session.add(row)

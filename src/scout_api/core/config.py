@@ -1,5 +1,5 @@
 from functools import lru_cache
-from typing import Self
+from typing import Literal, Self
 
 from pydantic import AliasChoices, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -207,6 +207,28 @@ class Settings(BaseSettings):
     match_run_watchdog_check_interval_seconds: float = 5.0
     # Test-only: block after claim to exercise hard hang (rejected in production).
     match_run_test_inject_hang: bool = False
+    # --- Product Match embeddings (MatchRun worker only; off by default). ---
+    match_embeddings_mode: Literal["off", "shadow", "active"] = "off"
+    match_embeddings_provider: Literal["openai", "openai_compatible"] = "openai"
+    match_embeddings_api: str = "https://api.openai.com/v1/embeddings"
+    match_embeddings_api_key: str | None = None
+    match_embeddings_model: str = "text-embedding-3-small"
+    # Bump when weights change without changing model ID or endpoint.
+    match_embeddings_cache_revision: str = "v1"
+    match_embeddings_input_prefix: str = ""
+    match_embeddings_cache_backend: Literal["local", "redis"] = "redis"
+    match_embeddings_dimensions: int = Field(default=1536, ge=1, le=3072)
+    match_embeddings_batch_size: int = Field(default=8, ge=1, le=100)
+    match_embeddings_timeout_seconds: float = Field(default=3.0, gt=0, le=10)
+    match_embeddings_max_candidates_per_run: int = Field(default=12, ge=1, le=100)
+    match_embeddings_cache_entries: int = Field(default=128, ge=1, le=512)
+    match_embeddings_cache_ttl_seconds: int = Field(default=21_600, ge=1, le=604_800)
+    match_embeddings_representation: Literal[
+        "raw", "normalized", "structured", "hybrid"
+    ] = "hybrid"
+    match_embeddings_active_similarity_threshold: float | None = Field(
+        default=None, ge=0, le=1
+    )
     # --- Store + capability circuit breaker (Phase 11) ---
     # Process-local circuit per (store_key, capability).
     # Set false to disable entirely (rollback path).
@@ -240,6 +262,13 @@ class Settings(BaseSettings):
             normalized = value.strip().lower()
             if normalized in {"always", "once_per_session", "never"}:
                 return normalized
+        return value
+
+    @field_validator("match_embeddings_active_similarity_threshold", mode="before")
+    @classmethod
+    def empty_embedding_threshold_is_none(cls, value: object) -> object:
+        if isinstance(value, str) and not value.strip():
+            return None
         return value
 
     @model_validator(mode="after")
@@ -285,6 +314,18 @@ class Settings(BaseSettings):
                 "MATCH_RUN_TEST_INJECT_HANG não é permitido quando "
                 "ENVIRONMENT=production."
             )
+        if self.match_embeddings_mode == "active":
+            if self.match_embeddings_provider == "openai" and not (
+                self.match_embeddings_api_key and self.match_embeddings_api_key.strip()
+            ):
+                raise ValueError(
+                    "MATCH_EMBEDDINGS_API_KEY é obrigatória para OpenAI no modo active."
+                )
+            if self.match_embeddings_active_similarity_threshold is None:
+                raise ValueError(
+                    "MATCH_EMBEDDINGS_ACTIVE_SIMILARITY_THRESHOLD deve ser "
+                    "calibrado antes do modo active."
+                )
         return self
 
     model_config = SettingsConfigDict(

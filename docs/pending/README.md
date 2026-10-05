@@ -87,7 +87,6 @@ Itens resolvidos **não** ficam no índice ativo.
 | [PENDING-019](PENDING-019-pricescout-match-start-failure-smoke.md) | Completar smoke de falhas no start do Product Match | OPEN | TESTING | P2 | frontend/product-match |
 | [PENDING-020](PENDING-020-product-match-monitor-live-smoke.md) | Validar Product Match live em vários monitores reais | IN_PROGRESS | TESTING | P2 | matching/monitor |
 | [PENDING-021](PENDING-021-store-logo-deployment-smoke.md) | Aplicar e validar o fluxo de logos no ambiente integrado | IN_PROGRESS | TESTING | P1 | matching/store-admin |
-| [PENDING-023](PENDING-023-image-availability-frontend.md) | Implementar e validar estados de disponibilidade de imagem no PriceScout | IN_PROGRESS | INCOMPLETE | P1 | frontend/images |
 
 *(pendências ativas: 5)*
 
@@ -106,16 +105,13 @@ Resolvida em 2026-09-23:
   POST via `browser_post` (in-page `fetch` no Camoufox — httpx /
   APIRequestContext = CF 403)
 
-Nota 2026-09-22: Shopee/ML estão com `match_enabled=false` no Match automático
-(PENDING-017). PENDING-016 permanece relevante para quando forem reativadas.
-
 Resolvida em 2026-09-22:
 
 - PENDING-015 Product Match concorrência + benchmark live — arquivo
   apagado; waves 3-fase + scrape budget + owner-thread; subset 8
   (`…004109Z`) cold 277,6s / warm 128,4s / 3 MATCH; full 13
   (`…023048Z`) sem hang cold 1726s / warm 2225s / 2 MATCH / 3 ERROR;
-  follow-up Shopee → PENDING-016
+  follow-up Shopee → [PENDING-016 arquivada](resolved/PENDING-016-shopee-match-wall-time.md)
 
 Resolvida em 2026-09-21:
 
@@ -154,6 +150,11 @@ Resolvida em 2026-09-19:
 
 Arquivo apagado (preferencial) ou pasta [`resolved/`](resolved/) quando arquivado.
 O Git preserva o histórico em qualquer caso.
+
+Resolvida em 2026-09-24 (Redis runtime):
+
+- [`resolved/PENDING-023-redis-runtime-capability-audit.md`](resolved/PENDING-023-redis-runtime-capability-audit.md)
+  — imagem, versão, módulos, memória, eviction, persistência e latência amostral.
 
 Resolvidas em 2026-09-19 (Best Buy Akamai):
 

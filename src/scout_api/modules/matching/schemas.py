@@ -616,6 +616,7 @@ class MatchCandidateLogView(BaseModel):
     decision: str | None = None
     confidence: Decimal | None = None
     reasons: list[str] = Field(default_factory=list)
+    embedding_evidence: dict[str, Any] | None = None
     duration_ms: int | None = None
 
 

@@ -206,6 +206,22 @@ services:
       MATCH_RUN_WATCHDOG_ENABLED: ${MATCH_RUN_WATCHDOG_ENABLED:-true}
       MATCH_RUN_WATCHDOG_CHECK_INTERVAL_SECONDS: ${MATCH_RUN_WATCHDOG_CHECK_INTERVAL_SECONDS:-5}
       MATCH_RUN_TEST_INJECT_HANG: ${MATCH_RUN_TEST_INJECT_HANG:-false}
+      MATCH_EMBEDDINGS_MODE: ${MATCH_EMBEDDINGS_MODE:-off}
+      MATCH_EMBEDDINGS_PROVIDER: ${MATCH_EMBEDDINGS_PROVIDER:-openai}
+      MATCH_EMBEDDINGS_API: ${MATCH_EMBEDDINGS_API:-https://api.openai.com/v1/embeddings}
+      MATCH_EMBEDDINGS_API_KEY: ${MATCH_EMBEDDINGS_API_KEY:-}
+      MATCH_EMBEDDINGS_MODEL: ${MATCH_EMBEDDINGS_MODEL:-text-embedding-3-small}
+      MATCH_EMBEDDINGS_CACHE_REVISION: ${MATCH_EMBEDDINGS_CACHE_REVISION:-v1}
+      MATCH_EMBEDDINGS_INPUT_PREFIX: ${MATCH_EMBEDDINGS_INPUT_PREFIX:-}
+      MATCH_EMBEDDINGS_CACHE_BACKEND: ${MATCH_EMBEDDINGS_CACHE_BACKEND:-redis}
+      MATCH_EMBEDDINGS_DIMENSIONS: ${MATCH_EMBEDDINGS_DIMENSIONS:-1536}
+      MATCH_EMBEDDINGS_BATCH_SIZE: ${MATCH_EMBEDDINGS_BATCH_SIZE:-8}
+      MATCH_EMBEDDINGS_TIMEOUT_SECONDS: ${MATCH_EMBEDDINGS_TIMEOUT_SECONDS:-3}
+      MATCH_EMBEDDINGS_MAX_CANDIDATES_PER_RUN: ${MATCH_EMBEDDINGS_MAX_CANDIDATES_PER_RUN:-12}
+      MATCH_EMBEDDINGS_CACHE_ENTRIES: ${MATCH_EMBEDDINGS_CACHE_ENTRIES:-128}
+      MATCH_EMBEDDINGS_CACHE_TTL_SECONDS: ${MATCH_EMBEDDINGS_CACHE_TTL_SECONDS:-21600}
+      MATCH_EMBEDDINGS_REPRESENTATION: ${MATCH_EMBEDDINGS_REPRESENTATION:-hybrid}
+      MATCH_EMBEDDINGS_ACTIVE_SIMILARITY_THRESHOLD: ${MATCH_EMBEDDINGS_ACTIVE_SIMILARITY_THRESHOLD:-}
       CAMOUFOX_ENABLED: ${CAMOUFOX_ENABLED:-true}
       CAMOUFOX_HEADLESS: ${CAMOUFOX_HEADLESS:-true}
       CAMOUFOX_PROXY_URL: ${CAMOUFOX_PROXY_URL:-}
@@ -226,6 +242,21 @@ services:
     # Worker process (no HTTP server) — disable image HEALTHCHECK that probes /health.
     healthcheck:
       disable: true
+    restart: unless-stopped
+  embedding-service:
+    image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.9
+    profiles: ["embeddings"]
+    command: ["--model-id", "intfloat/multilingual-e5-small", "--max-client-batch-size", "8", "--max-concurrent-requests", "8"]
+    volumes:
+      - embeddings-model-cache:/data
+    mem_limit: 2g
+    cpus: 2.0
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:80/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 180s
     restart: unless-stopped
   redis:
     image: redis:7-alpine
@@ -262,4 +293,5 @@ services:
       retries: 5
 
 volumes:
+  embeddings-model-cache:
   postgres-data:

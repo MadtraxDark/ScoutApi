@@ -71,6 +71,48 @@ def test_generic_alphanumeric_model_is_kept_in_search_queries() -> None:
     assert title not in queries
 
 
+def test_localized_color_query_follows_search_integration_locale() -> None:
+    identity = identity_from_price_item(
+        identity_reference_item(
+            "Apple iPhone 15 128GB Rosa",
+            brand="Apple",
+            model="iPhone 15",
+            category="smartphone",
+            variant="Rosa",
+        )
+    )
+
+    br_queries = build_search_queries(identity, locale="pt-BR")
+    us_queries = build_search_queries(identity, locale="en-US")
+    pink_us = next(query for query in us_queries if " pink" in query)
+
+    assert any("rosa" in query for query in br_queries)
+    assert pink_us == "apple iphone 15 128gb pink"
+    assert not any("rosa" in query for query in us_queries[:5])
+
+
+def test_store_query_locales_are_market_metadata_and_keep_identifiers() -> None:
+    from scout_api.modules.crawler.stores import STORE_CONFIGS
+
+    assert STORE_CONFIGS["bestbuy"].query_locale == "en-US"
+    assert STORE_CONFIGS["amazon_us"].query_locale == "en-US"
+    assert STORE_CONFIGS["amazon_br"].query_locale == "pt-BR"
+
+    identity = identity_from_price_item(
+        identity_reference_item(
+            "AMD Ryzen 7 5800X3D VG259Q5A A3256 MG7L4LL/A Rosa",
+            brand="AMD",
+            model="5800X3D VG259Q5A A3256 MG7L4LL/A",
+            category="cpu",
+            variant="Rosa",
+        )
+    )
+    queries = build_search_queries(identity, locale="en-US")
+    joined = " ".join(queries).lower()
+    for identifier in ("5800x3d", "vg259q5a", "a3256", "mg7l4ll/a"):
+        assert identifier in joined
+
+
 def test_serp_prefilter_rejects_renewed_when_reference_is_new() -> None:
     ref = identity_from_price_item(
         identity_reference_item(
