@@ -68,6 +68,7 @@ Política de quando criar/atualizar docs:
 | [0044](0044-camoufox-profile-lock-warm-session-lifecycle.md) | ProfileLock acompanha a sessão Camoufox persistente | Accepted |
 | [0045](0045-self-hosted-product-match-embeddings-provider.md) | Provider self-hosted para embeddings do Product Match | Accepted |
 | [0046](0046-product-match-embedding-cache-redis-l2.md) | Cache L2 de embeddings do Product Match em Redis | Accepted |
+| [0047](0047-api-token-bucket-scoped-cooldown.md) | Reposição contínua e cooldown por escopo na API | Accepted |
 
 ## Quando criar ADR
 

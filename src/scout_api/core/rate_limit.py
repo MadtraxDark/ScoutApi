@@ -1,7 +1,9 @@
-"""Fixed-window rate limiting with Redis (preferred) or in-process fallback."""
+"""Token bucket rate limiting with Redis or a bounded-lifetime local fallback."""
 
 from __future__ import annotations
 
+import logging
+import math
 import threading
 import time
 from dataclasses import dataclass
@@ -12,21 +14,32 @@ from scout_api.modules.crawler.core.redis_client import (
     build_redis_gateway,
 )
 
-# Atomic fixed window: EXPIRE only on first hit (count == 1).
-# Calling EXPIRE on every INCR resets the TTL under continuous traffic
-# (SPA polling) and turns the counter into an unbounded accumulator →
-# permanent 429 until the client idles for a full window.
-_FIXED_WINDOW_LUA = """
-local count = redis.call('INCR', KEYS[1])
-if count == 1 then
-  redis.call('EXPIRE', KEYS[1], ARGV[1])
+logger = logging.getLogger(__name__)
+
+# Redis TIME avoids clock skew between workers; all decisions are atomic.
+_TOKEN_BUCKET_LUA = """
+local capacity = tonumber(ARGV[1])
+local window = tonumber(ARGV[2])
+local clock = redis.call('TIME')
+local now = tonumber(clock[1]) + tonumber(clock[2]) / 1000000
+local state = redis.call('HMGET', KEYS[1], 'tokens', 'updated_at')
+local tokens = tonumber(state[1]) or capacity
+local updated = tonumber(state[2]) or now
+now = math.max(now, updated)
+local rate = capacity / window
+tokens = math.min(capacity, tokens + (now - updated) * rate)
+local allowed = 0
+if tokens >= 1 - 0.000000001 then
+  tokens = math.max(0, tokens - 1)
+  allowed = 1
 end
-local ttl = redis.call('TTL', KEYS[1])
-if ttl < 0 then
-  redis.call('EXPIRE', KEYS[1], ARGV[1])
-  ttl = tonumber(ARGV[1])
+local retry = 0
+if allowed == 0 then
+  retry = math.max(1, math.ceil((1 - tokens) / rate))
 end
-return {count, ttl}
+redis.call('HSET', KEYS[1], 'tokens', tokens, 'updated_at', now)
+redis.call('EXPIRE', KEYS[1], math.ceil(window))
+return {allowed, math.floor(tokens), retry}
 """
 
 
@@ -39,33 +52,30 @@ class RateLimitResult:
     scope: str
 
 
-class _MemoryWindow:
+class _MemoryBucket:
     def __init__(self) -> None:
         self._lock = threading.Lock()
-        self._buckets: dict[str, tuple[int, float]] = {}
+        self._buckets: dict[str, tuple[float, float, float]] = {}
+        self._next_cleanup = 0.0
 
     def hit(self, key: str, limit: int, window_seconds: int) -> RateLimitResult:
-        now = time.monotonic()
         with self._lock:
-            count, reset_at = self._buckets.get(key, (0, now + window_seconds))
-            if now >= reset_at:
-                count, reset_at = 0, now + window_seconds
-            count += 1
-            self._buckets[key] = (count, reset_at)
-            retry = max(1, int(reset_at - now))
-            if count > limit:
-                return RateLimitResult(
-                    allowed=False,
-                    limit=limit,
-                    remaining=0,
-                    retry_after=retry,
-                    scope=key.split(":", 1)[0],
-                )
+            now = time.monotonic()
+            if now >= self._next_cleanup:
+                self._buckets = {k: v for k, v in self._buckets.items() if v[2] > now}
+                self._next_cleanup = now + 60
+            tokens, updated_at, _ = self._buckets.get(key, (float(limit), now, now))
+            rate = limit / window_seconds
+            tokens = min(float(limit), tokens + max(0, now - updated_at) * rate)
+            allowed = tokens >= 1 - 1e-9
+            if allowed:
+                tokens = max(0, tokens - 1)
+            self._buckets[key] = (tokens, now, now + window_seconds)
             return RateLimitResult(
-                allowed=True,
+                allowed=allowed,
                 limit=limit,
-                remaining=max(0, limit - count),
-                retry_after=retry,
+                remaining=max(0, math.floor(tokens)),
+                retry_after=0 if allowed else max(1, math.ceil((1 - tokens) / rate)),
                 scope=key.split(":", 1)[0],
             )
 
@@ -82,7 +92,8 @@ class RateLimiter:
         self._redis = redis_gateway
         if self._redis is None and self._settings.redis_url:
             self._redis = build_redis_gateway(self._settings)
-        self._memory = _MemoryWindow()
+        self._memory = _MemoryBucket()
+        self._next_fallback_warning = 0.0
 
     def check(
         self,
@@ -100,33 +111,28 @@ class RateLimiter:
                 retry_after=0,
                 scope=scope,
             )
-        key = f"rl:{scope}:{identity}"
+        if limit <= 0 or window_seconds <= 0:
+            raise ValueError("Rate limit capacity and window must be positive")
+        # Separate namespace: old fixed-window keys contain strings, not hashes.
+        key = f"rl:tb:{scope}:{identity}"
         if self._redis is not None:
             client = self._redis.get_client()
             if client is not None:
                 try:
-                    raw = client.eval(
-                        _FIXED_WINDOW_LUA, 1, key, int(window_seconds)
-                    )
-                    count_i = int(raw[0])
-                    ttl = max(1, int(raw[1]))
-                    if count_i > limit:
-                        return RateLimitResult(
-                            allowed=False,
-                            limit=limit,
-                            remaining=0,
-                            retry_after=ttl,
-                            scope=scope,
-                        )
+                    raw = client.eval(_TOKEN_BUCKET_LUA, 1, key, limit, window_seconds)
                     return RateLimitResult(
-                        allowed=True,
+                        allowed=bool(int(raw[0])),
                         limit=limit,
-                        remaining=max(0, limit - count_i),
-                        retry_after=ttl,
+                        remaining=max(0, int(raw[1])),
+                        retry_after=max(0, int(raw[2])),
                         scope=scope,
                     )
                 except Exception:
                     pass
+            now = time.monotonic()
+            if now >= self._next_fallback_warning:
+                logger.warning("rate_limit_local_fallback", extra={"scope": scope})
+                self._next_fallback_warning = now + 60
         result = self._memory.hit(key, limit, window_seconds)
         return RateLimitResult(
             allowed=result.allowed,

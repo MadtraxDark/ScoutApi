@@ -38,6 +38,13 @@ async def http_exception_handler(
             "retryable": False,
         }
     headers = dict(exc.headers) if exc.headers else None
+    if (
+        exc.status_code == 429
+        and detail.get("code") in {"RATE_LIMITED", "DUPLICATE_REQUEST"}
+        and "rate_limit_scope" not in detail
+    ):
+        # Marketplace cooldown is not an API-wide quota. Keep legacy codes.
+        detail["rate_limit_policy"] = "upstream_cooldown"
     return JSONResponse(
         status_code=exc.status_code,
         content={"detail": detail},

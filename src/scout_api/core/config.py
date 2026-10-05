@@ -47,12 +47,12 @@ class Settings(BaseSettings):
     cors_allowed_origins: str = ""
     trusted_proxy_ips: str = ""
     rate_limit_enabled: bool = True
-    rate_limit_default_per_minute: int = 120
-    rate_limit_auth_per_minute: int = 20
-    rate_limit_crawler_per_minute: int = 10
+    rate_limit_default_per_minute: int = Field(default=120, ge=1)
+    rate_limit_auth_per_minute: int = Field(default=20, ge=1)
+    rate_limit_crawler_per_minute: int = Field(default=10, ge=1)
     # Lightweight SPA polling (match status, notifications) — separate bucket
     # so continuous polls do not starve CRUD or crawler start endpoints.
-    rate_limit_poll_per_minute: int = 300
+    rate_limit_poll_per_minute: int = Field(default=300, ge=1)
     scraper_user_agent: str = "ScoutApiV2/0.1 (+price-monitoring)"
     scraper_log_level: str = "INFO"
     scraper_default_concurrency: int = 2

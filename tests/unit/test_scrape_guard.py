@@ -111,6 +111,8 @@ def test_crawl_endpoint_maps_duplicate_to_429() -> None:
     detail = response.json()["detail"]
     assert detail["code"] == "DUPLICATE_REQUEST"
     assert detail["retry_after"] == 42
+    assert detail["rate_limit_policy"] == "upstream_cooldown"
+    assert "rate_limit_scope" not in detail
 
 
 def test_scrape_guard_cache_key_ignores_tracking_params() -> None:

@@ -122,17 +122,43 @@ o bucket `default`; polling contínuo não esgota o `default` nem bloqueia o
 início de novos crawls.
 
 Backend: Redis quando `REDIS_URL` está definido; senão memória do processo.
-Fixed-window atômico (Lua): `EXPIRE` só no primeiro hit da janela — **não**
-renovar TTL a cada request (isso acumulava contadores sob polling e gerava
-429 permanente até o cliente ficar ocioso).
+Token bucket atômico (Lua), conforme [ADR 0047](../adr/0047-api-token-bucket-scoped-cooldown.md).
+Cada `*_PER_MINUTE` define capacidade inicial e taxa de reposição por minuto;
+não é uma contagem estrita em qualquer janela móvel de 60 segundos. Não há
+aumento das capacidades configuradas. A reposição é contínua: com capacidade
+10, um saldo esgotado recupera uma requisição em seis segundos. Rejeições não
+consomem saldo nem adiam sua reposição. `Retry-After` arredonda para cima o
+tempo até o próximo token; requisições concorrentes podem consumi-lo antes.
 
-Identidade: hash do Bearer (usuário) ou IP (auth público). `X-Forwarded-For`
+Redis usa seu próprio relógio (`TIME`) e chaves `rl:tb:*`, sem reutilizar as
+strings da política anterior. TTL remove estado após um minuto ocioso, quando
+o saldo já estaria cheio. O fallback usa relógio monotônico e lock por processo,
+com limpeza periódica de entradas expiradas. Falha do Redis emite
+`rate_limit_local_fallback` no máximo uma vez por minuto por limiter; o fallback
+não garante uma cota compartilhada entre réplicas. Autorização permanece intacta.
+
+Identidade: hash do `sub` validado (usuário Bearer), estável após renovação do
+JWT; IP quando não há Bearer e nas rotas públicas de auth. A validação Bearer
+é reutilizada somente dentro do mesmo request. `X-Forwarded-For`
 só se o peer estiver em `TRUSTED_PROXY_IPS`.
 
-Resposta ao exceder: **429** + `Retry-After`.
+Resposta ao exceder: **429** + `Retry-After`, `X-RateLimit-Scope`,
+`X-RateLimit-Limit` e `X-RateLimit-Remaining: 0`. O corpo preserva
+`code=RATE_LIMITED`, `retryable` e `retry_after`, acrescentando
+`rate_limit_scope` (`default`, `auth`, `crawler`, `poll`) e
+`rate_limit_policy=token_bucket`. Logs `api_rate_limited` registram método,
+template da rota, escopo e espera; nunca identidade ou token.
+
+O cliente PriceScout coordena a pausa entre rotas do escopo atingido, inclusive
+refresh de autenticação, sem repetir mutações. Rotas conhecidas são classificadas
+pelo contrato; outras aprendem pelo header. Sem política explícita, a pausa
+permanece local por rota. A coordenação é por sessão e aba; não há coordenação
+entre abas. Dados confirmados não devem desaparecer durante a pausa.
 
 Throttling por domínio de marketplace (ScrapeGuard) é **ortogonal** a este
-controle.
+controle. Seus erros 429 preservam códigos existentes (`RATE_LIMITED` ou
+`DUPLICATE_REQUEST`) e recebem `rate_limit_policy=upstream_cooldown`, sem
+`rate_limit_scope` global. Não alteramos cooldowns, fila ou capacidade de browser.
 
 ## CORS
 
@@ -141,7 +167,8 @@ com credentials.
 
 Métodos: `GET`, `POST`, `PATCH`, `DELETE`, `OPTIONS`.
 Headers: `Authorization`, `Content-Type`, `Accept`.
-Expostos: `Retry-After`, `X-RateLimit-Limit`, `X-RateLimit-Remaining`.
+Expostos: `Retry-After`, `X-RateLimit-Limit`, `X-RateLimit-Remaining`,
+`X-RateLimit-Scope`.
 
 ## Logs e erros
 

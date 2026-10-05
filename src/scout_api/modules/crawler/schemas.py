@@ -23,6 +23,8 @@ class CrawlError(BaseModel):
     upstream_status: int | None = None
     retryable: bool = False
     retry_after: int | None = None
+    rate_limit_scope: str | None = None
+    rate_limit_policy: str | None = None
 
 
 class CrawlErrorResponse(BaseModel):

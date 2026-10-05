@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import secrets
 from collections.abc import Callable
 from typing import Annotated
@@ -18,6 +19,7 @@ from scout_api.modules.auth.jwt_service import AuthError, verify_access_token
 from scout_api.modules.auth.schemas import AuthenticatedPrincipal, UserRole
 
 _bearer = HTTPBearer(auto_error=False)
+logger = logging.getLogger(__name__)
 
 REFRESH_COOKIE = "scout_refresh_token"
 PKCE_COOKIE = "scout_pkce_verifier"
@@ -91,6 +93,7 @@ def _resolve_principal_from_bearer(
 
 
 def require_authenticated_user(
+    request: Request,
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)],
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> AuthenticatedPrincipal:
@@ -103,10 +106,13 @@ def require_authenticated_user(
     Does **not** accept the media access cookie — JSON APIs stay Bearer-only
     to avoid CSRF on mutating methods.
     """
-    principal = _resolve_principal_from_bearer(
-        credentials, settings, allow_dev_bypass=True
-    )
+    principal = getattr(request.state, "bearer_principal", None)
+    if principal is None:
+        principal = _resolve_principal_from_bearer(
+            credentials, settings, allow_dev_bypass=True
+        )
     if principal is not None:
+        request.state.bearer_principal = principal
         return principal
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -249,19 +255,33 @@ def enforce_rate_limit(
         limit = limits.get(scope, settings.rate_limit_default_per_minute)
         identity = client_ip(request, settings)
         if use_user and credentials and credentials.credentials:
-            # Hash token/sub material — never store raw token as Redis key.
-            identity = (
-                "u:"
-                + hashlib.sha256(credentials.credentials.encode("utf-8")).hexdigest()[
-                    :32
-                ]
-            )
+            principal = getattr(request.state, "bearer_principal", None)
+            if principal is None:
+                principal = _resolve_principal_from_bearer(
+                    credentials, settings, allow_dev_bypass=False
+                )
+                request.state.bearer_principal = principal
+            if principal is not None:
+                identity = (
+                    "u:"
+                    + hashlib.sha256(str(principal.id).encode("utf-8")).hexdigest()[:32]
+                )
         result = get_rate_limiter().check(
             scope=scope, identity=identity, limit=limit, window_seconds=60
         )
         response.headers["X-RateLimit-Limit"] = str(result.limit)
         response.headers["X-RateLimit-Remaining"] = str(result.remaining)
+        response.headers["X-RateLimit-Scope"] = scope
         if not result.allowed:
+            logger.info(
+                "api_rate_limited",
+                extra={
+                    "scope": scope,
+                    "method": request.method,
+                    "route": getattr(request.scope.get("route"), "path", "unknown"),
+                    "retry_after": result.retry_after,
+                },
+            )
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                 detail={
@@ -269,8 +289,15 @@ def enforce_rate_limit(
                     "message": "Limite de requisições excedido",
                     "retryable": True,
                     "retry_after": result.retry_after,
+                    "rate_limit_scope": scope,
+                    "rate_limit_policy": "token_bucket",
                 },
-                headers={"Retry-After": str(result.retry_after)},
+                headers={
+                    "Retry-After": str(result.retry_after),
+                    "X-RateLimit-Scope": scope,
+                    "X-RateLimit-Limit": str(result.limit),
+                    "X-RateLimit-Remaining": "0",
+                },
             )
         return result
 

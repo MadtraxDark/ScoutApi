@@ -87,8 +87,10 @@ Itens resolvidos **não** ficam no índice ativo.
 | [PENDING-019](PENDING-019-pricescout-match-start-failure-smoke.md) | Completar smoke de falhas no start do Product Match | OPEN | TESTING | P2 | frontend/product-match |
 | [PENDING-020](PENDING-020-product-match-monitor-live-smoke.md) | Validar Product Match live em vários monitores reais | IN_PROGRESS | TESTING | P2 | matching/monitor |
 | [PENDING-021](PENDING-021-store-logo-deployment-smoke.md) | Aplicar e validar o fluxo de logos no ambiente integrado | IN_PROGRESS | TESTING | P1 | matching/store-admin |
+| [PENDING-028](PENDING-028-baseline-quality-gates.md) | Falhas preexistentes nos checks globais | OPEN | TESTING | P2 | matching/quality |
+| [PENDING-029](PENDING-029-camoufox-rebuild-fpgen-permissions.md) | Rebuild Docker falha nas permissões do modelo fpgen | OPEN | TECH_DEBT | P1 | docker/camoufox |
 
-*(pendências ativas: 5)*
+*(pendências ativas: 7)*
 
 Resolvida em 2026-09-24:
 

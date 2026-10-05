@@ -85,6 +85,10 @@ PostgreSQL permanece a fonte de verdade de matching e histórico.
 Auth / Google). Públicos: `GET /health` e `/auth/*` de sessão. Detalhes:
 [`docs/security/api-auth.md`](docs/security/api-auth.md) e ADR 0023.
 
+Rate limiting usa reposição contínua por escopo (ADR 0047). As variáveis
+`RATE_LIMIT_*_PER_MINUTE` definem capacidade e reposição por minuto; o 429
+informa o escopo e `Retry-After` para coordenar a pausa no cliente.
+
 - `POST /crawl` — scraping completo (oferta + detalhes) via `ProductScrapeService`.
   Use `include_images=true` para incluir a galeria (`extract_images`); o padrão é
   `false` (sem parsing de imagens). Ver ADR 0012.

@@ -310,6 +310,10 @@ def test_crawler_rate_limit_returns_429(
     assert limited.status_code == 429
     assert limited.headers.get("Retry-After")
     assert limited.json()["detail"]["code"] == "RATE_LIMITED"
+    assert limited.json()["detail"]["rate_limit_scope"] == "crawler"
+    assert limited.json()["detail"]["rate_limit_policy"] == "token_bucket"
+    assert limited.headers["X-RateLimit-Scope"] == "crawler"
+    assert limited.headers["X-RateLimit-Remaining"] == "0"
     assert "redis" not in limited.text.lower()
 
 
@@ -322,24 +326,19 @@ def test_rate_limit_buckets_are_per_identity(auth_settings: str) -> None:
     assert a2.allowed is False
 
 
-def test_redis_fixed_window_expires_only_on_first_hit(auth_settings: str) -> None:
-    """Regression: EXPIRE-on-every-INCR made continuous SPA polling never reset."""
+def test_redis_token_bucket_decision_is_used(auth_settings: str) -> None:
+    """Redis decisions, including wait times, must not fall back to local state."""
 
     class _FakeRedis:
         def __init__(self) -> None:
-            self.counts: dict[str, int] = {}
-            self.ttls: dict[str, int] = {}
-            self.expire_calls = 0
+            self.calls = 0
 
-        def eval(self, script: str, numkeys: int, key: str, window: int):
+        def eval(self, script: str, numkeys: int, key: str, capacity: int, window: int):
             assert numkeys == 1
-            assert "INCR" in script.upper() or "incr" in script
-            count = self.counts.get(key, 0) + 1
-            self.counts[key] = count
-            if count == 1 or self.ttls.get(key, -1) < 0:
-                self.ttls[key] = int(window)
-                self.expire_calls += 1
-            return [count, self.ttls[key]]
+            assert key == "rl:tb:poll:u:poller"
+            assert capacity == 10 and window == 60
+            self.calls += 1
+            return [0, 0, 4]
 
     class _FakeGateway:
         def __init__(self, client: _FakeRedis) -> None:
@@ -349,16 +348,31 @@ def test_redis_fixed_window_expires_only_on_first_hit(auth_settings: str) -> Non
             return self._client
 
     client = _FakeRedis()
-    limiter = RateLimiter(
-        settings=get_settings(), redis_gateway=_FakeGateway(client)
+    limiter = RateLimiter(settings=get_settings(), redis_gateway=_FakeGateway(client))
+    result = limiter.check(scope="poll", identity="u:poller", limit=10)
+    assert not result.allowed
+    assert result.retry_after == 4
+    assert client.calls == 1
+
+
+def test_refreshing_jwt_does_not_reset_user_quota(auth_settings, monkeypatch):
+    monkeypatch.setenv("RATE_LIMIT_DEFAULT_PER_MINUTE", "1")
+    get_settings.cache_clear()
+    user = str(uuid4())
+    client = TestClient(app)
+    first = _mint(auth_settings, sub=user, extra={"jti": "first"})
+    renewed = _mint(auth_settings, sub=user, extra={"jti": "renewed"})
+    assert (
+        client.get("/auth/me", headers={"Authorization": f"Bearer {first}"}).status_code
+        == 200
     )
-    for _ in range(5):
-        ok = limiter.check(
-            scope="poll", identity="u:poller", limit=10, window_seconds=60
-        )
-        assert ok.allowed
-    assert client.expire_calls == 1
-    assert client.counts["rl:poll:u:poller"] == 5
+    blocked = client.get("/auth/me", headers={"Authorization": f"Bearer {renewed}"})
+    assert blocked.status_code == 429
+    other = _mint(auth_settings)
+    assert (
+        client.get("/auth/me", headers={"Authorization": f"Bearer {other}"}).status_code
+        == 200
+    )
 
 
 def test_poll_and_default_buckets_are_independent(auth_settings: str) -> None:

@@ -125,7 +125,12 @@ if origins:
         allow_credentials=True,
         allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["Authorization", "Content-Type", "Accept"],
-        expose_headers=["Retry-After", "X-RateLimit-Limit", "X-RateLimit-Remaining"],
+        expose_headers=[
+            "Retry-After",
+            "X-RateLimit-Limit",
+            "X-RateLimit-Remaining",
+            "X-RateLimit-Scope",
+        ],
     )
 
 ExceptionHandler = Callable[[Request, Exception], Response | Awaitable[Response]]
