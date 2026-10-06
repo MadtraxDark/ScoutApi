@@ -28,7 +28,9 @@ def main() -> None:
     if isinstance(offers, list):
         offers = offers[0] if offers else {}
     table = {
-        "json_ld_offers_price": offers.get("price") if isinstance(offers, dict) else None,
+        "json_ld_offers_price": offers.get("price")
+        if isinstance(offers, dict)
+        else None,
         "dom_valVista": (response.css("#valVista::text").get() or "").strip(),
         "dom_valParc": (response.css("#valParc::text").get() or "").strip(),
         "dom_nParc": (response.css("#nParc::text").get() or "").strip(),
@@ -37,9 +39,9 @@ def main() -> None:
         "js_valVista_assign": re.findall(
             r"\$\('\.val-prod'\)\.text\('([^']+)'\)", html
         )[:3],
-        "js_valParc_assign": re.findall(
-            r"\$\('\.valParc'\)\.text\('([^']+)'\)", html
-        )[:3],
+        "js_valParc_assign": re.findall(r"\$\('\.valParc'\)\.text\('([^']+)'\)", html)[
+            :3
+        ],
     }
     offer = spider.extract_offer(response)
     table["CURRENT_parser"] = {

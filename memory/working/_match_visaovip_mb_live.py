@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import time
 from pathlib import Path
-
 from uuid import UUID
 
 from scout_api.modules.crawler.core.scrape_guard import ScrapeGuard
@@ -29,6 +28,7 @@ OUT = Path("memory/working/visaovip_mb_match_live.json")
 
 def main() -> None:
     import os
+
     from sqlalchemy import create_engine
     from sqlalchemy.orm import Session
 

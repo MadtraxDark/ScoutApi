@@ -60,7 +60,8 @@ RUN if [ -d /usr/local/lib/python3.12/site-packages/fpgen ]; then \
 
 USER app
 
-RUN python -m camoufox fetch
+RUN python -m camoufox set official/stable/156.0.1-beta.34 \
+    && python -m camoufox fetch
 
 USER root
 

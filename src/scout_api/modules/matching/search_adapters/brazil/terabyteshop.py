@@ -26,8 +26,7 @@ class TerabyteShopSearchAdapter:
     def build_search_request(self, query: str) -> SearchRequest:
         return SearchRequest(
             url=(
-                "https://www.terabyteshop.com.br/busca?"
-                f"str={quote_plus(query.strip())}"
+                f"https://www.terabyteshop.com.br/busca?str={quote_plus(query.strip())}"
             ),
             method="GET",
             prefer_browser=False,

@@ -265,8 +265,9 @@ def test_visaovip_search_parser_independent_of_broken_pdp_fixture() -> None:
     assert len(candidates) == 2
     broken = HtmlResponse(
         url="https://www.visaovip.com/prod/x/y/1/",
-        body=(b"<html><head><title>Produto - Visaovip</title></head>"
-        b"<body></body></html>"),
+        body=(
+            b"<html><head><title>Produto - Visaovip</title></head><body></body></html>"
+        ),
         encoding="utf-8",
         request=Request("https://www.visaovip.com/prod/x/y/1/"),
     )

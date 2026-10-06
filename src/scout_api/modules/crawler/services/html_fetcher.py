@@ -18,7 +18,7 @@ from contextlib import AbstractContextManager
 from http.cookiejar import CookieJar
 from pathlib import Path
 from types import TracebackType
-from typing import Any, Protocol
+from typing import Any, Protocol, TypedDict
 from urllib.error import HTTPError, URLError
 from urllib.parse import unquote, urlparse
 from urllib.request import HTTPCookieProcessor, build_opener
@@ -32,6 +32,19 @@ from ..core.exceptions import RequestError, shopee_auth_required_error
 from ..core.fetch_metrics import FetchCostMetrics
 from ..core.fingerprints import canonicalize_url
 from ..core.proxy_policy import proxy_policy_for_url, resolve_store_config
+
+
+class _BrowserSchedulerOptions(TypedDict):
+    enabled: bool
+    capacity: int
+    queue_capacity: int
+    queue_timeout_ms: int
+    profile_lock_mode: str
+    profile_lock_ttl_ms: int
+    profile_lock_timeout_ms: int
+    profile_base_path: Path
+    redis_gateway: Any | None
+
 
 logger = logging.getLogger(__name__)
 
@@ -77,11 +90,11 @@ class _PlaywrightOwnerLoop:
             except BaseException as exc:  # noqa: BLE001 — forward to caller
                 fut.set_exception(exc)
 
-    def call(self, fn: Callable[[], Any]) -> Any:
+    def call[T](self, fn: Callable[[], T]) -> T:
         self._ensure_started()
         if threading.current_thread() is self._thread:
             return fn()
-        fut: Future[Any] = Future()
+        fut: Future[T] = Future()
         self._queue.put((fn, fut))
         return fut.result()
 
@@ -1202,20 +1215,25 @@ class CamoufoxHtmlFetcher:
         assert isinstance(result, HtmlResponse)
         return result
 
-    def _owner_call_with_profile_lease(
+    def _owner_call_with_profile_lease[T](
         self,
-        operation: Callable[[], Any],
+        operation: Callable[[], T],
         *,
         slot_lease: Any | None,
-    ) -> Any:
-        def _run() -> Any:
+    ) -> T:
+        def _run() -> T:
             with self._lock:
                 try:
                     return operation()
                 finally:
                     session = self._warm_session
-                    if slot_lease is not None and session is not None:
-                        if self._scheduler.retain_profile_lock(slot_lease):
+                    scheduler = self._scheduler
+                    if (
+                        slot_lease is not None
+                        and session is not None
+                        and scheduler is not None
+                    ):
+                        if scheduler.retain_profile_lock(slot_lease):
                             lock_lease = slot_lease._profile_lock_lease
                             ttl_ms = getattr(lock_lease, "_ttl_ms", None)
                             lock_wait_ms = getattr(
@@ -1243,6 +1261,7 @@ class CamoufoxHtmlFetcher:
                         # An injected but disabled scheduler cannot protect a
                         # persistent profile between fetches.
                         self._close_warm_session_unlocked()
+
         return self._owner.call(_run)
 
     def _has_reusable_warm_session(self, url: str) -> bool:
@@ -1466,7 +1485,7 @@ class CamoufoxHtmlFetcher:
                     self._close_warm_session_unlocked()
                 browser_cm = self._open_browser(url=url)
                 try:
-                    browser = browser_cm.__enter__()
+                    browser = metrics.measure("browser_acquire", browser_cm.__enter__)
                 except Exception as exc:
                     self._browser_launch_failures += 1
                     if oneshot_trial is not None:
@@ -1490,10 +1509,12 @@ class CamoufoxHtmlFetcher:
                     circuit.record_success()
                 self._browser_launches += 1
             else:
-                browser, reused = self._acquire_browser(url)
+                browser, reused = metrics.measure(
+                    "browser_acquire", lambda: self._acquire_browser(url)
+                )
                 browser_cm = None
             try:
-                page = self._new_page(browser)
+                page = metrics.measure("page_create", lambda: self._new_page(browser))
                 self._maybe_attach_resource_blocking(page, url)
                 self._attach_cost_listeners(page, request_types)
                 byte_holder = {"n": 0}
@@ -1522,7 +1543,9 @@ class CamoufoxHtmlFetcher:
                         self._attach_aliexpress_pdp_listener(page, captured, url)
                 warmup_used = False
                 if self._should_warmup(url):
-                    warmup_used = self._maybe_warmup(page, url)
+                    warmup_used = metrics.measure(
+                        "warmup", lambda: self._maybe_warmup(page, url)
+                    )
                 metrics.warmup_used = warmup_used
 
                 if shopee and self._early_stop_on_shopee_get_pc:
@@ -1543,10 +1566,18 @@ class CamoufoxHtmlFetcher:
                             retryable=True,
                         )
                 else:
-                    self._goto_with_bestbuy_retry(page, url, metrics=metrics)
+                    metrics.measure(
+                        "navigation",
+                        lambda: self._goto_with_bestbuy_retry(
+                            page, url, metrics=metrics
+                        ),
+                    )
 
-                html, final_url, title = self._wait_for_product_html(
-                    page, captured=captured, resume_url=url
+                html, final_url, title = metrics.measure(
+                    "settle_challenge",
+                    lambda: self._wait_for_product_html(
+                        page, captured=captured, resume_url=url
+                    ),
                 )
                 if captured.get("body"):
                     if shopee_search or captured.get("kind") == "search":
@@ -1804,7 +1835,8 @@ class CamoufoxHtmlFetcher:
             "fetch_cost_metrics store=%s proxy_used=%s proxy_policy=%s "
             "warmup_used=%s get_pc_captured=%s early_stop=%s "
             "network_request_count=%s estimated_transferred_bytes=%s "
-            "duration_ms=%s result=%s requests_by_resource_type=%s",
+            "duration_ms=%s result=%s requests_by_resource_type=%s "
+            "stage_timings_ms=%s",
             payload.get("store"),
             payload.get("proxy_used"),
             payload.get("proxy_policy"),
@@ -1816,6 +1848,7 @@ class CamoufoxHtmlFetcher:
             payload.get("duration_ms"),
             payload.get("result"),
             payload.get("requests_by_resource_type"),
+            payload.get("stage_timings_ms"),
             extra=payload,
         )
         observe(
@@ -2085,6 +2118,19 @@ class CamoufoxHtmlFetcher:
 
     def _goto(self, page: Any, url: str) -> None:
         page.goto(url, wait_until="domcontentloaded", timeout=self._timeout_ms)
+        host = (urlparse(url).hostname or "").removeprefix("www.")
+        if host == "magazineluiza.com.br":
+            if urlparse(url).path in {"", "/"}:
+                # Origin warmup retains its explicit settle below; waiting for
+                # analytics networkidle does not validate or resolve a PDP.
+                return
+            from .magalu_readiness import magalu_document_ready
+
+            html = page.content()
+            if not needs_interstitial_resolution(
+                html, url=url
+            ) and magalu_document_ready(html, url):
+                return
         wait_for_load_state = getattr(page, "wait_for_load_state", None)
         if callable(wait_for_load_state):
             try:
@@ -2595,7 +2641,7 @@ def build_html_fetcher(
     direct_dir, proxy_dir = profile_dirs_for_base(base_dir)
     profiles_root = camoufox_profiles_root(base_dir)
 
-    _sched_common = {
+    _sched_common: _BrowserSchedulerOptions = {
         "enabled": camoufox_browser_scheduler_enabled,
         "capacity": camoufox_browser_capacity,
         "queue_capacity": camoufox_browser_queue_capacity,

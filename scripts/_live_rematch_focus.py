@@ -7,7 +7,6 @@ import sys
 import time
 import traceback
 from datetime import UTC, datetime
-from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -23,7 +22,6 @@ from scout_api.modules.crawler.services.product_scrape_service import (
     ProductScrapeService,
     get_shared_html_fetcher,
 )
-from scout_api.modules.crawler.services.store_resolver import resolve_spider_by_store_key
 from scout_api.modules.matching.engine import MatchingEngine
 from scout_api.modules.matching.identity import (
     build_search_queries,
@@ -148,7 +146,9 @@ def main() -> int:
                         "message": str(exc)[:300],
                     }
                 )
-                print("search_err", getattr(exc, "code", None), str(exc)[:160], flush=True)
+                print(
+                    "search_err", getattr(exc, "code", None), str(exc)[:160], flush=True
+                )
                 continue
             print("candidates", len(candidates), flush=True)
             for cand in candidates:
@@ -205,7 +205,11 @@ def main() -> int:
         if not any(h["decision"] == "auto_match" for h in row["hits"]):
             time.sleep(SLEEP_BETWEEN)
             row["diagnostics"] = diagnose(store, queries[0], fetcher)
-            print("diag", json.dumps(row["diagnostics"], ensure_ascii=False)[:400], flush=True)
+            print(
+                "diag",
+                json.dumps(row["diagnostics"], ensure_ascii=False)[:400],
+                flush=True,
+            )
 
         report["stores"][store] = row
 

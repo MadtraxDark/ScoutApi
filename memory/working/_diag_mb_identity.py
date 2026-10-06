@@ -32,7 +32,8 @@ TITLE = (
 STORED_MODEL = "TUF Gaming B650M-E Socket AMD M-atx"
 CANDIDATE_SHORT = "ASUS TUF GAMING B650M-E WIFI"
 CANDIDATE_KABUM = (
-    "Placa-Mãe ASUS TUF Gaming B650M-E, WIFI, AMD AM5, B650, DDR5, Preto - 90MB1FV0-M0EAY0"
+    "Placa-Mãe ASUS TUF Gaming B650M-E, WIFI, AMD "
+    "AM5, B650, DDR5, Preto - 90MB1FV0-M0EAY0"
 )
 CANDIDATE_PLUS = "ASUS TUF GAMING B650M-PLUS WIFI"
 CANDIDATE_A = "ASUS PRIME B650M-A WIFI"
@@ -73,11 +74,21 @@ def main() -> None:
     bundle = resolve_product_identity(title=TITLE, category="motherboard")
     print("resolve brand:", bundle.value("brand"))
     print("resolve model:", bundle.value("model"))
-    for key in ("chipset", "socket", "memory_type", "form_factor", "wifi", "mpn", "variant"):
+    for key in (
+        "chipset",
+        "socket",
+        "memory_type",
+        "form_factor",
+        "wifi",
+        "mpn",
+        "variant",
+    ):
         print(f"  attr {key}:", bundle.value(key))
 
     print("\n=== MPN EXTRACTION ===")
-    print("forms:", extract_all_mpn_forms(TITLE, STORED_MODEL, "TUF-GAMING-B650M-E-WIFI"))
+    print(
+        "forms:", extract_all_mpn_forms(TITLE, STORED_MODEL, "TUF-GAMING-B650M-E-WIFI")
+    )
 
     print("\n=== IDENTITY (stored model + variant=WiFi like canonical) ===")
     ident = identity_from_price_item(
@@ -134,12 +145,15 @@ def main() -> None:
             _item(cand_title, brand="ASUS", variant=cand_variant, gtin=None)
         )
         score = engine.score(ident, cand)
+        models_ok = models_compatible(
+            ident.model, cand.model, left_title=ident.title, right_title=cand.title
+        )
         print(
             f"{label}: decision={score.decision} conf={score.confidence} "
             f"model={cand.model!r} mpn={cand.mpn} "
             f"vars={cand.variant_attrs} "
             f"title_sim={token_set_ratio(ident.title, cand.title):.3f} "
-            f"models_ok={models_compatible(ident.model, cand.model, left_title=ident.title, right_title=cand.title)}"
+            f"models_ok={models_ok}"
         )
         for r in score.reasons:
             print(f"  - {r.code}: {r.detail}")

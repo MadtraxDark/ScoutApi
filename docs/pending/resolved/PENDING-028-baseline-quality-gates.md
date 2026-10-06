@@ -1,6 +1,17 @@
 # PENDING-028 — Falhas preexistentes nos checks globais
 
-- Status: OPEN
+- Status: RESOLVED
+- Resolvida: 2026-10-05
+
+## Resolução final
+
+1090 testes backend passaram (10 condicionais ignorados), PostgreSQL progressivo executado explicitamente, Ruff check/formato e mypy src verdes. 77 testes frontend, typecheck e lint completos verdes. Corrigidos locale Amazon e contratos tipados, sem reduzir cobertura ou suprimir código real.
+
+[Evidências e limites](../../performance/pending-recovery-2026-10-05.md).
+
+## Histórico anterior à resolução
+
+
 - Tipo: TESTING
 - Prioridade: P2
 - Área: matching/quality
@@ -59,4 +70,4 @@ Mypy após a correção: 37 erros em 9 arquivos (baseline 41/11); imagens sem
 novos erros. Ruff e formato dos arquivos da importação passaram. TypeScript
 do PriceScout e 10 testes direcionados passaram; lint global ainda tem
 set-state-in-effect preexistente no admin. Detalhes e números da suíte em
-[relatório de importação](../performance/import-images-2026-10-05.md).
+[relatório de importação](../../performance/import-images-2026-10-05.md).

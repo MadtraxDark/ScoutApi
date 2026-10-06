@@ -146,9 +146,7 @@ def test_do_not_infer_kit_from_total_capacity() -> None:
 
 
 def test_motherboard_wifi_is_variant_not_model_noise() -> None:
-    bundle = resolve_product_identity(
-        title="ASUS TUF Gaming B650M-Plus WiFi AM5 DDR5"
-    )
+    bundle = resolve_product_identity(title="ASUS TUF Gaming B650M-Plus WiFi AM5 DDR5")
     assert bundle.category == "motherboard"
     assert bundle.value("brand") in {"Asus", "ASUS"}
     assert "B650" in (bundle.value("model") or "").upper()

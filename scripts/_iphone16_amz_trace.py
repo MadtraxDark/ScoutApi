@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 
-from scout_api.modules.crawler.core.exceptions import ParseError, RequestError
 from scout_api.modules.crawler.services.product_scrape_service import (
     ProductScrapeService,
 )

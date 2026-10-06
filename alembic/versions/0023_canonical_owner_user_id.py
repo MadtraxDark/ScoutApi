@@ -26,5 +26,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_index("ix_canonical_products_owner_user_id", table_name="canonical_products")
+    op.drop_index(
+        "ix_canonical_products_owner_user_id", table_name="canonical_products"
+    )
     op.drop_column("canonical_products", "owner_user_id")

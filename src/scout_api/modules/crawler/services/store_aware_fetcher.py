@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from collections.abc import Callable
+from typing import Any, Protocol, cast
 from urllib.parse import urlparse
 
 from scrapy.http import HtmlResponse
@@ -13,6 +14,17 @@ from ..core.proxy_policy import ProxyPolicy, proxy_policy_for_url
 from .html_fetcher import CamoufoxHtmlFetcher, HtmlFetcher
 
 logger = logging.getLogger(__name__)
+
+
+class _BrowserPostProvider(Protocol):
+    def browser_post(
+        self,
+        url: str,
+        *,
+        headers: dict[str, str],
+        data: bytes,
+        timeout_ms: int | None = None,
+    ) -> tuple[int, str]: ...
 
 
 def is_shoppingchina_quick_search(url: str) -> bool:
@@ -56,7 +68,9 @@ class StoreAwareHtmlFetcher:
                 url=url,
                 retryable=False,
             )
-        return post(url, headers=headers, data=data, timeout_ms=timeout_ms)
+        return cast(Callable[..., tuple[int, str]], post)(
+            url, headers=headers, data=data, timeout_ms=timeout_ms
+        )
 
     @property
     def direct(self) -> HtmlFetcher:
@@ -165,7 +179,7 @@ def find_browser_post(fetcher: object) -> Any | None:
             break
         seen.add(id(cur))
         if hasattr(type(cur), "browser_post"):
-            return cur.browser_post  # type: ignore[no-any-return]
+            return cast(_BrowserPostProvider, cur).browser_post
         nxt = getattr(cur, "_browser", None)
         if nxt is None:
             nxt = getattr(cur, "_direct", None)

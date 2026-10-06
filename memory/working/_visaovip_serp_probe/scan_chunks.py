@@ -1,6 +1,7 @@
 """Scan chunk files for Next.js Server Action IDs and searchProducts."""
+
+import re
 from pathlib import Path
-import re, sys
 
 base = Path(r"memory\working\_visaovip_serp_probe")
 
@@ -17,7 +18,7 @@ for name in sorted(base.glob("chunk_*.body")):
     idx = text.find("searchProducts")
     if idx > 0:
         print("  FOUND searchProducts at idx", idx)
-        snippet = text[max(0, idx-300):idx+600]
+        snippet = text[max(0, idx - 300) : idx + 600]
         print(snippet)
 
     # hex-like IDs (potential action IDs) - 40+ hex chars

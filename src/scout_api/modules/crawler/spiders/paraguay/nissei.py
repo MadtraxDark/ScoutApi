@@ -112,8 +112,7 @@ class NisseiSpider(BaseStoreSpider):
             availability=availability,
             metadata={
                 "source": {
-                    "price": selection.get("price_source")
-                    or "json-ld-or-magento",
+                    "price": selection.get("price_source") or "json-ld-or-magento",
                     "sku": id_source,
                     "availability": "json-ld-or-page",
                 },
@@ -152,8 +151,9 @@ class NisseiSpider(BaseStoreSpider):
             "color": data.get("color") if isinstance(data, dict) else None,
             "model": data.get("model") if isinstance(data, dict) else None,
         }
-        if isinstance(structured.get("brand"), dict):
-            structured["brand"] = structured["brand"].get("name")
+        structured_brand = structured.get("brand")
+        if isinstance(structured_brand, dict):
+            structured["brand"] = structured_brand.get("name")
 
         resolved = resolve_product_identity(
             selected_variant=selected_variant,
@@ -172,7 +172,11 @@ class NisseiSpider(BaseStoreSpider):
         if conflicts:
             logger.info(
                 "nissei_variant_source_conflict",
-                extra={"store": self.store, "url": response.url, "conflicts": conflicts},
+                extra={
+                    "store": self.store,
+                    "url": response.url,
+                    "conflicts": conflicts,
+                },
             )
 
         attribute_sources = {
@@ -284,7 +288,11 @@ class NisseiSpider(BaseStoreSpider):
         child_sku = selection.get("child_sku")
         child_id = selection.get("variant_product_id")
         if child_sku:
-            return str(child_sku).strip(), str(child_sku).strip(), "selected-variant-sku"
+            return (
+                str(child_sku).strip(),
+                str(child_sku).strip(),
+                "selected-variant-sku",
+            )
         if child_id:
             return str(child_id).strip(), str(child_id).strip(), "selected-variant-id"
 
@@ -447,10 +455,14 @@ class NisseiSpider(BaseStoreSpider):
         results: list[dict[str, Any]] = []
         for node in product_root.css(".swatch-attribute"):
             code = (
-                node.attrib.get("data-attribute-code")
-                or node.css("::attr(data-attribute-code)").get()
-                or ""
-            ).strip().casefold()
+                (
+                    node.attrib.get("data-attribute-code")
+                    or node.css("::attr(data-attribute-code)").get()
+                    or ""
+                )
+                .strip()
+                .casefold()
+            )
             if not code:
                 continue
             attr_id = (
@@ -463,11 +475,16 @@ class NisseiSpider(BaseStoreSpider):
                 or node.css("::attr(data-option-selected)").get()
                 or node.css("::attr(option-selected)").get()
             )
-            selected_label = " ".join(
-                t.strip()
-                for t in node.css(".swatch-attribute-selected-option::text").getall()
-                if t and t.strip()
-            ) or None
+            selected_label = (
+                " ".join(
+                    t.strip()
+                    for t in node.css(
+                        ".swatch-attribute-selected-option::text"
+                    ).getall()
+                    if t and t.strip()
+                )
+                or None
+            )
             options: list[dict[str, str]] = []
             for opt in node.css(".swatch-option"):
                 opt_id = (
@@ -484,10 +501,14 @@ class NisseiSpider(BaseStoreSpider):
                 if not opt_id or not label:
                     continue
                 checked = (
-                    opt.attrib.get("aria-checked")
-                    or opt.css("::attr(aria-checked)").get()
-                    or ""
-                ).strip().casefold()
+                    (
+                        opt.attrib.get("aria-checked")
+                        or opt.css("::attr(aria-checked)").get()
+                        or ""
+                    )
+                    .strip()
+                    .casefold()
+                )
                 classes = (opt.attrib.get("class") or "").casefold()
                 options.append({"id": opt_id, "label": label})
                 if checked == "true" or "selected" in classes.split():
@@ -576,11 +597,7 @@ class NisseiSpider(BaseStoreSpider):
             url_val = url_evidence.get(key)
             final = resolved.value(key)
             winner = resolved.get(key).source if final else None
-            if (
-                selected
-                and url_val
-                and _norm(selected) != _norm(url_val)
-            ):
+            if selected and url_val and _norm(selected) != _norm(url_val):
                 conflicts.append(
                     {
                         "attribute": key,

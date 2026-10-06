@@ -4,23 +4,23 @@ from __future__ import annotations
 
 import importlib
 import pkgutil
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from scout_api.modules.crawler.core.exceptions import RequestError
 
 if TYPE_CHECKING:
     from .base import StoreSearchAdapter
 
-_ADAPTERS: dict[str, type] | None = None
+_ADAPTERS: dict[str, type[StoreSearchAdapter]] | None = None
 
 
-def _discover_adapters() -> dict[str, type]:
+def _discover_adapters() -> dict[str, type[StoreSearchAdapter]]:
     """Walk search_adapters subpackages for classes with store_key + Protocol shape."""
     from . import __name__ as package_name
     from . import __path__ as package_path
     from .base import StoreSearchAdapter
 
-    found: dict[str, type] = {}
+    found: dict[str, type[StoreSearchAdapter]] = {}
     for module_info in pkgutil.walk_packages(package_path, f"{package_name}."):
         if module_info.name.endswith(".base") or module_info.name.endswith(".registry"):
             continue
@@ -41,11 +41,11 @@ def _discover_adapters() -> dict[str, type]:
             # Skip Protocol itself if ever imported as a class.
             if value is StoreSearchAdapter:
                 continue
-            found[store_key] = value
+            found[store_key] = cast(type[StoreSearchAdapter], value)
     return found
 
 
-def _adapters() -> dict[str, type]:
+def _adapters() -> dict[str, type[StoreSearchAdapter]]:
     global _ADAPTERS
     if _ADAPTERS is None:
         _ADAPTERS = _discover_adapters()
@@ -77,4 +77,4 @@ def resolve_search_adapter(store_key: str) -> StoreSearchAdapter:
             code="SEARCH_UNSUPPORTED",
             url=None,
         )
-    return cls()  # type: ignore[return-value]
+    return cls()

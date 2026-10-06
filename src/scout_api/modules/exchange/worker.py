@@ -37,7 +37,9 @@ def sweep_once(*, settings: Settings | None = None) -> dict[str, Any]:
     Wraps refresh_if_due; returns result summary or {'skipped': True}.
     Never raises.
     """
-    from scout_api.modules.exchange.refresh_service import refresh_if_due  # noqa: PLC0415
+    from scout_api.modules.exchange.refresh_service import (
+        refresh_if_due,  # noqa: PLC0415
+    )
 
     cfg = settings or get_settings()
     factory = get_session_factory()
@@ -101,7 +103,9 @@ def get_scheduler() -> ExchangeRateScheduler | None:
     return _scheduler
 
 
-def start_scheduler(*, settings: Settings | None = None) -> ExchangeRateScheduler | None:
+def start_scheduler(
+    *, settings: Settings | None = None
+) -> ExchangeRateScheduler | None:
     """Start the global in-process scheduler when exchange rates are enabled."""
     global _scheduler
     cfg = settings or get_settings()

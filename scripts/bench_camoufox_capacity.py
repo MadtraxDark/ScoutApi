@@ -24,11 +24,9 @@ Env: respects ``CAMOUFOX_*`` via ``get_settings()`` when profile dir omitted.
 from __future__ import annotations
 
 # ruff: noqa: E402
-
 import argparse
 import json
 import os
-import statistics
 import sys
 import threading
 import time
@@ -43,7 +41,6 @@ sys.path.insert(0, str(ROOT / "src"))
 from scout_api.core.config import get_settings
 from scout_api.modules.crawler.services.html_fetcher import CamoufoxHtmlFetcher
 
-
 LAYER1_URL = "https://example.com/"
 LAYER2_URL = "https://www.visaovip.com/busca/termo/notebook/"
 
@@ -51,6 +48,7 @@ LAYER2_URL = "https://www.visaovip.com/busca/termo/notebook/"
 # ---------------------------------------------------------------------------
 # System metric helpers
 # ---------------------------------------------------------------------------
+
 
 def _rss_kb() -> int | None:
     """Best-effort RSS sample (Linux /proc or resource module)."""
@@ -100,7 +98,8 @@ def _count_firefox_processes() -> int:
         import psutil  # type: ignore[import-not-found]
 
         return sum(
-            1 for p in psutil.process_iter(["name"])
+            1
+            for p in psutil.process_iter(["name"])
             if "firefox" in (p.info.get("name") or "").lower()
         )
     except Exception:  # noqa: BLE001
@@ -123,6 +122,7 @@ def _percentile(sorted_values: list[float], pct: float) -> float:
 # ---------------------------------------------------------------------------
 # Data structures
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class FetchSample:
@@ -149,10 +149,10 @@ class SlotStats:
 @dataclass
 class BenchResult:
     capacity: int
-    layer: str          # "layer1" | "layer2"
+    layer: str  # "layer1" | "layer2"
     url: str
     profile_root: str
-    iterations: int     # iterations per slot (not total)
+    iterations: int  # iterations per slot (not total)
 
     # Aggregate timing
     elapsed_s: float = 0.0
@@ -192,6 +192,7 @@ class BenchResult:
 # Fetcher factory
 # ---------------------------------------------------------------------------
 
+
 def _make_fetcher(profile_dir: Path) -> CamoufoxHtmlFetcher:
     settings = get_settings()
     profile_dir.mkdir(parents=True, exist_ok=True)
@@ -218,6 +219,7 @@ def _make_fetcher(profile_dir: Path) -> CamoufoxHtmlFetcher:
 # ---------------------------------------------------------------------------
 # Single-slot sequential runner (used by C1 and as sub-run inside parallel)
 # ---------------------------------------------------------------------------
+
 
 def _run_slot(
     fetcher: CamoufoxHtmlFetcher,
@@ -278,6 +280,7 @@ def _run_slot(
 # Multi-capacity runner
 # ---------------------------------------------------------------------------
 
+
 def run_capacity(
     capacity: int,
     *,
@@ -316,8 +319,12 @@ def run_capacity(
         slot_rss: list[int] = []
         slot_ff: list[int] = []
         slot_samples, slot_stat = _run_slot(
-            fetcher, 0, url, iterations,
-            rss_samples=slot_rss, ff_samples=slot_ff,
+            fetcher,
+            0,
+            url,
+            iterations,
+            rss_samples=slot_rss,
+            ff_samples=slot_ff,
         )
         all_samples.extend(slot_samples)
         all_stats.append(slot_stat)
@@ -335,9 +342,13 @@ def run_capacity(
             slot_rss: list[int] = []
             slot_ff: list[int] = []
             s, st = _run_slot(
-                fetchers[idx], idx, url, iterations,
+                fetchers[idx],
+                idx,
+                url,
+                iterations,
                 start_iter=idx * iterations + 1,
-                rss_samples=slot_rss, ff_samples=slot_ff,
+                rss_samples=slot_rss,
+                ff_samples=slot_ff,
             )
             with rss_lock:
                 rss_samples.extend(slot_rss)
@@ -345,7 +356,9 @@ def run_capacity(
                 ff_samples.extend(slot_ff)
             return s, st
 
-        with ThreadPoolExecutor(max_workers=capacity, thread_name_prefix="bench-slot") as pool:
+        with ThreadPoolExecutor(
+            max_workers=capacity, thread_name_prefix="bench-slot"
+        ) as pool:
             futures: list[Future[tuple[list[FetchSample], SlotStats]]] = [
                 pool.submit(run_slot_thread, i) for i in range(capacity)
             ]
@@ -415,6 +428,7 @@ def run_capacity(
 # Backward-compat shim (kept for Task 0 compatibility)
 # ---------------------------------------------------------------------------
 
+
 def run_c1_baseline(
     *,
     url: str,
@@ -435,6 +449,7 @@ def run_c1_baseline(
 # CLI helpers
 # ---------------------------------------------------------------------------
 
+
 def _default_profile_root() -> Path:
     raw = os.environ.get("BENCH_CAMOUFOX_PROFILE_ROOT", "").strip()
     if raw:
@@ -448,12 +463,22 @@ def _layer2_iterations(base: int) -> int:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Camoufox capacity benchmark (C1/C2/C3)")
+    parser = argparse.ArgumentParser(
+        description="Camoufox capacity benchmark (C1/C2/C3)"
+    )
     parser.add_argument("--capacity", type=int, default=1, choices=(1, 2, 3))
-    parser.add_argument("--iterations", type=int, default=10,
-                        help="Iterations per slot (not total). Layer 2 capped at 5.")
-    parser.add_argument("--layer", default="both", choices=("layer1", "layer2", "both"),
-                        help="Which layer(s) to run")
+    parser.add_argument(
+        "--iterations",
+        type=int,
+        default=10,
+        help="Iterations per slot (not total). Layer 2 capped at 5.",
+    )
+    parser.add_argument(
+        "--layer",
+        default="both",
+        choices=("layer1", "layer2", "both"),
+        help="Which layer(s) to run",
+    )
     parser.add_argument(
         "--layer1-url", default=os.environ.get("BENCH_LAYER1_URL", LAYER1_URL)
     )
@@ -461,11 +486,14 @@ def main() -> None:
         "--layer2-url", default=os.environ.get("BENCH_LAYER2_URL", LAYER2_URL)
     )
     parser.add_argument(
-        "--profile-root", type=Path, default=None,
+        "--profile-root",
+        type=Path,
+        default=None,
         help="Root for slot-* dirs (default /tmp/scout-bench-camoufox-capacity)",
     )
-    parser.add_argument("--json-out", type=Path, default=None,
-                        help="Write combined JSON to this file")
+    parser.add_argument(
+        "--json-out", type=Path, default=None, help="Write combined JSON to this file"
+    )
     args = parser.parse_args()
 
     profile_root = args.profile_root or _default_profile_root()
@@ -485,7 +513,13 @@ def main() -> None:
     }
 
     if args.layer in ("layer1", "both"):
-        print(f"\n[bench] Layer 1 — {args.layer1_url!r}  capacity={cap}  iterations={iters}", flush=True)
+        print(
+            (
+                f"\n[bench] Layer 1 — {args.layer1_url!r} "
+                f" capacity={cap}  iterations={iters}"
+            ),
+            flush=True,
+        )
         r1 = run_capacity(
             cap,
             url=args.layer1_url,
@@ -503,7 +537,13 @@ def main() -> None:
         )
 
     if args.layer in ("layer2", "both"):
-        print(f"\n[bench] Layer 2 — {args.layer2_url!r}  capacity={cap}  iterations={l2_iters}", flush=True)
+        print(
+            (
+                f"\n[bench] Layer 2 — {args.layer2_url!r} "
+                f" capacity={cap}  iterations={l2_iters}"
+            ),
+            flush=True,
+        )
         r2 = run_capacity(
             cap,
             url=args.layer2_url,

@@ -8,32 +8,31 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from scout_api.modules.crawler.core.fingerprints import canonicalize_url
 from scout_api.modules.crawler.services.product_scrape_service import (
     ProductScrapeService,
     get_shared_html_fetcher,
 )
+from scout_api.modules.matching.engine import MatchingEngine
 from scout_api.modules.matching.identity import (
     build_search_queries,
-    critical_identity_conflict,
     identity_from_price_item,
     identity_reference_item,
-    looks_like_accessory,
-    looks_like_bundle,
     serp_candidate_text,
 )
-from scout_api.modules.matching.engine import MatchingEngine
 from scout_api.modules.matching.product_match_service import (
     ProductMatchService,
     _serp_title_reject_reason,
 )
 from scout_api.modules.matching.store_search_service import StoreSearchService
 
+ROOT = Path(__file__).resolve().parents[1]
+
+
 TITLE = (
-    'Celular Samsung Galaxy S25 Ultra 5G 256GB Galaxy AI Titânio Preto '
+    "Celular Samsung Galaxy S25 Ultra 5G 256GB Galaxy AI Titânio Preto "
     '6,9" 12GB RAM Câm. Quádrupla 200+50+10+50MP Bateria 5000mAh Dual Chip'
 )
 # Ground truth for regression only — never used to force match.
@@ -159,7 +158,9 @@ def main() -> None:
     ref = identity_reference_item(TITLE, brand="Samsung", category="smartphone")
     ref_identity = identity_from_price_item(ref)
     queries = build_search_queries(ref_identity)
-    print("identity", ref_identity.brand, ref_identity.model, ref_identity.variant_attrs)
+    print(
+        "identity", ref_identity.brand, ref_identity.model, ref_identity.variant_attrs
+    )
     print("queries", queries[:6])
 
     fetcher = get_shared_html_fetcher()

@@ -5,8 +5,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from scout_api.modules.crawler.services.product_scrape_service import (
     ProductScrapeService,
@@ -15,6 +14,9 @@ from scout_api.modules.crawler.services.product_scrape_service import (
 from scout_api.modules.matching.identity import identity_reference_item
 from scout_api.modules.matching.product_match_service import ProductMatchService
 from scout_api.modules.matching.store_search_service import StoreSearchService
+
+ROOT = Path(__file__).resolve().parents[1]
+
 
 TITLE = "Celular Samsung Galaxy S25 Ultra 5G 256GB Galaxy AI Titânio Preto"
 

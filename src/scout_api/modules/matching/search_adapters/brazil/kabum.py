@@ -51,9 +51,7 @@ class KabumSearchAdapter:
             props = state.get("props", {}) if isinstance(state, dict) else {}
             page_props = props.get("pageProps", {}) if isinstance(props, dict) else {}
             data = page_props.get("data", {}) if isinstance(page_props, dict) else {}
-            catalog = (
-                data.get("catalogServer", {}) if isinstance(data, dict) else {}
-            )
+            catalog = data.get("catalogServer", {}) if isinstance(data, dict) else {}
             rows = catalog.get("data") if isinstance(catalog, dict) else None
             if not isinstance(rows, list):
                 continue

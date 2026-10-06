@@ -6,11 +6,11 @@ from __future__ import annotations
 import time
 
 from scout_api.core.config import get_settings
-from scout_api.modules.crawler.services.html_fetcher import build_html_fetcher
 from scout_api.modules.crawler.core.browser_health import (
     get_browser_circuit,
     reset_browser_circuit_for_tests,
 )
+from scout_api.modules.crawler.services.html_fetcher import build_html_fetcher
 
 
 def main() -> None:

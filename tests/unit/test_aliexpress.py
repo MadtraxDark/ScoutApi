@@ -24,7 +24,9 @@ from scout_api.modules.crawler.services.product_scrape_service import (
 from scout_api.modules.crawler.spiders.aliexpress import AliExpressSpider
 from scout_api.modules.crawler.spiders.registry import resolve_store_spider
 from scout_api.modules.crawler.stores import STORE_CONFIGS
-from scout_api.modules.matching.search_adapters.aliexpress import AliExpressSearchAdapter
+from scout_api.modules.matching.search_adapters.aliexpress import (
+    AliExpressSearchAdapter,
+)
 
 FIXTURES = Path(__file__).parents[1] / "fixtures" / "aliexpress"
 

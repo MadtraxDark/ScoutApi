@@ -239,7 +239,10 @@ def test_bestbuy_full_scrape_only_calls_images_when_requested(monkeypatch) -> No
     images = MagicMock(wraps=spider.extract_images)
     monkeypatch.setattr(spider, "extract_images", images)
     monkeypatch.setattr(
-        "scout_api.modules.crawler.services.product_scrape_service.resolve_store_spider",
+        (
+            "scout_api.modules.crawler.services.product_sc"
+            "rape_service.resolve_store_spider"
+        ),
         lambda _url: spider,
     )
 
@@ -262,12 +265,14 @@ def test_bestbuy_full_scrape_only_calls_images_when_requested(monkeypatch) -> No
 
 
 def test_bestbuy_search_derives_title_from_product_slug() -> None:
-    body = b"""
-    <html><body>
-      <a href="/product/apple-iphone-16-128gb-apple-intelligence-black-verizon/JCQ6HRGR8C">x</a>
-      <a href="/product/apple-iphone-16e-128gb-apple-intelligence-black-at-t/JCQ6HRFZF3">y</a>
-    </body></html>
-    """
+    body = (
+        b'\n    <html><body>\n      <a href="/product/ap'
+        b"ple-iphone-16-128gb-apple-intelligence-black"
+        b'-verizon/JCQ6HRGR8C">x</a>\n      <a href="/p'
+        b"roduct/apple-iphone-16e-128gb-apple-intellig"
+        b'ence-black-at-t/JCQ6HRFZF3">y</a>\n    </body'
+        b"></html>\n    "
+    )
     response = HtmlResponse(
         "https://www.bestbuy.com/site/searchpage.jsp?st=iphone",
         body=body,

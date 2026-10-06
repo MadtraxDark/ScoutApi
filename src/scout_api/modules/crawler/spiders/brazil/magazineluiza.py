@@ -255,9 +255,7 @@ class MagazineLuizaSpider(BaseStoreSpider):
         main_url = None
         main_raw = item.get("image")
         if isinstance(main_raw, str) and main_raw.strip():
-            main_candidates = self.normalize_image_urls(
-                main_raw, base_url=response.url
-            )
+            main_candidates = self.normalize_image_urls(main_raw, base_url=response.url)
             if main_candidates:
                 candidate = self._materialize_cdn_template(main_candidates[0])
                 if self._is_official_gallery_url(candidate, product_id):

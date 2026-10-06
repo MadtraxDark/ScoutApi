@@ -1,5 +1,5 @@
-from pathlib import Path
 import re
+from pathlib import Path
 
 t = Path("tests/fixtures/visaovip/product_motherboard.html").read_text(
     encoding="utf-8", errors="replace"

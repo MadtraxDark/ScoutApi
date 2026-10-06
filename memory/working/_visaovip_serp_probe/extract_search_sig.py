@@ -1,6 +1,7 @@
 """Extract searchProducts call signature and payload structure from chunk_serp3."""
-from pathlib import Path
+
 import re
+from pathlib import Path
 
 base = Path(r"memory\working\_visaovip_serp_probe")
 text = (base / "chunk_serp3.body").read_text(encoding="utf-8", errors="replace")
@@ -8,7 +9,7 @@ text = (base / "chunk_serp3.body").read_text(encoding="utf-8", errors="replace")
 # Find the searchProducts context more broadly
 idx = text.find("searchProducts")
 print("=== searchProducts context ===")
-print(text[max(0, idx-500):idx+3000])
+print(text[max(0, idx - 500) : idx + 3000])
 
 print("\n=== await p( usages ===")
 for m in re.finditer(r"await\s+p\([^)]{0,400}\)", text):

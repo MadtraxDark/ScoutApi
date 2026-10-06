@@ -7,7 +7,10 @@ from decimal import Decimal
 
 from scout_api.modules.crawler.models.product import ProductPriceItem
 from scout_api.modules.matching.engine import MatchingEngine
-from scout_api.modules.matching.identity import build_search_queries, identity_from_price_item
+from scout_api.modules.matching.identity import (
+    build_search_queries,
+    identity_from_price_item,
+)
 
 
 def item(**kw: object) -> ProductPriceItem:
@@ -52,7 +55,13 @@ def main() -> None:
     )
     eng = MatchingEngine()
     s = eng.score(ref, amazon)
-    print("AMZ", amazon.variant_attrs, s.decision, s.confidence, [r.code for r in s.reasons])
+    print(
+        "AMZ",
+        amazon.variant_attrs,
+        s.decision,
+        s.confidence,
+        [r.code for r in s.reasons],
+    )
 
     pro = identity_from_price_item(
         item(

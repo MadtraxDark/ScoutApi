@@ -32,8 +32,10 @@ from scout_api.modules.matching.models import (
 )
 from scout_api.modules.matching.product_registration_service import (
     ProductRegistrationService,
+    can_access_product,
 )
 from scout_api.modules.matching.repository import MatchingRepository
+from scout_api.modules.matching.schemas import MatchRunLiveView
 
 logger = logging.getLogger(__name__)
 
@@ -132,6 +134,56 @@ class MatchRunService:
         self._runs = MatchRunRepository(session)
         self._notifications = NotificationRepository(session)
         self._registration = ProductRegistrationService(session)
+
+    def get_live(
+        self, run_id: UUID, *, principal: AuthenticatedPrincipal
+    ) -> MatchRunLiveView:
+        from scout_api.modules.exchange.conversion_service import convert_safe
+        from scout_api.modules.exchange.repository import ExchangeRateRepository
+        from scout_api.modules.matching.match_run_serializers import match_run_to_status
+        from scout_api.modules.matching.schemas import (
+            MatchRunLiveView,
+            MatchStoreLiveView,
+        )
+
+        rows = self._runs.get_live_snapshot(run_id)
+        if not rows or not can_access_product(rows[0][1], principal):
+            raise LookupError("RUN_NOT_FOUND")
+        run = rows[0][0]
+        stores: list[MatchStoreLiveView] = []
+        for row in rows:
+            fields = dict(row._mapping)
+            fields.pop("ProductMatchRun", None)
+            fields.pop("CanonicalProduct", None)
+            if fields.get("id") is not None:
+                stores.append(MatchStoreLiveView.model_validate(fields))
+        foreign = any(s.matched_currency not in (None, "BRL") for s in stores)
+        rates = (
+            ExchangeRateRepository(self._session).list_latest(quote_currency="BRL")
+            if foreign
+            else []
+        )
+        for store in stores:
+            if store.matched_currency not in (None, "BRL"):
+                converted = convert_safe(
+                    store.matched_price,
+                    store.matched_currency,
+                    session=self._session,
+                    rates=rates,
+                )
+                if converted:
+                    store.converted_price_brl = converted.converted_amount
+                    store.exchange_rate_status = str(converted.rate_status)
+                    store.exchange_rate_updated_at = converted.fetched_at
+        return MatchRunLiveView(
+            run=match_run_to_status(run),
+            is_effectively_active=is_effectively_active(run),
+            auto_matches_found=sum(
+                s.matched_decision == "auto_match" and s.status == "match"
+                for s in stores
+            ),
+            stores=stores,
+        )
 
     def start(
         self,
@@ -271,8 +323,16 @@ class MatchRunService:
         stores_total: int,
         stores_completed: int,
         expected_worker_id: str | None = None,
+        expected_attempts: int | None = None,
         now: datetime | None = None,
     ) -> UserNotification | None:
+        if expected_worker_id is not None:
+            locked = self._runs.lock_claim(
+                run.id, worker_id=expected_worker_id, attempts=expected_attempts
+            )
+            if locked is None:
+                return None
+            run = locked
         if expected_worker_id is not None and run.worker_id != expected_worker_id:
             logger.warning(
                 "match_job_zombie_finalize_rejected",
@@ -320,8 +380,16 @@ class MatchRunService:
         code: str,
         message: str,
         expected_worker_id: str | None = None,
+        expected_attempts: int | None = None,
         now: datetime | None = None,
     ) -> UserNotification | None:
+        if expected_worker_id is not None:
+            locked = self._runs.lock_claim(
+                run.id, worker_id=expected_worker_id, attempts=expected_attempts
+            )
+            if locked is None:
+                return None
+            run = locked
         if expected_worker_id is not None and run.worker_id != expected_worker_id:
             logger.warning(
                 "match_job_zombie_finalize_rejected",
@@ -434,6 +502,8 @@ class MatchRunService:
         queries: list[str],
         candidates_found: int,
         candidates_evaluated: int,
+        matched_decision: str | None = None,
+        matched_payload: dict[str, Any] | None = None,
         matched_url: str | None = None,
         matched_title: str | None = None,
         matched_price: Decimal | None = None,
@@ -446,7 +516,15 @@ class MatchRunService:
         candidate_fetch_duration_ms: int | None = None,
         candidates: list[dict[str, Any]] | None = None,
         expected_worker_id: str | None = None,
+        expected_attempts: int | None = None,
     ) -> MatchStoreRun | None:
+        if expected_worker_id is not None:
+            locked = self._runs.lock_claim(
+                run.id, worker_id=expected_worker_id, attempts=expected_attempts
+            )
+            if locked is None:
+                return None
+            run = locked
         if expected_worker_id is not None and run.worker_id != expected_worker_id:
             logger.warning(
                 "match_job_zombie_store_outcome_rejected",
@@ -490,6 +568,8 @@ class MatchRunService:
         store_run.candidates_found = candidates_found
         store_run.candidates_evaluated = candidates_evaluated
         store_run.matched_url = matched_url
+        store_run.matched_decision = matched_decision
+        store_run.matched_payload = matched_payload
         store_run.matched_title = (matched_title or "")[:512] or None
         store_run.matched_price = matched_price
         store_run.matched_currency = matched_currency
@@ -525,6 +605,29 @@ class MatchRunService:
         run.last_activity_at = now
         self._session.flush()
         return store_run
+
+    def record_targets(
+        self, run: ProductMatchRun, stores: list[str], reference_payload: dict[str, Any]
+    ) -> None:
+        if run.reference_payload is None:
+            run.reference_payload = reference_payload
+        for store in stores:
+            row = self._runs.get_or_create_store_run(
+                run.id, store, display_name=store_display_name(store)
+            )
+            if row.finished_at is None:
+                row.status = "pending"
+                row.started_at = None
+        run.stores_total = len(stores)
+        self._session.flush()
+
+    def record_store_started(self, run: ProductMatchRun, store: str) -> None:
+        row = self._runs.get_or_create_store_run(run.id, store)
+        if row.status not in ("match", "no_match", "error"):
+            row.status = "running"
+            row.started_at = _utcnow()
+            run.last_activity_at = row.started_at
+        self._session.flush()
 
 
 class NotificationService:

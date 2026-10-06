@@ -25,7 +25,6 @@ from __future__ import annotations
 
 # Scripts insert ``src`` on sys.path before importing the package.
 # ruff: noqa: E402
-
 import json
 import logging
 import os

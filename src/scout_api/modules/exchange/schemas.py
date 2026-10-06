@@ -14,7 +14,9 @@ class ExchangeRateView(BaseModel):
 
     base_currency: str = Field(description="Moeda base (ex.: USD, PYG).")
     quote_currency: str = Field(description="Moeda cotada (ex.: BRL).")
-    rate_type: str = Field(description="Tipo da taxa (tourism_sell, ptax_sell, official…).")
+    rate_type: str = Field(
+        description="Tipo da taxa (tourism_sell, ptax_sell, official…)."
+    )
     rate: Decimal = Field(description="Taxa de câmbio (Decimal).", examples=["5.3034"])
     source: str = Field(description="Provedor da taxa.")
     source_timestamp: datetime | None = Field(
@@ -54,6 +56,7 @@ class ExchangeRateRefreshResponse(BaseModel):
 
 
 # ---- Conversion fields added to ProductListingView / OfferSnapshotView ----
+
 
 class ConversionFields(BaseModel):
     """Valor convertido em BRL (apenas FX — sem impostos/tarifas)."""

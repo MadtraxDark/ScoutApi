@@ -1013,6 +1013,25 @@ def _title_search_phrase(identity: ProductIdentity, locale: str | None) -> str |
             count=1,
         )
 
+    color = fold_text(identity.variant_attrs.get("color", ""))
+    language = (locale or "").split("-", 1)[0].lower()
+    if color and language:
+        canonical_color = normalize_variant_value("color", color)
+        hue = next((key for key in _COLOR_HUES if key in canonical_color), None)
+        localized_color = _COLOR_SEARCH_LOCALE_LABELS.get(hue or "", {}).get(language)
+        if localized_color:
+            if re.search(r"\b(?:titanio|titanium)\b", color):
+                if language == "en":
+                    localized_color += " titanium"
+                elif language in {"pt", "es"}:
+                    localized_color = "titanio " + localized_color
+            title = re.sub(
+                rf"(?<![a-z0-9]){re.escape(color)}(?![a-z0-9])",
+                localized_color,
+                title,
+                count=1,
+            )
+
     protected_category_tokens = (
         set(fold_text(localized_category or explicit_category or "").split())
         if explicit_category

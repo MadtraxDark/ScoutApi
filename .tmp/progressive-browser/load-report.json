@@ -1,0 +1,38 @@
+{
+  "duration_seconds": 603.95,
+  "interval_seconds": 4,
+  "groups_run_concurrently": true,
+  "data_queries_per_foreign_snapshot": 2,
+  "groups": {
+    "1": {
+      "requests": 151,
+      "p50_ms": 23.97,
+      "p95_ms": 34.63,
+      "max_ms": 65.96,
+      "payload_max_bytes": 5765,
+      "statuses": {
+        "200": 151
+      }
+    },
+    "10": {
+      "requests": 1510,
+      "p50_ms": 19.11,
+      "p95_ms": 31.7,
+      "max_ms": 115.25,
+      "payload_max_bytes": 5765,
+      "statuses": {
+        "200": 1510
+      }
+    },
+    "50": {
+      "requests": 7550,
+      "p50_ms": 13.59,
+      "p95_ms": 21.65,
+      "max_ms": 123.81,
+      "payload_max_bytes": 5765,
+      "statuses": {
+        "200": 7550
+      }
+    }
+  }
+}

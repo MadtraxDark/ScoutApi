@@ -18,7 +18,6 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from scout_api.modules.crawler.core.browser_health import (
-    TRIAL_TTL_SECONDS,
     BrowserCircuitBreaker,
     BrowserHealthState,
     TrialToken,
@@ -48,9 +47,7 @@ def _open_circuit(cb: BrowserCircuitBreaker, *, now: datetime = T0) -> None:
     cb.record_launch_failure(now=now)
 
 
-def _half_open_circuit(
-    cb: BrowserCircuitBreaker, *, now: datetime = T0
-) -> datetime:
+def _half_open_circuit(cb: BrowserCircuitBreaker, *, now: datetime = T0) -> datetime:
     """Drive circuit to DEGRADED (half-open) by opening then advancing past cooldown."""
     _open_circuit(cb, now=now)
     half_open_at = now + timedelta(seconds=cb.cooldown_seconds + 1)
@@ -193,7 +190,7 @@ def test_probe_crash_does_not_stick_half_open() -> None:
     assert token is not None
 
     # Before TTL expires: still DEGRADED with active trial.
-    before_expiry = half_open_at + timedelta(seconds=trial_ttl - 1)
+    _before_expiry = half_open_at + timedelta(seconds=trial_ttl - 1)
     assert cb.state == BrowserHealthState.DEGRADED
     snap = cb.snapshot()
     assert snap["active_trial"] is not None
@@ -301,7 +298,11 @@ def test_queue_codes_in_infrastructure_error_codes() -> None:
         BROWSER_INFRASTRUCTURE_ERROR_CODES,
     )
 
-    for code in ("BROWSER_QUEUE_SATURATED", "BROWSER_QUEUE_TIMEOUT", "BROWSER_JOB_CANCELLED"):
+    for code in (
+        "BROWSER_QUEUE_SATURATED",
+        "BROWSER_QUEUE_TIMEOUT",
+        "BROWSER_JOB_CANCELLED",
+    ):
         assert code in BROWSER_INFRASTRUCTURE_ERROR_CODES, (
             f"{code} missing from BROWSER_INFRASTRUCTURE_ERROR_CODES"
         )

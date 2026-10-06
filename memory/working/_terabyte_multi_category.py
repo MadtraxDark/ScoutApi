@@ -6,8 +6,6 @@ import json
 import time
 from pathlib import Path
 
-from scrapy.http import HtmlResponse, Request
-
 from scout_api.modules.crawler.services.curl_cffi_fetcher import CurlCffiHtmlFetcher
 from scout_api.modules.crawler.services.html_fetcher import is_challenge_page
 from scout_api.modules.crawler.spiders.brazil.terabyteshop import TerabyteShopSpider
@@ -41,10 +39,12 @@ OUT = Path("memory/working/_terabyte_probe/multi_category.json")
 
 
 def first_product_url(serp_html: str, base: str) -> str | None:
-    from urllib.parse import urljoin
     import re
+    from urllib.parse import urljoin
 
-    for href in re.findall(r'href=["\']([^"\']*/produto/\d+/[^"\']*)["\']', serp_html, re.I):
+    for href in re.findall(
+        r'href=["\']([^"\']*/produto/\d+/[^"\']*)["\']', serp_html, re.I
+    ):
         if "javascript" in href.casefold():
             continue
         return urljoin(base, href)

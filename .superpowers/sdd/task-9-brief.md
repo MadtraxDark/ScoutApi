@@ -13,7 +13,7 @@ class StrategyResult(StrEnum):
     SUCCESS = "success"
     NO_RESULTS = "no_results"
     BLOCKED = "blocked"
-    UNAVAILABLE = "unavailable"      # contract invalid / action missing
+    UNAVAILABLE = "unavailable"  # contract invalid / action missing
     INVALID_RESPONSE = "invalid_response"
     ERROR = "error"
 ```

@@ -19,7 +19,9 @@ def build_http_client(*, timeout: float | None = None) -> httpx.Client:
     No proxies — all exchange-rate sources are public and not blocked.
     """
     settings = get_settings()
-    effective_timeout = timeout if timeout is not None else settings.exchange_rate_http_timeout_seconds
+    effective_timeout = (
+        timeout if timeout is not None else settings.exchange_rate_http_timeout_seconds
+    )
     return httpx.Client(
         timeout=effective_timeout,
         headers={

@@ -7,8 +7,7 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from scout_api.modules.crawler.core.exceptions import ParseError, RequestError
 from scout_api.modules.matching.identity import (
@@ -18,6 +17,9 @@ from scout_api.modules.matching.identity import (
 )
 from scout_api.modules.matching.product_match_service import ProductMatchService
 from scout_api.modules.matching.store_search_service import StoreSearchService
+
+ROOT = Path(__file__).resolve().parents[1]
+
 
 SOURCE_TITLE = "Placa de Vídeo Gigabyte GeForce RTX 5060"
 

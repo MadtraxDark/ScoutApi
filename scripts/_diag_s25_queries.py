@@ -14,7 +14,7 @@ from scout_api.modules.matching.identity import (
 )
 
 TITLE = (
-    'Celular Samsung Galaxy S25 Ultra 5G 256GB Galaxy AI Titânio Preto '
+    "Celular Samsung Galaxy S25 Ultra 5G 256GB Galaxy AI Titânio Preto "
     '6,9" 12GB RAM Câm. Quádrupla 200+50+10+50MP Bateria 5000mAh Dual Chip'
 )
 

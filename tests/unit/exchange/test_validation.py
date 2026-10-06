@@ -61,7 +61,9 @@ def test_tourism_premium_band() -> None:
 
 
 def test_max_change_helper() -> None:
-    assert check_max_change(Decimal("550"), Decimal("5.5"), max_change_pct=15) is not None
+    assert (
+        check_max_change(Decimal("550"), Decimal("5.5"), max_change_pct=15) is not None
+    )
     assert check_max_change(Decimal("5.6"), Decimal("5.5"), max_change_pct=15) is None
 
 

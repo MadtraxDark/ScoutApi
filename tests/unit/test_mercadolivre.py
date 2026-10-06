@@ -63,7 +63,9 @@ def test_mercadolivre_catalog_vs_item_id_semantics() -> None:
 
 def test_mercadolivre_search_url_and_parse() -> None:
     adapter = MercadoLivreSearchAdapter()
-    assert "lista.mercadolivre.com.br" in adapter.build_search_request("msi rtx 5070").url
+    assert (
+        "lista.mercadolivre.com.br" in adapter.build_search_request("msi rtx 5070").url
+    )
     serp = HtmlResponse(
         "https://lista.mercadolivre.com.br/msi-rtx-5070",
         body=(

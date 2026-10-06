@@ -60,6 +60,7 @@ def convert(
     rate_type: RateType | None = None,
     session: Session,
     settings: Settings | None = None,
+    rates: list[ExchangeRateLatest] | None = None,
 ) -> ConversionResult:
     """Convert amount from from_currency to to_currency.
 
@@ -98,11 +99,34 @@ def convert(
 
     row: ExchangeRateLatest | None = None
     if effective_rt is not None:
-        row = repo.get_latest(from_currency, to_currency, effective_rt)
+        row = (
+            next(
+                (
+                    r
+                    for r in rates
+                    if r.base_currency == from_currency
+                    and r.quote_currency == to_currency
+                    and r.rate_type == str(effective_rt)
+                ),
+                None,
+            )
+            if rates is not None
+            else repo.get_latest(from_currency, to_currency, effective_rt)
+        )
 
     # Fallback: try any available rate_type for this pair
     if row is None:
-        rows = repo.list_latest(base_currency=from_currency, quote_currency=to_currency)
+        rows = (
+            [
+                r
+                for r in rates
+                if r.base_currency == from_currency and r.quote_currency == to_currency
+            ]
+            if rates is not None
+            else repo.list_latest(
+                base_currency=from_currency, quote_currency=to_currency
+            )
+        )
         if rows:
             # Prefer fresh over stale, then prefer business default types
             preference_order = [
@@ -128,7 +152,11 @@ def convert(
     if row is None:
         logger.debug(
             "exchange_rate_unavailable",
-            extra={"from": from_currency, "to": to_currency, "rate_type": str(effective_rt)},
+            extra={
+                "from": from_currency,
+                "to": to_currency,
+                "rate_type": str(effective_rt),
+            },
         )
         return ConversionResult(
             amount=amount,
@@ -161,7 +189,9 @@ def convert(
     # Keep full rate precision; round only the monetary BRL amount.
     raw_converted = amount * rate
     converted = (
-        quantize_brl_money(raw_converted) if to_currency.upper() == "BRL" else raw_converted
+        quantize_brl_money(raw_converted)
+        if to_currency.upper() == "BRL"
+        else raw_converted
     )
     status = _to_status(row, stale_after_seconds=cfg.exchange_rate_stale_after_seconds)
 
@@ -184,6 +214,7 @@ def convert_safe(
     *,
     session: Session,
     settings: Settings | None = None,
+    rates: list[ExchangeRateLatest] | None = None,
 ) -> ConversionResult | None:
     """Safe wrapper: returns None if amount or currency is None/zero."""
     if amount is None or from_currency is None:
@@ -194,6 +225,7 @@ def convert_safe(
             from_currency,
             session=session,
             settings=settings,
+            rates=rates,
         )
     except Exception as exc:  # noqa: BLE001
         logger.warning("exchange_convert_safe_error", extra={"error": str(exc)})

@@ -588,9 +588,7 @@ class ChallengeResolver:
             target_html = _safe_content(page)
 
         cur_url = _safe_url(page) or ""
-        if is_auth_wall_page(
-            target_html, url=cur_url, title=_safe_title(page)
-        ):
+        if is_auth_wall_page(target_html, url=cur_url, title=_safe_title(page)):
             logger.info(
                 "mercadolivre_auth_bypass_wall_persists",
                 extra={"url": cur_url[:160]},

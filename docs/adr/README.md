@@ -70,6 +70,8 @@ Política de quando criar/atualizar docs:
 | [0046](0046-product-match-embedding-cache-redis-l2.md) | Cache L2 de embeddings do Product Match em Redis | Accepted |
 | [0047](0047-api-token-bucket-scoped-cooldown.md) | Reposição contínua e cooldown por escopo na API | Accepted |
 | [0048](0048-import-image-references-before-original-preservation.md) | Referências antes da preservação original na importação | Accepted |
+| [0049](0049-progressive-match-live-observations.md) | Ofertas progressivas com observações duráveis de Match Runs | Accepted |
+
 
 ## Quando criar ADR
 

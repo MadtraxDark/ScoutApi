@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from scrapy.http import HtmlResponse, Request
-
 from scout_api.modules.crawler.core.scrape_guard import ScrapeGuard
 from scout_api.modules.crawler.services.product_scrape_service import (
     ProductScrapeService,
@@ -21,7 +19,7 @@ def main() -> None:
         domain_min_interval_seconds=1,
         result_cache_ttl_seconds=0,
     )
-    scrape = ProductScrapeService(guard=guard)
+    _scrape = ProductScrapeService(guard=guard)
     fetcher = get_shared_html_fetcher()
     response = fetcher.fetch(URL)
     spider = NisseiSpider()

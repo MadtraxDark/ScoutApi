@@ -14,8 +14,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from scout_api.modules.crawler.models.product import ProductPriceItem
 from scout_api.modules.crawler.services.store_resolver import eligible_match_store_keys
@@ -26,8 +25,11 @@ from scout_api.modules.matching.identity import (
 )
 from scout_api.modules.matching.store_search_service import StoreSearchService
 
+ROOT = Path(__file__).resolve().parents[1]
+
+
 TITLE = (
-    'Celular Samsung Galaxy S25 Ultra 5G 256GB Galaxy AI Titânio Preto '
+    "Celular Samsung Galaxy S25 Ultra 5G 256GB Galaxy AI Titânio Preto "
     '6,9" 12GB RAM Câm. Quádrupla 200+50+10+50MP Bateria 5000mAh Dual Chip'
 )
 

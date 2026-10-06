@@ -8,11 +8,13 @@ import signal
 import threading
 import time
 from typing import Any
+from uuid import UUID
 
 from sqlalchemy.orm import Session
 
 from scout_api.core.config import Settings, get_settings
 from scout_api.core.database import get_session_factory
+from scout_api.core.log_redaction import install_log_redaction
 from scout_api.core.performance import OperationCategory, timed
 from scout_api.modules.crawler.core.exceptions import ParseError, RequestError
 from scout_api.modules.matching.embedding_evidence import (
@@ -39,13 +41,18 @@ from scout_api.modules.matching.match_run_claim import (
 )
 from scout_api.modules.matching.match_run_repository import MatchRunRepository
 from scout_api.modules.matching.match_run_service import MatchRunService
+from scout_api.modules.matching.match_run_staging import (
+    restore_hit,
+    restore_product,
+    stage_product,
+)
 from scout_api.modules.matching.match_watchdog import MatchHangWatchdog
 from scout_api.modules.matching.models import CanonicalProduct, ProductMatchRun
 from scout_api.modules.matching.product_match_service import (
     MatchStoreOutcome,
     ProductMatchService,
 )
-from scout_api.modules.matching.schemas import MatchRequest, MatchResponse
+from scout_api.modules.matching.schemas import MatchHit, MatchRequest, MatchResponse
 
 _embedding_runtime: MatchEmbeddingRuntime | None = None
 
@@ -152,9 +159,12 @@ def _execute_match_for_run(
     session: Session,
     *,
     run_id: object,
-    product_id: object,
+    product_id: UUID,
     reference_url: str,
     on_store_outcome: Any,
+    on_targets_resolved: Any = None,
+    on_store_started: Any = None,
+    before_persist: Any = None,
     skip_stores: frozenset[str] | set[str] | None = None,
     run_deadline: MonotonicDeadline | None = None,
     embedding_evaluator: MatchEmbeddingEvaluator | None = None,
@@ -170,6 +180,39 @@ def _execute_match_for_run(
             embedding_active_threshold=cfg.match_embeddings_active_similarity_threshold,
         )
     match_service = ProductMatchService(**match_service_args)
+    durable_run = session.get(ProductMatchRun, run_id)
+    restored_matches: list[MatchHit] = []
+    target_stores = None
+    if durable_run is not None:
+        target_stores = [row.store for row in durable_run.store_runs] or None
+        for row in durable_run.store_runs:
+            if row.status == "match":
+                if not row.matched_payload:
+                    raise RequestError(
+                        "Resultado anterior sem contexto recuperável",
+                        code="MATCH_RECOVERY_INCOMPLETE",
+                    )
+                restored_matches.append(restore_hit(row.matched_payload))
+    durable_args = dict(
+        restored_matches=restored_matches,
+        target_stores=target_stores,
+        on_targets_resolved=on_targets_resolved,
+        on_store_started=on_store_started,
+        before_persist=before_persist,
+    )
+    if durable_run is not None and durable_run.reference_payload:
+        return match_service.match_from_item(
+            restore_product(durable_run.reference_payload),
+            persist=True,
+            include_review=True,
+            canonical_product_id=product_id,
+            on_store_outcome=on_store_outcome,
+            skip_stores=skip_stores,
+            run_deadline=run_deadline,
+            progress_tracker=GLOBAL_MATCH_PROGRESS,
+            run_id=str(run_id),
+            **durable_args,
+        )
     product = session.get(CanonicalProduct, product_id)
     run_id_str = str(run_id)
 
@@ -189,8 +232,9 @@ def _execute_match_for_run(
             persist=True,
             include_review=True,
             include_images=False,
-            canonical_product_id=product_id,  # type: ignore[arg-type]
+            canonical_product_id=product_id,
             on_store_outcome=on_store_outcome,
+            **durable_args,
             skip_stores=skip_stores,
             run_deadline=run_deadline,
             progress_tracker=GLOBAL_MATCH_PROGRESS,
@@ -199,7 +243,7 @@ def _execute_match_for_run(
 
     request = MatchRequest(
         reference_url=reference_url,  # type: ignore[arg-type]
-        canonical_product_id=product_id,  # type: ignore[arg-type]
+        canonical_product_id=product_id,
         persist=True,
         include_review=True,
         include_images=False,
@@ -208,6 +252,7 @@ def _execute_match_for_run(
         return match_service.match(
             request,
             on_store_outcome=on_store_outcome,
+            **durable_args,
             skip_stores=skip_stores,
             run_deadline=run_deadline,
             progress_tracker=GLOBAL_MATCH_PROGRESS,
@@ -232,8 +277,9 @@ def _execute_match_for_run(
             persist=True,
             include_review=True,
             include_images=False,
-            canonical_product_id=product_id,  # type: ignore[arg-type]
+            canonical_product_id=product_id,
             on_store_outcome=on_store_outcome,
+            **durable_args,
             skip_stores=skip_stores,
             run_deadline=run_deadline,
             progress_tracker=GLOBAL_MATCH_PROGRESS,
@@ -257,9 +303,12 @@ def process_claimed_run(
     started = utcnow()
     service = MatchRunService(session)
 
-    if _fail_stale_exhausted(session, run, settings=settings):
-        session.flush()
+    locked = MatchRunRepository(session).lock_claim(
+        run_id, worker_id=worker_id, attempts=claim_attempts
+    )
+    if locked is None:
         return run
+    run = locked
 
     if not reference_url:
         service.finalize_failed(
@@ -267,6 +316,7 @@ def process_claimed_run(
             code="REFERENCE_URL_MISSING",
             message="Produto sem URL de referência para busca.",
             expected_worker_id=worker_id,
+            expected_attempts=claim_attempts,
         )
         session.flush()
         return run
@@ -331,6 +381,34 @@ def process_claimed_run(
 
     outcome_lock = threading.Lock()
 
+    def short_update(action: Any) -> None:
+        factory = get_session_factory()
+        with factory() as update_session:
+            row = MatchRunRepository(update_session).lock_claim(
+                run_id, worker_id=worker_id, attempts=claim_attempts
+            )
+            if row is None:
+                raise RequestError("Attempt substituída", code="MATCH_CLAIM_LOST")
+            action(MatchRunService(update_session), row)
+            update_session.commit()
+
+    def on_targets_resolved(stores: list[str], reference: Any) -> None:
+        short_update(
+            lambda svc, row: svc.record_targets(row, stores, stage_product(reference))
+        )
+
+    def on_store_started(store: str) -> None:
+        short_update(lambda svc, row: svc.record_store_started(row, store))
+
+    def before_persist() -> None:
+        # No external work after this lock; catalog + links + terminal commit together.
+        session.expire_all()
+        row = MatchRunRepository(session).lock_claim(
+            run_id, worker_id=worker_id, attempts=claim_attempts
+        )
+        if row is None:
+            raise RequestError("Attempt substituída", code="MATCH_CLAIM_LOST")
+
     def on_store_outcome(outcome: MatchStoreOutcome) -> None:
         with outcome_lock:
             try:
@@ -356,6 +434,8 @@ def process_claimed_run(
                         queries=list(outcome.queries),
                         candidates_found=outcome.candidates_found,
                         candidates_evaluated=outcome.candidates_evaluated,
+                        matched_decision=outcome.matched_decision,
+                        matched_payload=outcome.matched_payload,
                         matched_url=outcome.matched_url,
                         matched_title=outcome.matched_title,
                         matched_price=outcome.matched_price,
@@ -368,6 +448,7 @@ def process_claimed_run(
                         candidate_fetch_duration_ms=outcome.candidate_fetch_duration_ms,
                         candidates=[dict(c) for c in outcome.candidates],
                         expected_worker_id=worker_id,
+                        expected_attempts=claim_attempts,
                     )
                     store_session.commit()
             except Exception:  # noqa: BLE001
@@ -376,6 +457,7 @@ def process_claimed_run(
                     run_id,
                     outcome.store,
                 )
+                raise
 
     try:
         with timed(
@@ -393,6 +475,9 @@ def process_claimed_run(
                 "product_id": product_id,
                 "reference_url": reference_url,
                 "on_store_outcome": on_store_outcome,
+                "on_targets_resolved": on_targets_resolved,
+                "on_store_started": on_store_started,
+                "before_persist": before_persist,
                 "skip_stores": skip_stores,
                 "run_deadline": run_deadline,
             }
@@ -414,6 +499,10 @@ def process_claimed_run(
         fresh = session.get(ProductMatchRun, run_id)
         if fresh is None:
             return run
+        for hit in response.matches:
+            for store_row in fresh.store_runs:
+                if store_row.store == hit.store:
+                    store_row.matched_listing_id = hit.listing_id
         matches_found = max(int(fresh.matches_found or 0), len(response.matches))
         no_matches = max(int(fresh.no_matches or 0), len(response.unmatched_stores))
         errors = max(int(fresh.errors or 0), len(response.errors))
@@ -430,6 +519,7 @@ def process_claimed_run(
             stores_total=stores_total,
             stores_completed=int(fresh.stores_completed or stores_total),
             expected_worker_id=worker_id,
+            expected_attempts=claim_attempts,
         )
         finished = utcnow()
         logger.info(
@@ -449,6 +539,7 @@ def process_claimed_run(
         )
         return fresh
     except RequestError as exc:
+        session.rollback()
         fresh = session.get(ProductMatchRun, run_id)
         if fresh is None:
             return run
@@ -463,9 +554,11 @@ def process_claimed_run(
             code=code,
             message=str(exc),
             expected_worker_id=worker_id,
+            expected_attempts=claim_attempts,
         )
         return fresh
     except ParseError as exc:
+        session.rollback()
         fresh = session.get(ProductMatchRun, run_id)
         if fresh is None:
             return run
@@ -474,10 +567,12 @@ def process_claimed_run(
             code="PARSE_ERROR",
             message=str(exc),
             expected_worker_id=worker_id,
+            expected_attempts=claim_attempts,
         )
         return fresh
     except Exception:  # noqa: BLE001
         logger.exception("match_run_failed run_id=%s", run_id)
+        session.rollback()
         fresh = session.get(ProductMatchRun, run_id)
         if fresh is None:
             return run
@@ -486,6 +581,7 @@ def process_claimed_run(
             code="INTERNAL_ERROR",
             message="Falha interna no Product Match",
             expected_worker_id=worker_id,
+            expected_attempts=claim_attempts,
         )
         return fresh
     finally:
@@ -664,6 +760,11 @@ def run_forever(*, settings: Settings | None = None) -> None:
 
 
 def main() -> None:
+    logging.basicConfig(
+        level=getattr(logging, get_settings().scraper_log_level.upper(), logging.INFO),
+        format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    )
+    install_log_redaction()
     parser = argparse.ArgumentParser(description="ScoutApiV2 product match run worker")
     parser.parse_args()
     run_forever()

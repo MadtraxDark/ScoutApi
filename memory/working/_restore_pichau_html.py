@@ -1,4 +1,5 @@
 """Restore full Pichau HTML from CDP dump."""
+
 from __future__ import annotations
 
 import json

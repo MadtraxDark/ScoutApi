@@ -100,7 +100,7 @@ def test_http_first_falls_back_to_browser_on_challenge() -> None:
     assert "Phone" in response.text
 
 
-def test_http_first_keeps_incomplete_buybox_without_browser() -> None:
+def test_http_first_resolves_incomplete_buybox_with_browser() -> None:
     url = "https://www.amazon.com.br/dp/B0GVTB7BGQ"
     incomplete = _html_response(
         url,
@@ -113,10 +113,36 @@ def test_http_first_keeps_incomplete_buybox_without_browser() -> None:
     response = AmazonHttpFirstHtmlFetcher(
         http=http, browser=browser, empty_buybox_retry_seconds=0
     ).fetch(url)
-    assert browser.calls == []
+    assert browser.calls == [url]
     assert http.calls == [url]
-    assert response.meta["fetch_metrics"]["fetch_strategy"] == "http-direct"
-    assert "aod-ingress-link" in response.text
+    assert "browser-hydrated" in response.text
+
+
+def test_http_first_exhausted_empty_retry_uses_browser() -> None:
+    url = "https://www.amazon.com.br/dp/B0GVTB7BGQ"
+    empty = _html_response(url, '<span id="productTitle">Phone</span>')
+    http = _RecordingFetcher(empty)
+    browser = _RecordingFetcher(_html_response(url, "browser-hydrated"))
+    response = AmazonHttpFirstHtmlFetcher(
+        http=http, browser=browser, empty_buybox_retry_seconds=0.001
+    ).fetch(url)
+    assert http.calls == [url, url]
+    assert browser.calls == [url]
+    assert response is browser.response
+
+
+def test_http_first_explicit_out_of_stock_does_not_open_browser() -> None:
+    url = "https://www.amazon.com.br/dp/B0GVTB7BGQ"
+    oos = _html_response(
+        url,
+        '<span id="productTitle">Phone</span>'
+        '<div id="availability"><span>Atualmente indisponível.</span></div>',
+    )
+    http = _RecordingFetcher(oos)
+    browser = _RecordingFetcher()
+    response = AmazonHttpFirstHtmlFetcher(http=http, browser=browser).fetch(url)
+    assert response is oos
+    assert browser.calls == []
 
 
 def test_http_first_retries_once_when_buybox_missing() -> None:
@@ -215,7 +241,9 @@ def test_http_search_empty_shell_falls_back_to_browser() -> None:
     )
 
     url = "https://www.amazon.com.br/s?k=rtx+5060"
-    empty_shell = _html_response(url, "<html><body><div id='search'>shell</div></body></html>")
+    empty_shell = _html_response(
+        url, "<html><body><div id='search'>shell</div></body></html>"
+    )
     assert not looks_like_amazon_search(empty_shell)
     browser_serp = _html_response(
         url,

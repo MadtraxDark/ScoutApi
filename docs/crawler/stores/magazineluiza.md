@@ -59,6 +59,12 @@
 ## Fetch strategy
 
 - Default Camoufox + Proxy Cost Mode
+- Budget validado em 2026-10-05: 15 s frio e 1 s cache, escolhido pelo usuário.
+  Warmup mantém a pausa de cookies/challenge e dispensa analytics networkidle
+  na homepage. PDP dispensa essa espera apenas com NEXT_DATA pronto (item,
+  id, título e ofertas) e sem interstitial. Documento incompleto/challenge
+  mantém espera e resolução. C1 permanece 1.
+  [Amostras e limitações](../../performance/pending-recovery-2026-10-05.md).
 
 ## Known blocking
 

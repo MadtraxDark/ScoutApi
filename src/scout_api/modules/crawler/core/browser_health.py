@@ -55,6 +55,7 @@ class TrialToken:
     token_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     expires_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
+
 _LAUNCH_FAILURE_MARKERS: tuple[str, ...] = (
     "launch_persistent_context",
     "browsertype.launch",
@@ -302,7 +303,8 @@ def is_browser_launch_failure(exc: BaseException) -> bool:
     if any(marker in message for marker in _LAUNCH_FAILURE_MARKERS):
         return True
     if "timeouterror" in name and any(
-        marker in message for marker in ("launch", "browser", "persistent", "browsertype")
+        marker in message
+        for marker in ("launch", "browser", "persistent", "browsertype")
     ):
         return True
     # Playwright launch TimeoutError is often just "Timeout 45000ms exceeded."

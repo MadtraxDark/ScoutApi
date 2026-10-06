@@ -67,7 +67,9 @@ def main() -> None:
             seen.add(key)
             parts.append(f"<!-- {css} -->\n{chunk}")
     price_box = (
-        "\n\n".join(parts) if parts else "<!-- EMPTY: no price box selectors matched -->"
+        "\n\n".join(parts)
+        if parts
+        else "<!-- EMPTY: no price box selectors matched -->"
     )
     BOX.write_text(price_box, encoding="utf-8")
     print("PRICE_BOX_LEN", len(price_box), "PARTS", len(parts))
@@ -219,7 +221,9 @@ def main() -> None:
         ),
         "installment_count": offer.installment_count,
         "installment_price": (
-            str(offer.installment_price) if offer.installment_price is not None else None
+            str(offer.installment_price)
+            if offer.installment_price is not None
+            else None
         ),
         "discount_percentage": (
             str(offer.discount_percentage)
@@ -235,7 +239,9 @@ def main() -> None:
     print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
 
     (OUT / "24707_signals.json").write_text(
-        json.dumps({"signals": signals, "spider": result}, ensure_ascii=False, indent=2),
+        json.dumps(
+            {"signals": signals, "spider": result}, ensure_ascii=False, indent=2
+        ),
         encoding="utf-8",
     )
 

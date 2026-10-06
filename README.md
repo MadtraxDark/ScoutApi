@@ -16,6 +16,10 @@ Copie `.env.example` para `.env` e ajuste os valores conforme o ambiente. O `.en
 
 ## Docker
 
+Runtime reproduzível do crawler: Camoufox 0.5.7 e browser oficial
+156.0.1-beta.34 fixados. Modelo fpgen é preparado com permissão restrita para
+`app`; capacidade C1 permanece 1. Workers não herdam o healthcheck HTTP da API.
+
 Execute `docker compose up --build`. A API ficará disponível em `http://localhost:8000`; `GET /health` verifica a disponibilidade (`status` + `database`). O entrypoint aplica `alembic upgrade head` automaticamente no boot (`AUTO_MIGRATE=true`).
 
 Para apontar ao Postgres do Supabase em vez do serviço Compose, defina
@@ -28,6 +32,7 @@ O perfil Camoufox é um bind mount em `./data/camoufox-profiles` (compartilhado 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\pip install -e .
+.\.venv\Scripts\python -m camoufox set official/stable/156.0.1-beta.34
 .\.venv\Scripts\python -m camoufox fetch
 .\scripts\seed-camoufox-profile.ps1
 ```

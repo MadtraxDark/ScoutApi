@@ -3,6 +3,54 @@
 **PROCESSO LONGO NÃO PODE SER INVISÍVEL.**
 
 Documento canônico de budgets, eventos e fluxo de investigação.
+
+## Preview Magalu e recuperação de pendências — 2026-10-05
+
+Budget aprovado: 15 s frio / 1 s cache. Três acessos finais: 13,77 s, 7,17 s,
+7,47 s; cache abaixo de 1 ms; oferta e 25 imagens preservadas, sem proxy.
+`FetchCostMetrics.stage_timings_ms` decompõe aquisição, página, warmup,
+navegação e settle/challenge, inclusive em erro. C1 permanece 1.
+O budget genérico de browser não foi alterado.
+[Causas, amostras, checks e limites](performance/pending-recovery-2026-10-05.md).
+
+## Medição local de ofertas progressivas — 2026-10-05
+
+ADR 0049. API FastAPI em Windows, Python 3.12, PostgreSQL 16 em Docker local,
+um processo API, pool padrão, nove lojas e quatro matches (incluindo USD).
+Fixtures e cleanup exclusivamente em `scout_progressive_test`; sem busca em
+lojas durante a carga. Grupos de observadores executados simultaneamente por
+603,95s, intervalo 4s, identidades JWT distintas e sem desativar rate limiting.
+
+| Observadores no grupo | Requests | P50 | P95 | Máximo | HTTP |
+|---|---:|---:|---:|---:|---|
+| 1 | 151 | 23,97 ms | 34,63 ms | 65,96 ms | 200 |
+| 10 | 1.510 | 19,11 ms | 31,70 ms | 115,25 ms | 200 |
+| 50 | 7.550 | 13,59 ms | 21,65 ms | 123,81 ms | 200 |
+
+Total: 9.211 respostas; payload máximo 5.765 bytes. Snapshot BRL usa uma
+query de dados; com moeda estrangeira usa duas, sem candidates ou staging.
+Os grupos têm fases de polling diferentes e compartilham carga; P95 menor
+do grupo 50 não significa ganho de capacidade. Não é benchmark de produção.
+
+Amostragem do processo API por 200,76s durante a carga: working set
+147,46–147,53 MiB, início/fim 147,46 MiB; 22,09s de CPU, equivalentes a 11%
+de um core. Não houve crescimento material na janela amostrada.
+
+Primeiro harness com 61 clients separados/catch-up de intervalos excedeu
+timeout. A repetição usou um pool HTTP compartilhado e períodos espaçados,
+sem acúmulo artificial de polls atrasados. O resultado aprovado acima é dessa
+repetição; não se atribuiu o timeout inicial à API sem evidência.
+
+Chrome + API/PostgreSQL reais: commit de outcome até primeiro card 4,42s
+(um ciclo de 4s mais rede/renderização). Validou segunda oferta progressiva,
+review separado, F5, navegação, falha preservando resultado, handoff e draft.
+Smoke real delimitado, C1, acesso direto sem proxy pago: 8,17s; Pichau
+`auto_match` com listing vinculado (6.357ms), KaBuM `no_match` (1.503ms).
+Não há comparação antes/depois suficiente para afirmar aceleração do crawler;
+nenhuma regressão significativa de duração foi observada nesta validação.
+
+Harnesses e reprodução: [integração PriceScout](integration/pricescout.md).
+Evidências locais: `.tmp/progressive-browser/{report,load-report,resource-report,smoke-report}.json`.
 Regra operacional do agente: [`.cursor/rules/performance.mdc`](../.cursor/rules/performance.mdc).
 Decisão: [ADR 0028](adr/0028-performance-observability.md).
 

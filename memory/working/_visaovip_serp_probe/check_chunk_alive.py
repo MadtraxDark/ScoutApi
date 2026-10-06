@@ -1,22 +1,19 @@
 """Check if the known chunk is still accessible and has the same action IDs."""
-import httpx
+
 import re
+
+import httpx
 
 BASE_URL = "https://www.visaovip.com"
 
 # Known chunk from the probe files (captured 2026-09-23)
 KNOWN_CHUNK = "/_next/static/chunks/5304c8ab31d35f98.js"
 
-ACTION_ID_RE = re.compile(
-    r'createServerReference\("([0-9a-f]{40,})"'
-)
+ACTION_ID_RE = re.compile(r'createServerReference\("([0-9a-f]{40,})"')
 
 print(f"Checking: {BASE_URL}{KNOWN_CHUNK}")
 with httpx.Client(timeout=20) as client:
-    r = client.get(
-        f"{BASE_URL}{KNOWN_CHUNK}",
-        headers={"User-Agent": "Mozilla/5.0"}
-    )
+    r = client.get(f"{BASE_URL}{KNOWN_CHUNK}", headers={"User-Agent": "Mozilla/5.0"})
     print(f"Status: {r.status_code}")
     print(f"Content-Length: {len(r.text)}")
     if r.status_code == 200:
@@ -42,9 +39,12 @@ with httpx.Client(timeout=20, follow_redirects=True) as client:
         headers={
             "User-Agent": "Mozilla/5.0",
             "Rsc": "1",
-            "Next-Router-State-Tree": "%5B%22%22%2C%7B%22children%22%3A%5B%22__PAGE__%22%2C%7B%7D%5D%7D%2Cnull%2Cnull%2Ctrue%5D",
+            ("Next-Router-State-Tree"): (
+                "%5B%22%22%2C%7B%22children%22%3A%5B%22__PAGE_"
+                "_%22%2C%7B%7D%5D%7D%2Cnull%2Cnull%2Ctrue%5D"
+            ),
             "Accept": "text/x-component",
-        }
+        },
     )
     print(f"RSC endpoint status: {r2.status_code}")
     print(f"RSC response len: {len(r2.text)}")

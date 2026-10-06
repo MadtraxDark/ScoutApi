@@ -7,8 +7,6 @@ from pathlib import Path
 
 from scrapy.http import HtmlResponse, Request
 
-from scout_api.modules.crawler.spiders.paraguay.nissei import NisseiSpider
-
 text = Path("data/nissei_variant_diag/page_1.html").read_text(encoding="utf-8")
 for needle in (
     "product-attribute-specs-table",
@@ -32,10 +30,15 @@ for m in re.finditer(r'class=["\']([^"\']*spec[^"\']*)["\']', text, flags=re.I):
         break
 
 url = "https://nissei.com/br/x"
-resp = HtmlResponse(url, body=text.encode("utf-8"), encoding="utf-8", request=Request(url))
+resp = HtmlResponse(
+    url, body=text.encode("utf-8"), encoding="utf-8", request=Request(url)
+)
 print("tables", len(resp.css("table")))
 print("tr count", len(resp.css("table tr")))
-print("th sample", [t.strip() for t in resp.css("table th::text").getall()[:20] if t.strip()])
+print(
+    "th sample",
+    [t.strip() for t in resp.css("table th::text").getall()[:20] if t.strip()],
+)
 print("product-info-main", bool(resp.css(".product-info-main")))
 print("specs table css", bool(resp.css(".product-attribute-specs-table")))
 # Try alternate selectors Magento uses

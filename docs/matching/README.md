@@ -62,7 +62,9 @@ Consultas com atributos localizáveis usam o `query_locale` configurado na
 integração da loja (`StoreConfig`). Por padrão, a metadata deriva `pt-BR`,
 `en-US` ou `es-PY` do país; lojas podem sobrescrever esse locale explicitamente.
 Cada loja recebe sua própria ladder: por exemplo, cor `Rosa` mantém uma query
-`rosa` para pt-BR e prioriza `pink` para en-US. Identificadores, códigos de
+`rosa` para pt-BR e prioriza `pink` para en-US, inclusive no título principal.
+O acabamento também é preservado: `Titânio Preto` vira `black titanium` em
+en-US e continua `titanio preto` em pt-BR. Identificadores, códigos de
 modelo e frases comerciais não são traduzidos. Os aliases de cor restantes
 continuam disponíveis como fallback sem multiplicar a quantidade de queries;
 a ladder preserva seu dedup e o budget existente por loja.

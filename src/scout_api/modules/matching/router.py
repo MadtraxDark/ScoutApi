@@ -61,6 +61,7 @@ from scout_api.modules.matching.schemas import (
     MatchResponse,
     MatchRunDetailView,
     MatchRunListResponse,
+    MatchRunLiveView,
     MatchRunStatusView,
     NotificationListResponse,
     NotificationView,
@@ -327,8 +328,8 @@ def _stores_response(session: Session | None) -> StoreListResponse:
         StoreInfo(
             key=key,
             display_name=(
-                metadata[key].display_name
-                if key in metadata and metadata[key].display_name
+                (metadata[key].display_name or config.label)
+                if key in metadata
                 else config.label
             ),
             country=config.country,
@@ -1083,6 +1084,35 @@ def get_match_run_status(
             },
         ) from None
     return match_run_to_status(run)
+
+
+@router.get(
+    "/match-runs/{run_id}/live",
+    response_model=MatchRunLiveView,
+    tags=["Correspondência"],
+    dependencies=[Depends(require_permission("match")), _RL_POLL],
+    summary="Resultados progressivos da Match Run",
+)
+def get_match_run_live(
+    run_id: Annotated[UUID, Path(description="ID da Match Run.")],
+    principal: Annotated[AuthenticatedPrincipal, Depends(require_authenticated_user)],
+    service: Annotated[MatchRunService, Depends(get_match_run_service)],
+    response: Response,
+) -> MatchRunLiveView:
+    response.headers["Cache-Control"] = "private, no-store"
+    try:
+        return service.get_live(run_id, principal=principal)
+    except LookupError:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "code": "RUN_NOT_FOUND",
+                "message": "Match Run não encontrada.",
+                "retryable": False,
+            },
+        ) from None
+    except SQLAlchemyError as exc:
+        raise _http_for_database_error(exc) from exc
 
 
 @router.get(

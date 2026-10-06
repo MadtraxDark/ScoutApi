@@ -1,6 +1,17 @@
 # PENDING-029 — Rebuild Docker falha nas permissões do modelo fpgen
 
-- Status: OPEN
+- Status: RESOLVED
+- Resolvida: 2026-10-05
+
+## Resolução final
+
+Build oficial final passou (exit=0). Camoufox 0.5.7/browser 156.0.1-beta.34 fixados e validados em C1 em lojas reais. API final saudável; fpgen/data gravável por app; capacidade=1 e scheduler ativo. Workers atualizados iniciaram com Alembic head 0032_match_live. Banco e volumes preservados.
+
+[Evidências e limites](../../performance/pending-recovery-2026-10-05.md).
+
+## Histórico anterior à resolução
+
+
 - Tipo: TECH_DEBT
 - Prioridade: P1
 - Área: docker/camoufox
@@ -77,4 +88,4 @@ api + image-optimizer passou; ensure_fpgen_model foi validado sob app. O bloquei
 de permissão está corrigido. Permanece aberta somente a validação/pin do runtime
 Camoufox novo; execução local conserva 0.5.6 da imagem validada. Não implantar
 browser novo sem evidência exigida pelo projeto. Ver relatório de desempenho
-[importação](../performance/import-images-2026-10-05.md).
+[importação](../../performance/import-images-2026-10-05.md).

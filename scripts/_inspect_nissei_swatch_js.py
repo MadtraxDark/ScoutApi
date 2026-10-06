@@ -21,7 +21,7 @@ def main() -> None:
         for m in re.finditer(r'id="(swatch-opt-\d+)"', text):
             start = m.start()
             # find closing roughly
-            end = text.find("</div>", start + 50)
+            _end = text.find("</div>", start + 50)
             # expand to larger region: next 3k chars
             chunk = text[start : start + 4000]
             print("swatch-opt chunk head:\n", chunk[:1500])
@@ -98,7 +98,11 @@ def main() -> None:
 
         # Check if URL query params or hash preselect
         # Also look for preconfigured values in JS variables
-        for m in re.finditer(r"preconfigured|preSelected|defaultSelected|initialSelected", text, flags=re.I):
+        for m in re.finditer(
+            r"preconfigured|preSelected|defaultSelected|initialSelected",
+            text,
+            flags=re.I,
+        ):
             print("preselect-ish", text[m.start() : m.start() + 120])
 
 

@@ -20,23 +20,18 @@ import threading
 import time
 from datetime import UTC, datetime
 from decimal import Decimal
-from pathlib import Path
 from unittest.mock import MagicMock
-
-import pytest
 
 from scout_api.modules.crawler.core.browser_health import (
     BROWSER_INFRASTRUCTURE_ERROR_CODES,
-    BrowserCircuitBreaker,
-    is_browser_infrastructure_error,
-    reset_browser_circuit_for_tests,
 )
 from scout_api.modules.crawler.core.browser_scheduler import BrowserScheduler
 from scout_api.modules.crawler.core.exceptions import (
     BROWSER_INFRASTRUCTURE_ERROR_CODES as EXC_BROWSER_INFRA_CODES,
+)
+from scout_api.modules.crawler.core.exceptions import (
     RequestError,
 )
-from scout_api.modules.crawler.core.profile_lock import RedisProfileLock
 from scout_api.modules.crawler.models.product import ProductPriceItem
 from scout_api.modules.matching.eligibility import eligible_match_store_keys
 from scout_api.modules.matching.product_match_service import (
@@ -46,13 +41,14 @@ from scout_api.modules.matching.product_match_service import (
 from scout_api.modules.matching.schemas import MatchRequest
 from scout_api.modules.matching.search_candidate import SearchCandidate
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
 
-def _sched(capacity: int = 1, queue_capacity: int = 8, timeout_ms: int = 5_000) -> BrowserScheduler:
+def _sched(
+    capacity: int = 1, queue_capacity: int = 8, timeout_ms: int = 5_000
+) -> BrowserScheduler:
     return BrowserScheduler(
         capacity=capacity,
         queue_capacity=queue_capacity,
@@ -149,7 +145,8 @@ def test_browser_infra_error_from_search_is_match_error_not_no_match() -> None:
     )
     assert resp.matches == []
     error_codes = {e.code for e in resp.errors}
-    # Infra error MUST appear in errors — the caller can distinguish error from genuine NO_MATCH
+    # Infra error MUST appear in errors — the caller can distinguish error from genuine
+    # NO_MATCH
     assert "BROWSER_QUEUE_SATURATED" in error_codes, (
         f"Esperava BROWSER_QUEUE_SATURATED em errors, obteve: {error_codes}"
     )
@@ -233,7 +230,9 @@ def test_nav_timeout_does_not_stop_query_loop() -> None:
         call_count += 1
         if call_count == 1:
             # First query: transient, non-infra error (nav timeout equivalent)
-            raise RequestError("page load timeout", code="REQUEST_ERROR", retryable=True)
+            raise RequestError(
+                "page load timeout", code="REQUEST_ERROR", retryable=True
+            )
         return []
 
     search.search.side_effect = _search
@@ -267,7 +266,9 @@ def test_infra_error_stops_query_loop_immediately() -> None:
     def _search(store_key: str, query: str, **_kwargs: object) -> list[SearchCandidate]:
         nonlocal call_count
         call_count += 1
-        raise RequestError("launch failed", code="BROWSER_LAUNCH_ERROR", retryable=False)
+        raise RequestError(
+            "launch failed", code="BROWSER_LAUNCH_ERROR", retryable=False
+        )
 
     search.search.side_effect = _search
 
@@ -316,7 +317,7 @@ def test_soak_serial_acquire_release_capacity1() -> None:
         assert snap["browser_active_jobs"] == 1
 
         # Every 3rd iteration: poison release (simulate browser recycle)
-        poison = (i % 3 == 0)
+        poison = i % 3 == 0
         sched.release(lease, poison=poison)
 
         snap2 = sched.snapshot()
@@ -349,7 +350,7 @@ def test_soak_concurrent_queue_pressure_with_poison() -> None:
         try:
             lease = sched.acquire()
             time.sleep(0.02)  # hold slot briefly
-            poison = (wid % 4 == 0)
+            poison = wid % 4 == 0
             sched.release(lease, poison=poison)
             with lock:
                 results.append("ok")
@@ -357,7 +358,9 @@ def test_soak_concurrent_queue_pressure_with_poison() -> None:
             with lock:
                 results.append(exc.code)
 
-    threads = [threading.Thread(target=worker, args=(i,), daemon=True) for i in range(8)]
+    threads = [
+        threading.Thread(target=worker, args=(i,), daemon=True) for i in range(8)
+    ]
     for t in threads:
         t.start()
     for t in threads:
@@ -447,6 +450,4 @@ def test_coverage_gate_skip_stores_are_excluded_but_others_reported() -> None:
     # Remaining eligible must all appear
     eligible = set(eligible_match_store_keys()) - {"mercadolivre"} - skip
     missing = eligible - attempted
-    assert not missing, (
-        f"Lojas elegíveis (excluindo skip) não reportadas: {missing}"
-    )
+    assert not missing, f"Lojas elegíveis (excluindo skip) não reportadas: {missing}"

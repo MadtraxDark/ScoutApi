@@ -34,7 +34,12 @@ if isinstance(inner, dict):
 
 # also search whole next for code patterns like "code":777166
 text = m.group(1)
-for pat in [r'"code":777166', r'"id":777166', r'"productId":777166', r"/produto/777166"]:
+for pat in [
+    r'"code":777166',
+    r'"id":777166',
+    r'"productId":777166',
+    r"/produto/777166",
+]:
     print(pat, text.count(pat))
 
 # Find list of products by looking for dictionaries with code/id and name
@@ -81,4 +86,9 @@ def walk2(obj, depth=0):
 
 
 walk2(props)
-print("product-like codes", len(codes), codes[:20], "777166" in [str(c) for c in codes] or 777166 in codes)
+print(
+    "product-like codes",
+    len(codes),
+    codes[:20],
+    "777166" in [str(c) for c in codes] or 777166 in codes,
+)

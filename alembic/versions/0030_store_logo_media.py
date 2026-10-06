@@ -17,7 +17,12 @@ def upgrade() -> None:
     op.add_column("store_metadata", sa.Column("logo_optimized_file_id", sa.String(128)))
     op.add_column(
         "store_metadata",
-        sa.Column("logo_processing_status", sa.String(24), nullable=False, server_default="ready"),
+        sa.Column(
+            "logo_processing_status",
+            sa.String(24),
+            nullable=False,
+            server_default="ready",
+        ),
     )
     op.add_column("store_metadata", sa.Column("logo_version", sa.String(36)))
     op.add_column("store_metadata", sa.Column("logo_processing_error", sa.Text()))

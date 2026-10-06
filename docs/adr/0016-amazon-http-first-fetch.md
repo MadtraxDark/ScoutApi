@@ -52,8 +52,10 @@ Adotar **C**:
    após `UPSTREAM_BLOCKED`**.
 3. HTTP é aceito quando a resposta é um PDP reconhecível. Se a Buy Box estiver
    ausente e não houver OOS claro, **repete HTTP uma vez** (~1.25s) — o BR
-   frequentemente omite widgets na primeira resposta. Challenge, HTTP error ou
-   página não-PDP escalam para browser. Parser continua fail-closed
+   frequentemente omite widgets na primeira resposta. Retry ainda sem Buy Box
+   e sem OOS explícito, ou retry com falha, escala para browser direto (correção
+   validada em 2026-10-05). Challenge, HTTP error ou página não-PDP também
+   escalam para browser. Parser continua fail-closed
    (`MissingPriceError`) se ainda não houver Buy Box.
 4. Spiders Amazon normalizam a URL de fetch para `https://www.{host}/dp/{ASIN}`
    (`prepare_fetch_url`), reduzindo ruído de tracking.

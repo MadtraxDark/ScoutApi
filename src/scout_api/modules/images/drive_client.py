@@ -27,6 +27,9 @@ FOLDER_MIME = "application/vnd.google-apps.folder"
 
 
 class DriveStorage(Protocol):
+    @property
+    def root_folder_id(self) -> str: ...
+
     def ensure_folder(self, name: str, *, parent_id: str) -> str: ...
 
     def upload_bytes(

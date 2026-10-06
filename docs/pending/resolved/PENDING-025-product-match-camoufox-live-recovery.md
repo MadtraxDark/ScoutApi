@@ -56,12 +56,12 @@ ambiente. Cada integração apontada como afetada executou em MatchRun ou no
 smoke individual. A execução paralela ainda revelou `BROWSER_QUEUE_TIMEOUT`
 em dois stores, embora não haja launch concorrente, falha de launch ou circuito
 aberto. Esse problema distinto de fila C1 está aberto em
-[PENDING-026](../PENDING-026-match-wave-c1-browser-queue-timeout.md).
+[PENDING-026](PENDING-026-match-wave-c1-browser-queue-timeout.md).
 
 ## Relacionado
 
 - [ADR 0044](../../adr/0044-camoufox-profile-lock-warm-session-lifecycle.md)
 - [PENDING-024](PENDING-024-product-match-embeddings-shadow.md): experimento
   local de evidência shadow, encerrado sem habilitar `active`
-- [PENDING-026](../PENDING-026-match-wave-c1-browser-queue-timeout.md): fila
+- [PENDING-026](PENDING-026-match-wave-c1-browser-queue-timeout.md): fila
   C1 na wave paralela

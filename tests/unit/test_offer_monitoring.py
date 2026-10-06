@@ -123,9 +123,7 @@ def test_schedule_not_due_before_interval() -> None:
     settings = _settings()
     regular = compute_next_regular_check_at(now=now, settings=settings)
     assert regular == now + timedelta(hours=12)
-    next_at = compute_next_check_at(
-        now=now, next_regular=regular, settings=settings
-    )
+    next_at = compute_next_check_at(now=now, next_regular=regular, settings=settings)
     assert next_at == now + timedelta(hours=12)
     almost = now + timedelta(hours=11, minutes=59)
     assert almost < next_at
@@ -163,9 +161,7 @@ def test_restart_recovery_due_immediately(session: Session) -> None:
     listing.next_check_at = datetime(2026, 9, 21, 2, 0, tzinfo=UTC)
     session.flush()
     now = datetime(2026, 9, 21, 8, 0, tzinfo=UTC)
-    claimed = claim_due_listings(
-        session, worker_id="w1", now=now, settings=_settings()
-    )
+    claimed = claim_due_listings(session, worker_id="w1", now=now, settings=_settings())
     assert len(claimed) == 1
     assert claimed[0].id == listing.id
     assert claimed[0].last_check_delay_seconds == 6 * 3600
@@ -177,9 +173,7 @@ def test_multiple_missed_intervals_single_claim(session: Session) -> None:
     listing.next_check_at = datetime(2026, 9, 18, 10, 0, tzinfo=UTC)
     session.flush()
     now = datetime(2026, 9, 21, 10, 0, tzinfo=UTC)
-    claimed = claim_due_listings(
-        session, worker_id="w1", now=now, settings=_settings()
-    )
+    claimed = claim_due_listings(session, worker_id="w1", now=now, settings=_settings())
     assert len(claimed) == 1
     # One claim only — no fabricated historical windows.
     release_claim(listing)
@@ -202,9 +196,7 @@ def test_promo_expires_during_downtime(session: Session) -> None:
     assert listing.promotion_status == "expired"
     assert is_promotion_commercially_active(listing, now=now) is False
     listing.next_check_at = now
-    claimed = claim_due_listings(
-        session, worker_id="w1", now=now, settings=_settings()
-    )
+    claimed = claim_due_listings(session, worker_id="w1", now=now, settings=_settings())
     assert len(claimed) == 1
 
 
@@ -256,12 +248,8 @@ def test_concurrency_only_one_worker_claims(session: Session) -> None:
     listing.next_check_at = datetime(2026, 9, 21, 1, 0, tzinfo=UTC)
     session.flush()
     now = datetime(2026, 9, 21, 10, 0, tzinfo=UTC)
-    first = claim_due_listings(
-        session, worker_id="w1", now=now, settings=_settings()
-    )
-    second = claim_due_listings(
-        session, worker_id="w2", now=now, settings=_settings()
-    )
+    first = claim_due_listings(session, worker_id="w1", now=now, settings=_settings())
+    second = claim_due_listings(session, worker_id="w2", now=now, settings=_settings())
     assert len(first) == 1
     assert second == []
 
@@ -275,9 +263,7 @@ def test_worker_crash_lease_recovery(session: Session) -> None:
     listing.check_claim_expires_at = datetime(2026, 9, 21, 9, 5, tzinfo=UTC)
     session.flush()
     now = datetime(2026, 9, 21, 10, 0, tzinfo=UTC)
-    claimed = claim_due_listings(
-        session, worker_id="w2", now=now, settings=_settings()
-    )
+    claimed = claim_due_listings(session, worker_id="w2", now=now, settings=_settings())
     assert len(claimed) == 1
     assert claimed[0].check_worker_id == "w2"
 
@@ -297,18 +283,14 @@ def test_manual_refresh_reschedules_not_immediately_due(session: Session) -> Non
     )
     session.flush()
     assert listing.next_check_at == now + timedelta(hours=12)
-    claimed = claim_due_listings(
-        session, worker_id="w1", now=now, settings=_settings()
-    )
+    claimed = claim_due_listings(session, worker_id="w1", now=now, settings=_settings())
     assert claimed == []
 
 
 def test_transient_failure_uses_retry_not_12h(session: Session) -> None:
     listing = _listing(session)
     now = datetime(2026, 9, 21, 10, 0, tzinfo=UTC)
-    mark_check_failure(
-        listing, error="timeout", now=now, settings=_settings()
-    )
+    mark_check_failure(listing, error="timeout", now=now, settings=_settings())
     assert listing.next_check_at == now + timedelta(seconds=300)
     assert listing.consecutive_failures == 1
 

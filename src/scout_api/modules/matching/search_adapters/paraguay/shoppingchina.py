@@ -94,9 +94,7 @@ class ShoppingChinaSearchAdapter:
             )
             if not isinstance(href, str) or not href.strip():
                 continue
-            absolute = self._normalize_product_path(
-                urljoin(page_url, href.strip())
-            )
+            absolute = self._normalize_product_path(urljoin(page_url, href.strip()))
             path = urlsplit(absolute).path or ""
             if "/produto/" not in path.lower() and "/producto/" not in path.lower():
                 continue
@@ -132,9 +130,7 @@ class ShoppingChinaSearchAdapter:
             "a.product-item-link::attr(href), "
             "li.product-item a::attr(href)"
         ).getall():
-            absolute = self._normalize_product_path(
-                urljoin(response.url, href.strip())
-            )
+            absolute = self._normalize_product_path(urljoin(response.url, href.strip()))
             path = urlsplit(absolute).path or ""
             if "catalogsearch" in path.lower() or "/site/search" in path.lower():
                 continue

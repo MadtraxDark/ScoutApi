@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
+from time import perf_counter
 from typing import Any
 
 
@@ -24,6 +26,17 @@ class FetchCostMetrics:
     result: str = "success"
     blocked_resource_types: tuple[str, ...] = ()
     early_stop: bool = False
+    stage_timings_ms: dict[str, float] = field(default_factory=dict)
+
+    def measure[T](self, stage: str, operation: Callable[[], T]) -> T:
+        started = perf_counter()
+        try:
+            return operation()
+        finally:
+            duration = (perf_counter() - started) * 1000
+            self.stage_timings_ms[stage] = round(
+                self.stage_timings_ms.get(stage, 0) + duration, 2
+            )
 
     def as_log_dict(self) -> dict[str, Any]:
         payload = asdict(self)

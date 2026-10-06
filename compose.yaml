@@ -185,6 +185,9 @@ services:
         condition: service_healthy
     volumes:
       - ./data/camoufox-profiles:/home/app/.cache/scout-api/camoufox-profiles
+    # Worker sem servidor HTTP; /health pertence apenas à API.
+    healthcheck:
+      disable: true
     restart: unless-stopped
   match-runner:
     build:

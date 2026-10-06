@@ -39,9 +39,7 @@ def upgrade() -> None:
     )
     op.add_column(
         "store_listings",
-        sa.Column(
-            "next_regular_check_at", sa.DateTime(timezone=True), nullable=True
-        ),
+        sa.Column("next_regular_check_at", sa.DateTime(timezone=True), nullable=True),
     )
     op.add_column(
         "store_listings",
@@ -84,9 +82,7 @@ def upgrade() -> None:
     )
     op.add_column(
         "store_listings",
-        sa.Column(
-            "check_claim_expires_at", sa.DateTime(timezone=True), nullable=True
-        ),
+        sa.Column("check_claim_expires_at", sa.DateTime(timezone=True), nullable=True),
     )
     op.add_column(
         "store_listings",
@@ -166,9 +162,7 @@ def upgrade() -> None:
         "store_listings",
         ["next_check_at"],
         unique=False,
-        postgresql_where=sa.text(
-            "monitoring_enabled IS TRUE AND status = 'active'"
-        ),
+        postgresql_where=sa.text("monitoring_enabled IS TRUE AND status = 'active'"),
         sqlite_where=sa.text("monitoring_enabled = 1 AND status = 'active'"),
     )
     op.create_index(

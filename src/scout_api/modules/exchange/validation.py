@@ -54,7 +54,8 @@ def check_tourism_premium(
     *,
     max_premium_pct: float = 12.0,
 ) -> str | None:
-    """Validate tourism_sell is between ptax_sell and ptax_sell * (1 + max_premium_pct/100).
+    """Validate tourism_sell is between ptax_sell and ptax_sell * (1 +
+    max_premium_pct/100).
 
     Tourism should be above PTAX (spread) but not absurdly higher.
     Returns an error string if the check fails, None otherwise.
@@ -66,7 +67,8 @@ def check_tourism_premium(
     if not (lower <= tourism_sell <= upper):
         return (
             f"tourism_sell {tourism_sell} outside expected range "
-            f"[{lower:.4f}, {upper:.4f}] (ptax_sell={ptax_sell}, premium≤{max_premium_pct}%)"
+            f"[{lower:.4f}, {upper:.4f}] "
+            f"(ptax_sell={ptax_sell}, premium≤{max_premium_pct}%)"
         )
     return None
 
@@ -180,13 +182,14 @@ def validate_batch(
 
     # Cross-check: tourism premium vs ptax_sell (both need to be in the valid list)
     rate_map: dict[tuple[str, str, RateType], Decimal] = {
-        (r.base_currency, r.quote_currency, r.rate_type): r.rate
-        for r in valid
+        (r.base_currency, r.quote_currency, r.rate_type): r.rate for r in valid
     }
     tourism_sell = rate_map.get(("USD", "BRL", RateType.TOURISM_SELL))
     ptax_sell = rate_map.get(("USD", "BRL", RateType.PTAX_SELL))
     if tourism_sell is not None and ptax_sell is not None:
-        err = check_tourism_premium(tourism_sell, ptax_sell, max_premium_pct=tourism_max_premium_pct)
+        err = check_tourism_premium(
+            tourism_sell, ptax_sell, max_premium_pct=tourism_max_premium_pct
+        )
         if err:
             logger.warning("exchange_rate_tourism_premium_check", extra={"error": err})
             # Soft warning: don't reject; data might be legitimate early-morning spread

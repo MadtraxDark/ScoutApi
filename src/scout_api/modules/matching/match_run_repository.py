@@ -7,10 +7,11 @@ from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session, load_only, selectinload
 
 from scout_api.modules.matching.models import (
     ACTIVE_MATCH_RUN_STATUSES,
+    CanonicalProduct,
     MatchCandidateLog,
     MatchStoreRun,
     ProductMatchRun,
@@ -28,6 +29,86 @@ class MatchRunRepository:
 
     def get(self, run_id: uuid.UUID) -> ProductMatchRun | None:
         return self._session.get(ProductMatchRun, run_id)
+
+    def get_live_snapshot(self, run_id: uuid.UUID) -> list[Any]:
+        run_fields = [
+            getattr(ProductMatchRun, name)
+            for name in (
+                "id",
+                "product_id",
+                "status",
+                "started_at",
+                "finished_at",
+                "last_activity_at",
+                "claimed_at",
+                "claim_expires_at",
+                "attempts",
+                "total_duration_ms",
+                "stores_total",
+                "stores_completed",
+                "matches_found",
+                "no_matches",
+                "errors",
+                "failure_code",
+                "failure_message",
+            )
+        ]
+        store_fields = [
+            getattr(MatchStoreRun, name).label(name)
+            for name in (
+                "id",
+                "store",
+                "store_display_name",
+                "status",
+                "started_at",
+                "finished_at",
+                "matched_decision",
+                "matched_listing_id",
+                "matched_url",
+                "matched_title",
+                "matched_price",
+                "matched_currency",
+                "matched_confidence",
+                "error_code",
+            )
+        ]
+        identity = [
+            MatchStoreRun.matched_payload["product"][field].as_string().label(label)
+            for field, label in (
+                ("store", "matched_store"),
+                ("country", "matched_country"),
+                ("product_id", "matched_product_id"),
+                ("canonical_url", "matched_canonical_url"),
+            )
+        ]
+        stmt = (
+            select(ProductMatchRun, CanonicalProduct, *store_fields, *identity)
+            .join(CanonicalProduct, CanonicalProduct.id == ProductMatchRun.product_id)
+            .outerjoin(MatchStoreRun, MatchStoreRun.run_id == ProductMatchRun.id)
+            .where(ProductMatchRun.id == run_id)
+            .options(
+                load_only(*run_fields, raiseload=True),
+                load_only(
+                    CanonicalProduct.id, CanonicalProduct.owner_user_id, raiseload=True
+                ),
+            )
+            .order_by(MatchStoreRun.store)
+        )
+        return list(self._session.execute(stmt).all())
+
+    def lock_claim(
+        self, run_id: uuid.UUID, *, worker_id: str, attempts: int | None = None
+    ) -> ProductMatchRun | None:
+        stmt = select(ProductMatchRun).where(
+            ProductMatchRun.id == run_id,
+            ProductMatchRun.worker_id == worker_id,
+            ProductMatchRun.status == "running",
+        )
+        if attempts is not None:
+            stmt = stmt.where(ProductMatchRun.attempts == attempts)
+        return self._session.scalars(
+            stmt.with_for_update().execution_options(populate_existing=True)
+        ).first()
 
     def get_with_details(self, run_id: uuid.UUID) -> ProductMatchRun | None:
         stmt = (

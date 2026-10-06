@@ -187,7 +187,9 @@ def main() -> None:
             "EAN",
             "SKU",
         ):
-            pattern = rf"<th[^>]*>\s*{re.escape(label_name)}\s*</th>\s*<td[^>]*>(.*?)</td>"
+            pattern = (
+                rf"<th[^>]*>\s*{re.escape(label_name)}\s*</th>\s*<td[^>]*>(.*?)</td>"
+            )
             hit = re.search(pattern, text, flags=re.I | re.S)
             if hit:
                 val = re.sub(r"<[^>]+>", "", hit.group(1)).strip()

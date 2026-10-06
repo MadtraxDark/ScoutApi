@@ -274,15 +274,20 @@ def test_build_search_urls() -> None:
         "amazon.com/s?k="
         in AmazonUSSearchAdapter().build_search_request("rtx 4060").url
     )
-    assert "searchpage.jsp" in BestBuySearchAdapter().build_search_request("rtx 4060").url
-    assert "nissei.com/br/catalogsearch/result" in NisseiSearchAdapter().build_search_request(
-        "rtx 4060"
-    ).url
+    assert (
+        "searchpage.jsp" in BestBuySearchAdapter().build_search_request("rtx 4060").url
+    )
+    assert (
+        "nissei.com/br/catalogsearch/result"
+        in NisseiSearchAdapter().build_search_request("rtx 4060").url
+    )
     assert (
         "quick_search?search="
         in ShoppingChinaSearchAdapter().build_search_request("rtx 4060").url
     )
-    assert "search?keyword=" in ShopeeSearchAdapter().build_search_request("rtx 4060").url
+    assert (
+        "search?keyword=" in ShopeeSearchAdapter().build_search_request("rtx 4060").url
+    )
 
 
 def test_all_implemented_stores_support_search() -> None:

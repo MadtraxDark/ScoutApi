@@ -226,9 +226,7 @@ def main() -> int:
                         product=product,
                     )
                     if learned and not ref_identity.gtin:
-                        ref_identity = identity_with_gtin(
-                            ref_identity, learned.gtin
-                        )
+                        ref_identity = identity_with_gtin(ref_identity, learned.gtin)
                         queries = build_search_queries(ref_identity)
                         print(
                             "  LEARNED_GTIN",
@@ -270,9 +268,7 @@ def main() -> int:
         "unmatched_stores": unmatched,
         "errors": errors,
     }
-    OUT.write_text(
-        json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
+    OUT.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     print("\nREPORT", OUT, flush=True)
     print(
         "SUMMARY matches=",

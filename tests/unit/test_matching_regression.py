@@ -587,8 +587,8 @@ def test_no_monitor_model_codes_keep_regular_matching() -> None:
 
 
 def test_rank_candidates_prefers_mpn_title_hit() -> None:
-    from scout_api.modules.matching.search_candidate import SearchCandidate
     from scout_api.modules.matching.identity import rank_candidates_for_query
+    from scout_api.modules.matching.search_candidate import SearchCandidate
 
     ranked = rank_candidates_for_query(
         [
@@ -610,8 +610,8 @@ def test_rank_candidates_prefers_mpn_title_hit() -> None:
 
 def test_rank_candidates_ignores_amazon_keywords_querystring() -> None:
     """SERP URLs embed keywords=… — must not flatten color ranking."""
-    from scout_api.modules.matching.search_candidate import SearchCandidate
     from scout_api.modules.matching.identity import rank_candidates_for_query
+    from scout_api.modules.matching.search_candidate import SearchCandidate
 
     ranked = rank_candidates_for_query(
         [
@@ -1668,9 +1668,9 @@ def test_gpu_candidate_retrieval_mock_uses_progressive_query() -> None:
     """Search layer is queried with progressive identity queries, not full title."""
     from unittest.mock import MagicMock
 
-    from scout_api.modules.matching.search_candidate import SearchCandidate
     from scout_api.modules.matching.product_match_service import ProductMatchService
     from scout_api.modules.matching.schemas import MatchRequest
+    from scout_api.modules.matching.search_candidate import SearchCandidate
 
     ref = _item(
         store="visaovip",
@@ -2041,9 +2041,9 @@ def test_match_from_item_identity_only_discovers_without_reference_url() -> None
     """Search receives progressive identity queries; no known store URL is injected."""
     from unittest.mock import MagicMock
 
-    from scout_api.modules.matching.search_candidate import SearchCandidate
     from scout_api.modules.matching.identity import identity_reference_item
     from scout_api.modules.matching.product_match_service import ProductMatchService
+    from scout_api.modules.matching.search_candidate import SearchCandidate
 
     reference = identity_reference_item(
         "Placa de Vídeo Gigabyte GeForce RTX 5060",
@@ -2103,9 +2103,9 @@ def test_match_early_stops_scraping_after_auto_match() -> None:
     """Once a store auto_matches, do not scrape remaining SERP candidates."""
     from unittest.mock import MagicMock
 
-    from scout_api.modules.matching.search_candidate import SearchCandidate
     from scout_api.modules.matching.identity import identity_reference_item
     from scout_api.modules.matching.product_match_service import ProductMatchService
+    from scout_api.modules.matching.search_candidate import SearchCandidate
 
     reference = identity_reference_item(
         "Placa de Vídeo Gigabyte GeForce RTX 5060 Windforce OC 8GB",
@@ -2160,9 +2160,9 @@ def test_match_skips_scrape_when_serp_title_clearly_conflicts() -> None:
     """Notebook SERP titles must not trigger a discrete-GPU PDP scrape."""
     from unittest.mock import MagicMock
 
-    from scout_api.modules.matching.search_candidate import SearchCandidate
     from scout_api.modules.matching.identity import identity_reference_item
     from scout_api.modules.matching.product_match_service import ProductMatchService
+    from scout_api.modules.matching.search_candidate import SearchCandidate
 
     reference = identity_reference_item(
         "Placa de Vídeo Gigabyte GeForce RTX 5060 8GB GDDR7",
@@ -2215,9 +2215,9 @@ def test_match_skips_duplicate_candidate_url_scrape() -> None:
     """Same candidate URL appearing twice must be scraped once per Match."""
     from unittest.mock import MagicMock
 
-    from scout_api.modules.matching.search_candidate import SearchCandidate
     from scout_api.modules.matching.identity import identity_reference_item
     from scout_api.modules.matching.product_match_service import ProductMatchService
+    from scout_api.modules.matching.search_candidate import SearchCandidate
 
     reference = identity_reference_item(
         "Placa de Vídeo Gigabyte GeForce RTX 5060 Windforce OC 8GB",
@@ -2258,9 +2258,9 @@ def test_match_respects_scrape_budget_across_queries() -> None:
     """max_candidates_per_store caps total PDP scrapes for a store, not per SERP."""
     from unittest.mock import MagicMock
 
-    from scout_api.modules.matching.search_candidate import SearchCandidate
     from scout_api.modules.matching.identity import identity_reference_item
     from scout_api.modules.matching.product_match_service import ProductMatchService
+    from scout_api.modules.matching.search_candidate import SearchCandidate
 
     reference = identity_reference_item(
         "Placa de Vídeo Gigabyte GeForce RTX 5060 Windforce OC 8GB",
@@ -2308,9 +2308,9 @@ def test_match_respects_scrape_budget_across_queries() -> None:
 def test_match_forces_include_images_false_on_candidates() -> None:
     from unittest.mock import MagicMock
 
-    from scout_api.modules.matching.search_candidate import SearchCandidate
     from scout_api.modules.matching.identity import identity_reference_item
     from scout_api.modules.matching.product_match_service import ProductMatchService
+    from scout_api.modules.matching.search_candidate import SearchCandidate
 
     reference = identity_reference_item(
         "Placa de Vídeo Gigabyte GeForce RTX 5060 Windforce OC 8GB",
@@ -2523,11 +2523,11 @@ def test_phone_wearable_kit_is_bundle_reject() -> None:
     assert score.decision == "reject"
     assert any(r.code == "bundle_reject" for r in score.reasons)
     from scout_api.modules.crawler.core.fingerprints import title_hint_from_url
-    from scout_api.modules.matching.search_candidate import SearchCandidate
     from scout_api.modules.matching.identity import (
         enrich_candidate_title,
         rank_candidates_for_query,
     )
+    from scout_api.modules.matching.search_candidate import SearchCandidate
 
     url = (
         "https://www.magazineluiza.com.br/"

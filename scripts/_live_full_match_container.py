@@ -24,7 +24,6 @@ from scout_api.modules.crawler.services.product_scrape_service import (
     get_shared_html_fetcher,
 )
 from scout_api.modules.crawler.services.store_resolver import (
-    resolve_spider_by_store_key,
     stores_supporting_search,
 )
 from scout_api.modules.matching.engine import MatchingEngine
@@ -326,9 +325,7 @@ def main() -> int:
                         product=product,
                     )
                     if learned and not ref_identity.gtin:
-                        ref_identity = identity_with_gtin(
-                            ref_identity, learned.gtin
-                        )
+                        ref_identity = identity_with_gtin(ref_identity, learned.gtin)
                         queries = build_search_queries(ref_identity)
                         print(
                             "  LEARNED_GTIN",
@@ -354,7 +351,7 @@ def main() -> int:
             diagnostics[store_key] = diagnose_search(store_key, q, fetcher)
 
     elapsed = time.perf_counter() - t0
-    trusted = resolve_trusted_gtin(
+    _trusted = resolve_trusted_gtin(
         ref_identity,
         # rebuild minimal hits for consensus
         [],

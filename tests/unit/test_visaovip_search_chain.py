@@ -8,8 +8,8 @@ import pytest
 from scrapy.http import HtmlResponse
 
 from scout_api.modules.crawler.core.exceptions import RequestError
-from scout_api.modules.matching.search_adapters.paraguay.visaovip_action_strategy import (
-    StrategyResult,
+from scout_api.modules.matching.search_adapters.paraguay import (
+    visaovip_action_strategy as _action_strategy,
 )
 from scout_api.modules.matching.search_candidate import SearchCandidate
 from scout_api.modules.matching.store_search_service import (
@@ -17,8 +17,9 @@ from scout_api.modules.matching.store_search_service import (
     _dedup_candidates_by_product_id,
 )
 
-
 # ---------------------------------------------------------------------------
+StrategyResult = _action_strategy.StrategyResult
+
 # Helpers
 # ---------------------------------------------------------------------------
 
@@ -32,8 +33,11 @@ def _candidate(product_id: str, title: str = "Produto") -> SearchCandidate:
     )
 
 
-def _make_empty_response(url: str = "https://www.visaovip.com/busca/termo/foo/") -> HtmlResponse:
-    """Minimal scrapy Response (no /prod/ links → classify_empty_result returns incomplete)."""
+def _make_empty_response(
+    url: str = "https://www.visaovip.com/busca/termo/foo/",
+) -> HtmlResponse:
+    """Minimal scrapy Response (no /prod/ links → classify_empty_result returns
+    incomplete)."""
     return HtmlResponse(
         url=url,
         body=b"<html><body>sem resultados aqui</body></html>",
@@ -41,7 +45,9 @@ def _make_empty_response(url: str = "https://www.visaovip.com/busca/termo/foo/")
     )
 
 
-def _make_genuine_empty_response(url: str = "https://www.visaovip.com/busca/termo/foo/") -> HtmlResponse:
+def _make_genuine_empty_response(
+    url: str = "https://www.visaovip.com/busca/termo/foo/",
+) -> HtmlResponse:
     return HtmlResponse(
         url=url,
         body=b"<html><body>Nenhum resultado encontrado</body></html>",
@@ -167,7 +173,7 @@ def test_chain_strategy_a_no_results_genuine_empty() -> None:
 
 def test_chain_strategy_a_unavailable_falls_back_to_b() -> None:
     cands_b = [_candidate("99", "Notebook")]
-    response_mock = _make_empty_response()
+    _response_mock = _make_empty_response()
     # Override: classify as genuine_empty so B returns []
     adapter = MagicMock()
     adapter.build_search_request.return_value = MagicMock(
@@ -347,7 +353,7 @@ def test_chain_discovers_action_id_then_strategy_a_success() -> None:
     vv_action.reset_action_id_cache_for_tests()
 
     fake_id = "a" * 40
-    chunk_js = (
+    _chunk_js = (
         'createServerReference("'
         + fake_id
         + '",b,void 0,c.findSourceMapURL,"searchProducts")'
@@ -355,7 +361,7 @@ def test_chain_discovers_action_id_then_strategy_a_success() -> None:
     # Hydrated SERP HTML (≥10 KB) with one chunk script tag
     pad = "x" * 10_000
     serp_html = (
-        f'<html><head></head><body>{pad}'
+        f"<html><head></head><body>{pad}"
         f'<script src="/_next/static/chunks/abcdef0123456789.js"></script>'
         f"</body></html>"
     )
@@ -415,9 +421,6 @@ def test_chain_wires_browser_post_when_fetcher_supports_it() -> None:
     """StoreAware/Camoufox-style fetcher → Strategy A gets post_fn."""
     from scout_api.modules.matching.search_adapters.paraguay import (
         visaovip_action_strategy as vv_action,
-    )
-    from scout_api.modules.matching.search_adapters.paraguay.visaovip_action_strategy import (
-        StrategyResult,
     )
 
     class _FetcherWithBrowserPost:
@@ -621,7 +624,9 @@ def test_serp_challenge_emits_upstream_waf_blocked() -> None:
 
     assert exc_info.value.code == "UPSTREAM_WAF_BLOCKED"
     # Message must be human-readable, not raw snake_case
-    assert "WAF" in exc_info.value.args[0] or "bloqueada" in exc_info.value.args[0].lower()
+    assert (
+        "WAF" in exc_info.value.args[0] or "bloqueada" in exc_info.value.args[0].lower()
+    )
 
 
 # ---------------------------------------------------------------------------

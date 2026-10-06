@@ -1,3 +1,5 @@
+from typing import Literal
+
 from sqlalchemy.orm import Session
 
 from scout_api.modules.matching.models import StoreMetadata
@@ -38,7 +40,7 @@ class StoreMetadataRepository:
         mime_type: str,
         original_file_id: str,
         version: str,
-        status: str,
+        status: Literal["ready", "pending", "processing", "failed"],
         svg_text: str | None = None,
     ) -> StoreMetadata:
         row = self.get(key)

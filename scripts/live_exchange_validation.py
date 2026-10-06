@@ -1,4 +1,5 @@
 """Live validation of exchange providers (network). Not part of default suite."""
+
 from __future__ import annotations
 
 import json

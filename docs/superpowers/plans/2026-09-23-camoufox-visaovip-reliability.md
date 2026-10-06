@@ -109,6 +109,7 @@ class FailureDomain(StrEnum):
     STORE_CAPABILITY = "store_capability"
     OPERATION = "operation"
 
+
 @dataclass
 class BrowserSlot:
     slot_id: int
@@ -120,9 +121,14 @@ class BrowserSlot:
     fetch_count: int
     health: str
 
+
 class BrowserScheduler:
-    def __init__(self, *, capacity: int, queue_capacity: int, queue_timeout_ms: int): ...
-    def acquire(self, *, cancel_event: threading.Event | None = None) -> BrowserSlotLease: ...
+    def __init__(
+        self, *, capacity: int, queue_capacity: int, queue_timeout_ms: int
+    ): ...
+    def acquire(
+        self, *, cancel_event: threading.Event | None = None
+    ) -> BrowserSlotLease: ...
     def release(self, lease: BrowserSlotLease, *, poison: bool = False) -> None: ...
     def snapshot(self) -> dict[str, object]: ...  # depth, capacity, active, waits
 ```
@@ -189,6 +195,7 @@ class BrowserCircuitBreaker:
     def allow(self) -> bool: ...  # False if OPEN (not half-open grant)
     def claim_trial(self, *, now: datetime | None = None) -> TrialToken | None: ...
     def complete_trial(self, token: TrialToken, *, success: bool) -> None: ...
+
     # Crash safety: token has expires_at; snapshot() reaps expired trials → reopen OPEN
 ```
 
@@ -262,7 +269,7 @@ class StoreAttemptBudget:
 Settings (names exact):
 
 ```python
-match_search_query_budget: int = 5          # MAX, not mandatory count
+match_search_query_budget: int = 5  # MAX, not mandatory count
 match_external_attempt_budget: int = 12
 match_browser_navigation_budget: int = 8
 ```
@@ -409,7 +416,7 @@ class StrategyResult(StrEnum):
     SUCCESS = "success"
     NO_RESULTS = "no_results"
     BLOCKED = "blocked"
-    UNAVAILABLE = "unavailable"      # contract invalid / action missing
+    UNAVAILABLE = "unavailable"  # contract invalid / action missing
     INVALID_RESPONSE = "invalid_response"
     ERROR = "error"
 ```

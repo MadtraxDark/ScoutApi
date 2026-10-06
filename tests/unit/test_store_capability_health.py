@@ -19,14 +19,12 @@ import pytest
 
 from scout_api.modules.crawler.core.exceptions import ParseError, RequestError
 from scout_api.modules.crawler.core.store_capability_health import (
-    CapabilityTrialToken,
     StoreCapabilityCircuit,
     StoreCapabilityState,
     get_store_capability_circuit,
     is_store_search_trip_failure,
     reset_store_capability_circuits_for_tests,
     store_capability_unavailable_error,
-    STORE_SEARCH_TRIP_CODES,
 )
 
 

@@ -52,7 +52,7 @@ _ROW_RE = re.compile(
     r"<td[^>]*>(.*?)</td>\s*"  # 1: Guarani/Dólar
     r"<td[^>]*>(.*?)</td>\s*"  # 2: SML Guarani/Real
     r"<td[^>]*>(.*?)</td>\s*"  # 3: Real/Dólar (PTAX)
-    r"<td[^>]*>(.*?)</td>",    # 4: Taxa SML Real/Guarani ← our target
+    r"<td[^>]*>(.*?)</td>",  # 4: Taxa SML Real/Guarani ← our target
     re.DOTALL | re.IGNORECASE,
 )
 
@@ -78,7 +78,9 @@ def _parse_date(s: str) -> datetime | None:
         return None
 
 
-def parse_sml_html(html: str, *, fetched_at: datetime | None = None) -> list[FetchedRate]:
+def parse_sml_html(
+    html: str, *, fetched_at: datetime | None = None
+) -> list[FetchedRate]:
     """Parse BCB SML HTML page.
 
     Args:
@@ -152,7 +154,9 @@ class BcbSmlProvider:
             fetched_at = datetime.now(UTC)
             return parse_sml_html(html, fetched_at=fetched_at)
         except httpx.HTTPStatusError as exc:
-            logger.warning("bcb_sml_http_error", extra={"status": exc.response.status_code})
+            logger.warning(
+                "bcb_sml_http_error", extra={"status": exc.response.status_code}
+            )
             raise
         except httpx.TimeoutException:
             logger.warning("bcb_sml_timeout")

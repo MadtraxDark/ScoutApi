@@ -45,7 +45,9 @@ def _build_url(start: date, end: date) -> str:
     return f"{_BASE_URL}?{qs}"
 
 
-def parse_ptax_json(data: dict[object, object], *, fetched_at: datetime | None = None) -> list[FetchedRate]:
+def parse_ptax_json(
+    data: dict[object, object], *, fetched_at: datetime | None = None
+) -> list[FetchedRate]:
     """Parse OLINDA PTAX JSON response.
 
     Args:
@@ -82,7 +84,9 @@ def parse_ptax_json(data: dict[object, object], *, fetched_at: datetime | None =
     if isinstance(ts_raw, str):
         try:
             # Format: "2026-09-22 13:03:30.646171"
-            source_ts = datetime.strptime(ts_raw[:19], "%Y-%m-%d %H:%M:%S").replace(tzinfo=UTC)
+            source_ts = datetime.strptime(ts_raw[:19], "%Y-%m-%d %H:%M:%S").replace(
+                tzinfo=UTC
+            )
         except ValueError:
             pass
 
@@ -116,7 +120,9 @@ class BcbPtaxProvider:
 
     source_id = _SOURCE_ID
 
-    def __init__(self, *, client: httpx.Client | None = None, days_lookback: int = _DAYS_LOOKBACK) -> None:
+    def __init__(
+        self, *, client: httpx.Client | None = None, days_lookback: int = _DAYS_LOOKBACK
+    ) -> None:
         self._client = client
         self._days_lookback = days_lookback
 
@@ -140,7 +146,9 @@ class BcbPtaxProvider:
             fetched_at = datetime.now(UTC)
             return parse_ptax_json(data, fetched_at=fetched_at)
         except httpx.HTTPStatusError as exc:
-            logger.warning("bcb_ptax_http_error", extra={"status": exc.response.status_code})
+            logger.warning(
+                "bcb_ptax_http_error", extra={"status": exc.response.status_code}
+            )
             raise
         except httpx.TimeoutException:
             logger.warning("bcb_ptax_timeout")

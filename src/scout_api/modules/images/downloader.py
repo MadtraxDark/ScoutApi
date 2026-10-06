@@ -142,9 +142,12 @@ def validate_image_bytes(
                     f"Imagem excede dimensão máxima ({max_dimension}px)",
                     code="INVALID_REQUEST",
                 )
-            mime = Image.MIME.get(fmt or "", "") or (
-                claimed_content_type or "application/octet-stream"
-            ).split(";")[0].strip()
+            mime = (
+                Image.MIME.get(fmt or "", "")
+                or (claimed_content_type or "application/octet-stream")
+                .split(";")[0]
+                .strip()
+            )
             if not mime.startswith("image/"):
                 mime = f"image/{(fmt or 'jpeg').lower()}"
                 if mime == "image/jpg":

@@ -5,8 +5,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from scrapy.http import HtmlResponse, Request
-
 from scout_api.modules.crawler.services.curl_cffi_fetcher import CurlCffiHtmlFetcher
 from scout_api.modules.crawler.spiders.brazil.terabyteshop import TerabyteShopSpider
 
@@ -25,9 +23,7 @@ def main() -> None:
     (OUT / "24707.html").write_text(resp.text or "", encoding="utf-8")
     # Price box snippet
     chunks = resp.css("#topopreco, .info-price, p.precode, .precotopo").getall()
-    (OUT / "24707_price_box.html").write_text(
-        "\n".join(chunks), encoding="utf-8"
-    )
+    (OUT / "24707_price_box.html").write_text("\n".join(chunks), encoding="utf-8")
     offer = spider.extract_offer(resp)
     payload = {
         "url": resp.url,

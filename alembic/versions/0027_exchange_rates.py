@@ -26,7 +26,9 @@ def upgrade() -> None:
         sa.Column("source_timestamp", sa.DateTime(timezone=True), nullable=True),
         sa.Column("fetched_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("status", sa.String(16), nullable=False, server_default="fresh"),
-        sa.Column("consecutive_failures", sa.Integer(), nullable=False, server_default="0"),
+        sa.Column(
+            "consecutive_failures", sa.Integer(), nullable=False, server_default="0"
+        ),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
     )
@@ -73,15 +75,21 @@ def upgrade() -> None:
         sa.Column("last_refresh_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("last_success_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("last_error", sa.Text(), nullable=True),
-        sa.Column("consecutive_failures", sa.Integer(), nullable=False, server_default="0"),
+        sa.Column(
+            "consecutive_failures", sa.Integer(), nullable=False, server_default="0"
+        ),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
     )
 
 
 def downgrade() -> None:
     op.drop_table("exchange_rate_scheduler_state")
-    op.drop_index("ix_exchange_rate_obs_observed_at", table_name="exchange_rate_observations")
-    op.drop_index("ix_exchange_rate_obs_pair_type", table_name="exchange_rate_observations")
+    op.drop_index(
+        "ix_exchange_rate_obs_observed_at", table_name="exchange_rate_observations"
+    )
+    op.drop_index(
+        "ix_exchange_rate_obs_pair_type", table_name="exchange_rate_observations"
+    )
     op.drop_table("exchange_rate_observations")
     op.drop_index("ix_exchange_rate_latest_pair", table_name="exchange_rate_latest")
     op.drop_constraint("uq_exchange_rate_latest_key", "exchange_rate_latest")

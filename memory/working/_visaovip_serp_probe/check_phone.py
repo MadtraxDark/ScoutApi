@@ -1,8 +1,10 @@
-from pathlib import Path
 import re
+from pathlib import Path
 
 phone = Path(
-    r"c:\Users\Thyago\Documents\Visual Studio Code\ScoutApiV2\tests\fixtures\visaovip\product_phone.html"
+    "c:\\Users\\Thyago\\Documents\\Visual Studio Code\\"
+    "ScoutApiV2\\tests\\fixtures\\visaovip\\product_ph"
+    "one.html"
 ).read_text(encoding="utf-8", errors="replace")
 print("phone fixture len", len(phone))
 print("productCode hits", len(re.findall(r"productCode", phone)))
@@ -17,7 +19,9 @@ m = re.search(r"<title[^>]*>([^<]+)</title>", phone, re.I)
 print("title", m.group(1)[:120] if m else None)
 
 serp = Path(
-    r"c:\Users\Thyago\Documents\Visual Studio Code\ScoutApiV2\memory\working\_visaovip_serp_probe\serp_phone_curl_curl.txt"
+    "c:\\Users\\Thyago\\Documents\\Visual Studio Code\\"
+    "ScoutApiV2\\memory\\working\\_visaovip_serp_prob"
+    "e\\serp_phone_curl_curl.txt"
 ).read_text(encoding="utf-8", errors="replace")
 print(
     "phone SERP empty markers",

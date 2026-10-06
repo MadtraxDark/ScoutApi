@@ -7,7 +7,6 @@ Writes JSON report under data/live-match-reports/.
 from __future__ import annotations
 
 import json
-import re
 import sys
 import time
 import traceback
@@ -16,8 +15,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from scout_api.modules.crawler.core.exceptions import ParseError, RequestError
 from scout_api.modules.crawler.services.html_fetcher import (
@@ -29,7 +27,6 @@ from scout_api.modules.crawler.services.product_scrape_service import (
     get_shared_html_fetcher,
 )
 from scout_api.modules.crawler.services.store_resolver import (
-    resolve_spider_by_store_key,
     stores_supporting_search,
 )
 from scout_api.modules.matching.identity import (
@@ -40,6 +37,9 @@ from scout_api.modules.matching.product_match_service import ProductMatchService
 from scout_api.modules.matching.schemas import MatchRequest
 from scout_api.modules.matching.store_search_order import order_stores_for_match
 from scout_api.modules.matching.store_search_service import StoreSearchService
+
+ROOT = Path(__file__).resolve().parents[1]
+
 
 REF_URL = (
     "https://www.magazineluiza.com.br/"
@@ -130,13 +130,13 @@ def diagnose_store_search(
         out["fetch_seconds"] = round(elapsed, 2)
         out["final_url"] = getattr(response, "url", None)
         out["status"] = getattr(response, "status", None)
-        out["page"] = _diagnose_html(html, url=str(out["final_url"] or fetch_url), title=title)
+        out["page"] = _diagnose_html(
+            html, url=str(out["final_url"] or fetch_url), title=title
+        )
         try:
             candidates = adapter.parse_candidates(response)
             out["parsed_candidates"] = len(candidates)
-            out["candidate_titles"] = [
-                (c.title or "")[:120] for c in candidates[:5]
-            ]
+            out["candidate_titles"] = [(c.title or "")[:120] for c in candidates[:5]]
             out["candidate_urls"] = [c.url for c in candidates[:5]]
         except Exception as exc:
             out["parse_error"] = f"{type(exc).__name__}: {exc}"
@@ -279,7 +279,7 @@ def main() -> int:
             )
 
         # Build per-store summary skeleton
-        matched_stores = {h.store for h in response.matches}
+        _matched_stores = {h.store for h in response.matches}
         error_by_store = {e.store: e for e in response.errors}
         for store in ordered:
             row: dict[str, Any] = {"store": store, "status": "unknown"}

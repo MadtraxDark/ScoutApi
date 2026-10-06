@@ -58,7 +58,8 @@ def _first_page(browser: Any) -> Any:
 
 
 def _attach_popup_handler(browser: Any) -> None:
-    """Bring OAuth popups to the front instead of leaving them hung in the background."""
+    """Bring OAuth popups to the front instead of leaving them hung in the
+    background."""
 
     def on_page(new_page: Any) -> None:
         try:
@@ -86,7 +87,7 @@ def main() -> int:
     parser.add_argument(
         "--url",
         default=None,
-        help=f"Start URL (default: home, or login page with --login)",
+        help="Start URL (default: home, or login page with --login)",
     )
     parser.add_argument(
         "--login",

@@ -25,7 +25,7 @@ MARKERS = (
     "jsonConfig",
     "spConfig",
     "swatch-opt",
-    "data-role=\"swatch-options\"",
+    'data-role="swatch-options"',
     "option-selected",
     "x-magento-init",
     "Magento_Swatches",

@@ -29,7 +29,6 @@ Output: stdout + memory/working/2026-09-23-camoufox-visaovip-reliability.md
 from __future__ import annotations
 
 # ruff: noqa: E402
-
 import argparse
 import json
 import re
@@ -81,7 +80,7 @@ class OpResult:
     # Navigation
     final_url: str | None = None
     http_status: int | None = None
-    nav_result: str = "unknown"   # ok | error | challenge | auth_wall | exception
+    nav_result: str = "unknown"  # ok | error | challenge | auth_wall | exception
 
     # DOM analysis
     dom_bytes: int = 0
@@ -93,7 +92,9 @@ class OpResult:
     challenge_markers_found: list[str] = field(default_factory=list)
 
     # Classification (per adapter logic)
-    empty_classification: str | None = None  # incomplete | genuine_empty | unknown | n/a
+    empty_classification: str | None = (
+        None  # incomplete | genuine_empty | unknown | n/a
+    )
 
     # Duration
     duration_ms: float = 0.0
@@ -223,6 +224,7 @@ def _make_fetcher(profile_dir: Path) -> CamoufoxHtmlFetcher:
 # Single op runner
 # ---------------------------------------------------------------------------
 
+
 def _run_op(
     fetcher: CamoufoxHtmlFetcher,
     adapter: VisaoVipSearchAdapter,
@@ -281,7 +283,10 @@ def _run_op(
         result.ok = (
             not result.challenge_detected
             and not result.auth_wall_detected
-            and (result.prod_link_count > 0 or result.empty_classification == "genuine_empty")
+            and (
+                result.prod_link_count > 0
+                or result.empty_classification == "genuine_empty"
+            )
         )
 
     except Exception as exc:  # noqa: BLE001
@@ -356,7 +361,7 @@ def _verdict(summary: dict[str, Any]) -> str:
     b650_markers = b650m.get("all_challenge_markers", [])
 
     s25_nav_results = s25.get("nav_results", [])
-    b650_nav_results = b650m.get("nav_results", [])
+    _b650_nav_results = b650m.get("nav_results", [])
 
     s25_incomplete = s25.get("incomplete_hydrate_count", 0)
     s25_genuine_empty = s25.get("genuine_empty_count", 0)
@@ -369,9 +374,14 @@ def _verdict(summary: dict[str, Any]) -> str:
 
     # Decision tree
     waf_markers = {
-        "cf_just_a_moment", "cf_challenge_platform", "cf_hard_block",
-        "akamai_bot_manager", "akamai_sec_cpt", "security_verification",
-        "robot_check", "captcha_interstitial",
+        "cf_just_a_moment",
+        "cf_challenge_platform",
+        "cf_hard_block",
+        "akamai_bot_manager",
+        "akamai_sec_cpt",
+        "security_verification",
+        "robot_check",
+        "captcha_interstitial",
     }
     s25_waf_hit = bool(set(s25_markers) & waf_markers)
     b650_waf_hit = bool(set(b650_markers) & waf_markers)
@@ -381,9 +391,13 @@ def _verdict(summary: dict[str, Any]) -> str:
     # Both fail?
     if s25_ok == 0 and b650_ok == 0:
         if s25_challenge > 0 or b650_waf_hit or s25_waf_hit:
-            lines.append("VERDICT: INFRA/WAF — both queries blocked; not query-specific")
+            lines.append(
+                "VERDICT: INFRA/WAF — both queries blocked; not query-specific"
+            )
         else:
-            lines.append("VERDICT: INFRA — fetcher/session failure affecting all queries")
+            lines.append(
+                "VERDICT: INFRA — fetcher/session failure affecting all queries"
+            )
     # Only S25 fails?
     elif s25_ok == 0 and b650_ok > 0:
         if s25_waf_hit:
@@ -411,7 +425,8 @@ def _verdict(summary: dict[str, Any]) -> str:
             errors = s25.get("error_msgs", [])
             error_sample = errors[0] if errors else "unknown"
             lines.append(
-                f"VERDICT: INFRA/EXCEPTION — S25 throws exception ({error_sample[:120]}); "
+                f"VERDICT: INFRA/EXCEPTION — S25 throws exception "
+                f"({error_sample[:120]}); "
                 f"B650M succeeds → likely retryable network error or Camoufox crash "
                 f"on that specific navigation, not a query-category difference."
             )
@@ -457,7 +472,9 @@ _SECTION_START = "## VISAO_VIP_DISCOVERY"
 _AB_PROBE_START = "### A/B Probe — Task 7 (probe_visaovip_serp_ab)"
 
 
-def _update_working_log(run: ProbeRun, summary: dict[str, Any], verdict_text: str) -> None:
+def _update_working_log(
+    run: ProbeRun, summary: dict[str, Any], verdict_text: str
+) -> None:
     """Append/replace the A/B probe section in the working log."""
     log_path = _LOG_PATH
     if not log_path.exists():
@@ -484,8 +501,16 @@ def _update_working_log(run: ProbeRun, summary: dict[str, Any], verdict_text: st
             f"**Query `{qid}`** — `{s['query']}`",
             "",
             f"- OK: {s['ok_count']}/{s['iterations']}",
-            f"- challenge: {s['challenge_count']}, incomplete_hydrate: {s['incomplete_hydrate_count']}, genuine_empty: {s['genuine_empty_count']}, exception: {s['exception_count']}",
-            f"- avg /prod/ links: {s['avg_prod_links']}, avg DOM: {s['avg_dom_kb']} KB, avg duration: {s['avg_duration_ms']} ms",
+            (
+                f"- challenge: {s['challenge_count']}, "
+                f"incomplete_hydrate: {s['incomplete_hydrate_count']}, "
+                f"genuine_empty: {s['genuine_empty_count']}, "
+                f"exception: {s['exception_count']}"
+            ),
+            (
+                f"- avg /prod/ links: {s['avg_prod_links']}, avg DOM: "
+                f"{s['avg_dom_kb']} KB, avg duration: {s['avg_duration_ms']} ms"
+            ),
             f"- nav_results: {s['nav_results']}",
             f"- challenge markers: {s['all_challenge_markers']}",
             f"- final URLs: {s['final_urls']}",
@@ -508,11 +533,16 @@ def _update_working_log(run: ProbeRun, summary: dict[str, Any], verdict_text: st
 
     block = "\n".join(block_lines)
 
-    # Replace existing block if present, otherwise append after VISAO_VIP_DISCOVERY header
+    # Replace existing block if present, otherwise append after VISAO_VIP_DISCOVERY
+    # header
     if _AB_PROBE_START in content:
         # Remove old block (from _AB_PROBE_START to next --- separator or end)
         pattern = re.compile(
-            r"(\n?" + re.escape(_AB_PROBE_START) + r".*?)(?=\n## |\n### (?!" + re.escape("A/B") + r")|\Z)",
+            r"(\n?"
+            + re.escape(_AB_PROBE_START)
+            + r".*?)(?=\n## |\n### (?!"
+            + re.escape("A/B")
+            + r")|\Z)",
             re.DOTALL,
         )
         content = pattern.sub(block, content, count=1)
@@ -535,11 +565,12 @@ def _update_working_log(run: ProbeRun, summary: dict[str, Any], verdict_text: st
 # Main
 # ---------------------------------------------------------------------------
 
+
 def _print_result(r: OpResult) -> None:
     status = "✓ OK" if r.ok else "✗ FAIL"
     print(
         f"  [{status}] iter={r.iteration} nav={r.nav_result} "
-        f"prod_links={r.prod_link_count} dom_kb={r.dom_bytes//1024} "
+        f"prod_links={r.prod_link_count} dom_kb={r.dom_bytes // 1024} "
         f"duration={r.duration_ms:.0f}ms"
     )
     if r.final_url and r.final_url != r.search_url:
@@ -553,7 +584,9 @@ def _print_result(r: OpResult) -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Visão VIP A/B SERP root-cause probe (Task 7)")
+    parser = argparse.ArgumentParser(
+        description="Visão VIP A/B SERP root-cause probe (Task 7)"
+    )
     parser.add_argument(
         "--iterations",
         type=int,
@@ -573,7 +606,7 @@ def main() -> int:
     args = parser.parse_args()
 
     profile_dir = Path(args.profile_dir)
-    print(f"\n=== Visão VIP A/B SERP Root-Cause Probe (Task 7) ===")
+    print("\n=== Visão VIP A/B SERP Root-Cause Probe (Task 7) ===")
     print(f"Profile: {profile_dir}")
     print(f"Iterations per query: {args.iterations}")
     print(f"Queries: {[q for _, q in PROBE_QUERIES]}")
@@ -621,10 +654,12 @@ def main() -> int:
     print("SUMMARY")
     print("=" * 60)
     for qid, s in summary.items():
-        print(f"\n{qid}: ok={s['ok_count']}/{s['iterations']} "
-              f"prod_links_avg={s['avg_prod_links']} "
-              f"dom_kb_avg={s['avg_dom_kb']} "
-              f"duration_avg={s['avg_duration_ms']}ms")
+        print(
+            f"\n{qid}: ok={s['ok_count']}/{s['iterations']} "
+            f"prod_links_avg={s['avg_prod_links']} "
+            f"dom_kb_avg={s['avg_dom_kb']} "
+            f"duration_avg={s['avg_duration_ms']}ms"
+        )
         print(f"  nav_results:  {s['nav_results']}")
         print(f"  challenge:    {s['all_challenge_markers']}")
         print(f"  final_urls:   {s['final_urls']}")

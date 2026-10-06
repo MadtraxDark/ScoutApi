@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import html as html_lib
 import json
 import re
 from pathlib import Path
@@ -86,7 +85,12 @@ def summarize_config(cfg: dict, label: str) -> None:
     for key in ("names", "sku", "optionPrices", "images", "salable"):
         if key in cfg and key not in {"optionPrices"}:
             val = cfg[key]
-            print(" ", key, type(val).__name__, (len(val) if hasattr(val, "__len__") else val))
+            print(
+                " ",
+                key,
+                type(val).__name__,
+                (len(val) if hasattr(val, "__len__") else val),
+            )
 
 
 def main() -> None:
@@ -114,17 +118,21 @@ def main() -> None:
             positions = [m.start() for m in re.finditer(re.escape(needle), text)]
             print(needle, "count", len(positions), "first", positions[:3])
 
-        # Magento often embeds config as: "Magento_Swatches/js/swatch-renderer": {"jsonConfig": ...}
+        # Magento often embeds config as: "Magento_Swatches/js/swatch-renderer":
+        # {"jsonConfig": ...}
         for m in re.finditer(r"Magento_Swatches/js/swatch-renderer", text):
             start = m.start()
             print("renderer ref at", start)
             cfg, end = try_extract_json_object(text, start)
             if cfg:
                 path = OUT / f"swatch_renderer_near_{i}.json"
-                path.write_text(json.dumps(cfg, ensure_ascii=False, indent=2)[:500000], encoding="utf-8")
+                path.write_text(
+                    json.dumps(cfg, ensure_ascii=False, indent=2)[:500000],
+                    encoding="utf-8",
+                )
                 print(" extracted object keys", list(cfg.keys())[:20], "->", path)
                 # dig for nested jsonConfig
-                blob = json.dumps(cfg)
+                _blob = json.dumps(cfg)
                 if "attributes" in cfg:
                     summarize_config(cfg, f"{label}-direct")
                 else:
@@ -151,7 +159,7 @@ def main() -> None:
             if '"optionPrices"' in body and '"attributes"' in body:
                 print("candidate script", si, "len", len(body))
                 # find the jsonConfig object
-                idx = body.find('"attributes"')
+                _idx = body.find('"attributes"')
                 # walk backwards to nearest {
                 # Better: find '"jsonConfig":'
                 j = body.find('"jsonConfig"')
@@ -183,10 +191,16 @@ def main() -> None:
 
         # Check for Amasty / custom selected defaults in JS
         for m in re.finditer(r"selectedOptions\s*=\s*\{", text):
-            print("selectedOptions assign at", m.start(), text[m.start() : m.start() + 200])
+            print(
+                "selectedOptions assign at",
+                m.start(),
+                text[m.start() : m.start() + 200],
+            )
 
         # For URL B: look for simple product meta / related configurable parent
-        for m in re.finditer(r"parent.?product|parentId|parent_id|configurable", text, flags=re.I):
+        for m in re.finditer(
+            r"parent.?product|parentId|parent_id|configurable", text, flags=re.I
+        ):
             if m.start() < 400000:  # skip minified noise somewhat
                 snippet = text[m.start() : m.start() + 80]
                 if "function" in snippet or "prototype" in snippet:

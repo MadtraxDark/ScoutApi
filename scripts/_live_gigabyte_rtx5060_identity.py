@@ -18,9 +18,11 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from scout_api.modules.crawler.services.product_scrape_service import (
+    ProductScrapeService,
+)
 from scout_api.modules.crawler.stores import STORE_CONFIGS
 from scout_api.modules.matching.identity import (
     build_search_queries,
@@ -30,9 +32,9 @@ from scout_api.modules.matching.identity import (
 from scout_api.modules.matching.product_match_service import ProductMatchService
 from scout_api.modules.matching.store_search_order import order_stores_for_match
 from scout_api.modules.matching.store_search_service import StoreSearchService
-from scout_api.modules.crawler.services.product_scrape_service import (
-    ProductScrapeService,
-)
+
+ROOT = Path(__file__).resolve().parents[1]
+
 
 SOURCE_TITLE = "Placa de Vídeo Gigabyte GeForce RTX 5060"
 # Human ground truth only — never passed to Search/Match as hints.

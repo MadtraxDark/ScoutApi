@@ -1,4 +1,6 @@
-﻿from scout_api.modules.crawler.services.product_scrape_service import get_shared_html_fetcher
+from scout_api.modules.crawler.services.product_scrape_service import (
+    get_shared_html_fetcher,
+)
 from scout_api.modules.matching.search_adapters.paraguay.shoppingchina import (
     ShoppingChinaSearchAdapter,
 )

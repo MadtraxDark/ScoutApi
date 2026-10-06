@@ -1,4 +1,5 @@
 """Probe public Pichau API endpoints discovered in live PDP (no invented auth)."""
+
 from __future__ import annotations
 
 import json
@@ -47,7 +48,9 @@ for url in endpoints:
                 try:
                     data = json.loads(text)
                     entry["json_keys"] = (
-                        list(data.keys())[:30] if isinstance(data, dict) else type(data).__name__
+                        list(data.keys())[:30]
+                        if isinstance(data, dict)
+                        else type(data).__name__
                     )
                 except Exception as exc:  # noqa: BLE001
                     entry["json_err"] = str(exc)

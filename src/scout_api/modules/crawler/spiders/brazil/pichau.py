@@ -7,6 +7,7 @@ import logging
 import re
 from decimal import Decimal, InvalidOperation
 from typing import Any, Literal
+
 from scrapy.http import Response
 
 from ...core.exceptions import MissingPriceError, ParseError, RequestError
@@ -342,8 +343,10 @@ class PichauSpider(BaseStoreSpider):
             )
         if "site em manutenção" in text or "pru pru" in text:
             raise ParseError("Pichau em manutenção / HTML não-PDP")
-        if response.status == 404 or "página não encontrada" in title or (
-            "pagina nao encontrada" in title
+        if (
+            response.status == 404
+            or "página não encontrada" in title
+            or ("pagina nao encontrada" in title)
         ):
             raise ParseError("Página de produto Pichau não encontrada")
         if "404" in title and "pichau" in title:
@@ -490,12 +493,16 @@ class PichauSpider(BaseStoreSpider):
             if isinstance(value, (dict, list)):
                 continue
             # Magento select attributes often store option IDs (e.g. socket=539).
-            if str(key).casefold() in {
-                "socket",
-                "plataforma",
-                "formato_placa",
-                "tipo_de_memoria",
-            } and str(value).strip().isdigit():
+            if (
+                str(key).casefold()
+                in {
+                    "socket",
+                    "plataforma",
+                    "formato_placa",
+                    "tipo_de_memoria",
+                }
+                and str(value).strip().isdigit()
+            ):
                 continue
             label = _SPEC_LABELS.get(key, key.replace("_", " ").strip().title())
             if isinstance(value, bool):

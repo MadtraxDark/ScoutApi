@@ -40,8 +40,8 @@ def process_store_logo_jobs(
     jobs = [
         (row.store_key, row.logo_version, row.logo_original_file_id) for row in rows
     ]
-    for row in rows:
-        row.logo_processing_status = "processing"
+    for job_row in rows:
+        job_row.logo_processing_status = "processing"
     session.commit()
 
     processed = 0

@@ -40,8 +40,8 @@ class RequestError(CrawlerError):
 # triggers when they are emitted instead of the legacy UPSTREAM_BLOCKED.
 PROXY_FALLBACK_ERROR_CODES: frozenset[str] = frozenset(
     {
-        "UPSTREAM_BLOCKED",        # legacy — alias; still recognised on read
-        "UPSTREAM_WAF_BLOCKED",    # preferred: WAF/challenge blocks SERP fetch
+        "UPSTREAM_BLOCKED",  # legacy — alias; still recognised on read
+        "UPSTREAM_WAF_BLOCKED",  # preferred: WAF/challenge blocks SERP fetch
         "SEARCH_INCOMPLETE_RESPONSE",  # preferred: SERP arrived but unparseable
         "AUTH_REQUIRED",
     }

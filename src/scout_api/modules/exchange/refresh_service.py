@@ -46,14 +46,22 @@ def _fetch_with_fallback(
         rates = primary.fetch()
         logger.info(
             "exchange_fetch_ok",
-            extra={"provider": primary.source_id, "count": len(rates), "context": context},
+            extra={
+                "provider": primary.source_id,
+                "count": len(rates),
+                "context": context,
+            },
         )
         return rates, None
     except Exception as exc:  # noqa: BLE001
         err = f"{primary.source_id}: {exc}"
         logger.warning(
             "exchange_fetch_failed",
-            extra={"provider": primary.source_id, "error": str(exc), "context": context},
+            extra={
+                "provider": primary.source_id,
+                "error": str(exc),
+                "context": context,
+            },
         )
         if fallback is None:
             return [], err
@@ -73,7 +81,11 @@ def _fetch_with_fallback(
             err2 = f"{fallback.source_id}: {exc2}"
             logger.warning(
                 "exchange_fetch_fallback_failed",
-                extra={"provider": fallback.source_id, "error": str(exc2), "context": context},
+                extra={
+                    "provider": fallback.source_id,
+                    "error": str(exc2),
+                    "context": context,
+                },
             )
             return [], f"{err}; {err2}"
 
@@ -108,7 +120,9 @@ def run_refresh(
     override_tourism_sell: Decimal | None = None
     if cfg.exchange_rate_manual_usd_brl_tourism_sell:
         try:
-            override_tourism_sell = Decimal(cfg.exchange_rate_manual_usd_brl_tourism_sell)
+            override_tourism_sell = Decimal(
+                cfg.exchange_rate_manual_usd_brl_tourism_sell
+            )
             logger.warning(
                 "exchange_rate_manual_override_active",
                 extra={"override_tourism_sell": str(override_tourism_sell)},
@@ -148,9 +162,14 @@ def run_refresh(
         all_fetched = [
             r
             for r in all_fetched
-            if not (r.base_currency == "USD" and r.quote_currency == "BRL" and r.rate_type == RateType.TOURISM_SELL)
+            if not (
+                r.base_currency == "USD"
+                and r.quote_currency == "BRL"
+                and r.rate_type == RateType.TOURISM_SELL
+            )
         ]
         from scout_api.modules.exchange.domain import FetchedRate as FR  # noqa: PLC0415
+
         all_fetched.append(
             FR(
                 base_currency="USD",
@@ -175,13 +194,15 @@ def run_refresh(
 
     for rate, errs in rejected:
         errors.append(
-            f"rejected {rate.base_currency}/{rate.quote_currency}/{rate.rate_type}: {errs}"
+            f"rejected "
+            f"{rate.base_currency}/{rate.quote_currency}/{rate.rate_type}: {errs}"
         )
 
     # Prefer BCB as SoT for PTAX in latest table; Valor PTAX stays in observations
     # only when BCB is present (unique key is pair+rate_type).
     has_bcb_ptax = any(
-        r.source == "bcb_ptax" and r.rate_type == RateType.PTAX_SELL for r in valid_rates
+        r.source == "bcb_ptax" and r.rate_type == RateType.PTAX_SELL
+        for r in valid_rates
     )
     to_persist = [
         r

@@ -1,0 +1,21 @@
+from pathlib import Path
+
+base = Path('src/scout_api/modules')
+def edit(name, replacements):
+    path = base / name
+    text = path.read_text(encoding='utf-8')
+    for old, new in replacements:
+        assert old in text, (name, old)
+        text = text.replace(old, new)
+    path.write_text(text, encoding='utf-8')
+
+edit('matching/match_run_claim.py', [('if result.rowcount:', 'if cast(CursorResult[Any], result).rowcount:')])
+edit('exchange/repository.py', [('from decimal import Decimal', 'from decimal import Decimal\nfrom typing import Any, cast'), ('from sqlalchemy.orm import Session', 'from sqlalchemy.orm import Session\nfrom sqlalchemy.engine import CursorResult'), ('return result.rowcount  # type: ignore[return-value]', 'return cast(CursorResult[Any], result).rowcount')])
+edit('matching/store_logo_worker.py', [('for row in rows:\n        row.logo_processing_status = "processing"', 'for job_row in rows:\n        job_row.logo_processing_status = "processing"')])
+edit('matching/search_adapters/registry.py', [('from typing import TYPE_CHECKING', 'from typing import TYPE_CHECKING, cast'), ('dict[str, type]', 'dict[str, type[StoreSearchAdapter]]'), ('found[store_key] = value', 'found[store_key] = cast(type[StoreSearchAdapter], value)'), ('return cls()  # type: ignore[return-value]', 'return cls()')])
+edit('crawler/spiders/paraguay/nissei.py', [('if isinstance(structured.get("brand"), dict):\n            structured["brand"] = structured["brand"].get("name")', 'structured_brand = structured.get("brand")\n        if isinstance(structured_brand, dict):\n            structured["brand"] = structured_brand.get("name")')])
+edit('crawler/core/profile_lock.py', [('import logging', 'import importlib\nimport logging'), ('TYPE_CHECKING, Protocol', 'TYPE_CHECKING, Protocol, cast'), ('logger = logging.getLogger(__name__)', 'class _FcntlModule(Protocol):\n    LOCK_EX: int\n    LOCK_NB: int\n    LOCK_UN: int\n\n    def flock(self, fd: int, operation: int) -> None: ...\n\n\nlogger = logging.getLogger(__name__)'), ('import fcntl as _fcntl', '_fcntl = cast(_FcntlModule, importlib.import_module("fcntl"))')])
+edit('crawler/services/store_aware_fetcher.py', [('import logging', 'import logging\nfrom collections.abc import Callable'), ('from typing import Any', 'from typing import Any, cast'), ('return post(url, headers=headers, data=data, timeout_ms=timeout_ms)', 'return cast(Callable[..., tuple[int, str]], post)(\n            url, headers=headers, data=data, timeout_ms=timeout_ms\n        )'), ('return cur.browser_post  # type: ignore[no-any-return]', 'return getattr(cur, "browser_post")')])
+edit('matching/router.py', [('metadata[key].display_name\n                if key in metadata and metadata[key].display_name', '(metadata[key].display_name or config.label)\n                if key in metadata')])
+edit('matching/models.py', [('from typing import Any', 'from typing import Any, Literal'), ('logo_processing_status: Mapped[str]', 'logo_processing_status: Mapped[Literal["ready", "pending", "processing", "failed"]]')])
+edit('crawler/services/html_fetcher.py', [('from typing import Any, Protocol', 'from typing import Any, Protocol, TypedDict'), ('def call(self, fn: Callable[[], Any]) -> Any:', 'def call[T](self, fn: Callable[[], T]) -> T:'), ('fut: Future[Any] = Future()', 'fut: Future[T] = Future()'), ('def _owner_call_with_profile_lease(', 'def _owner_call_with_profile_lease[T]('), ('operation: Callable[[], Any],', 'operation: Callable[[], T],'), (') -> Any:\n        def _run() -> Any:', ') -> T:\n        def _run() -> T:'), ('if slot_lease is not None and session is not None:\n                        if self._scheduler.retain_profile_lock(slot_lease):', 'scheduler = self._scheduler\n                    if slot_lease is not None and session is not None and scheduler is not None:\n                        if scheduler.retain_profile_lock(slot_lease):'), ('_sched_common = {', '_sched_common: _BrowserSchedulerOptions = {'), ('from typing import Any, Protocol, TypedDict\n', 'from typing import Any, Protocol, TypedDict\n\n\nclass _BrowserSchedulerOptions(TypedDict):\n    enabled: bool\n    capacity: int\n    queue_capacity: int\n    queue_timeout_ms: int\n    profile_lock_mode: str\n    profile_lock_ttl_ms: int\n    profile_lock_timeout_ms: int\n    profile_base_path: Path\n    redis_gateway: Any | None\n\n')])

@@ -1,4 +1,5 @@
-﻿"""Analyze live Pichau Ryzen PDP HTML (no spider changes)."""
+"""Analyze live Pichau Ryzen PDP HTML (no spider changes)."""
+
 from __future__ import annotations
 
 import json
@@ -67,7 +68,7 @@ def main() -> None:
         return s
 
     snips: dict[str, str | None] = {}
-    for label, needle in needles.items():
+    for label, _needle in needles.items():
         snips[label] = snip_at(idxs[label], label)
 
     # Extra: first few \"product\": occurrences count

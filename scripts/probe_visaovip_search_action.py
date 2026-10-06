@@ -85,7 +85,7 @@ class ActionCaptureResult:
 
     # Discovery
     action_id_from_chunk: str | None = None
-    action_id_stable: bool | None = None   # same across 2 page fetches?
+    action_id_stable: bool | None = None  # same across 2 page fetches?
     chunk_url: str | None = None
     build_id: str | None = None
 
@@ -99,7 +99,7 @@ class ActionCaptureResult:
     response_products_count: int | None = None
 
     # Flags
-    requires_session: bool | None = None   # 401/403 without cookies?
+    requires_session: bool | None = None  # 401/403 without cookies?
     error: str | None = None
     duration_ms: float = 0.0
 
@@ -115,6 +115,7 @@ class ProbeReport:
 # ---------------------------------------------------------------------------
 # Action ID discovery (HTTP, no browser)
 # ---------------------------------------------------------------------------
+
 
 def _http_headers(referer: str | None = None) -> dict[str, str]:
     h = {
@@ -167,7 +168,8 @@ def discover_action_ids(
         build_m = re.search(r'"b":"([A-Za-z0-9_-]{10,30})"', html)
         build_id = build_m.group(1) if build_m else None
 
-        # Find candidate chunk scripts (there are many; we look for the SERP-specific one)
+        # Find candidate chunk scripts (there are many; we look for the SERP-specific
+        # one)
         chunk_urls = _SERP_CHUNK_RE.findall(html)
 
         # Try each chunk to find searchProducts; bail after first hit
@@ -196,7 +198,9 @@ def discover_action_ids(
     return dict(_STATIC_ACTION_IDS), None, None
 
 
-def verify_action_id_live(action_id: str, slug: str = "asus-tuf-gaming-b650m-e-wifi") -> bool:
+def verify_action_id_live(
+    action_id: str, slug: str = "asus-tuf-gaming-b650m-e-wifi"
+) -> bool:
     """
     Probe whether an action ID is currently valid by making a POST and
     checking for '404 Server action not found' vs other response.
@@ -252,6 +256,7 @@ def check_action_id_stability(
 # Server Action POST call (HTTP, no browser)
 # ---------------------------------------------------------------------------
 
+
 def _build_action_payload(
     search_term: str,
     search_type: str = "termo",
@@ -273,13 +278,13 @@ def _build_action_payload(
         p(searchTerm, searchType, characteristicFilters, locale, page, perPage, stock)
     """
     args = [
-        search_term,           # t: searchTerm (e.g. "asus-tuf-gaming-b650m-e-wifi")
-        search_type,           # r: type ("termo", "categoria", "marca", "destaques", etc.)
-        characteristics or [], # l: characteristic filters (empty for unfiltered)
-        locale,                # e: locale ("pt-BR")
-        page,                  # o: page
-        per_page,              # n: perPage
-        stock,                 # s: stock filter ("all" | "in" | "out")
+        search_term,  # t: searchTerm (e.g. "asus-tuf-gaming-b650m-e-wifi")
+        search_type,  # r: type ("termo", "categoria", "marca", "destaques", etc.)
+        characteristics or [],  # l: characteristic filters (empty for unfiltered)
+        locale,  # e: locale ("pt-BR")
+        page,  # o: page
+        per_page,  # n: perPage
+        stock,  # s: stock filter ("all" | "in" | "out")
     ]
     return json.dumps(args, ensure_ascii=False).encode("utf-8")
 
@@ -366,6 +371,7 @@ def call_search_action(
 # Browser-based capture (Camoufox)
 # ---------------------------------------------------------------------------
 
+
 def _capture_via_browser(
     profile_dir: Path,
     slug: str,
@@ -411,15 +417,18 @@ def _capture_via_browser(
                 if "next-action" not in hdrs:
                     return
                 body_bytes = req.post_data_buffer
-                action_requests.append({
-                    "url": req.url,
-                    "headers": hdrs,
-                    "body": body_bytes[:4096].hex() if body_bytes else None,
-                    "body_text": (
-                        body_bytes[:4096].decode("utf-8", errors="replace")
-                        if body_bytes else None
-                    ),
-                })
+                action_requests.append(
+                    {
+                        "url": req.url,
+                        "headers": hdrs,
+                        "body": body_bytes[:4096].hex() if body_bytes else None,
+                        "body_text": (
+                            body_bytes[:4096].decode("utf-8", errors="replace")
+                            if body_bytes
+                            else None
+                        ),
+                    }
+                )
 
             page.on("request", on_request)
 
@@ -435,12 +444,14 @@ def _capture_via_browser(
                     resp_body = resp.body()[:2048].decode("utf-8", errors="replace")
                 except Exception:  # noqa: BLE001
                     resp_body = None
-                finished.append({
-                    "url": resp.url,
-                    "status": resp.status,
-                    "headers": dict(resp.headers),
-                    "body": resp_body,
-                })
+                finished.append(
+                    {
+                        "url": resp.url,
+                        "status": resp.status,
+                        "headers": dict(resp.headers),
+                        "body": resp_body,
+                    }
+                )
 
             page.on("response", on_response)
 
@@ -480,8 +491,12 @@ def run_probe(profile_dir: Path, use_browser: bool = True) -> ProbeReport:
 
     print("\n=== Step 1: Discover action IDs from SERP chunk JS ===")
     action_ids, chunk_url, build_id = discover_action_ids()
-    search_action_id = action_ids.get("searchProducts", _STATIC_ACTION_IDS["searchProducts"])
-    facets_action_id = action_ids.get("searchFacets", _STATIC_ACTION_IDS["searchFacets"])
+    search_action_id = action_ids.get(
+        "searchProducts", _STATIC_ACTION_IDS["searchProducts"]
+    )
+    facets_action_id = action_ids.get(
+        "searchFacets", _STATIC_ACTION_IDS["searchFacets"]
+    )
 
     print(f"  searchProducts ID : {search_action_id}")
     print(f"  searchFacets ID   : {facets_action_id}")
@@ -512,8 +527,13 @@ def run_probe(profile_dir: Path, use_browser: bool = True) -> ProbeReport:
         res.chunk_url = chunk_url
         res.build_id = build_id
         http_results.append(res)
-        print(f"    status={res.response_status} content_type={res.response_content_type}")
-        print(f"    products={res.response_products_count} duration={res.duration_ms:.0f}ms")
+        print(
+            f"    status={res.response_status} content_type={res.response_content_type}"
+        )
+        print(
+            f"    products={res.response_products_count} "
+            f"duration={res.duration_ms:.0f}ms"
+        )
         print(f"    error={res.error}")
         if res.response_body_sample:
             print(f"    body[:200]={res.response_body_sample[:200]!r}")
@@ -564,10 +584,10 @@ def _verdict(
     s25_prods = s25 and (s25.response_products_count or 0) > 0
 
     # Browser capture found the actual POST
-    browser_b650m = next((r for r in browser_results if r.get("query_id") == "b650m_wifi"), None)
-    browser_b650m_captured = bool(
-        browser_b650m and browser_b650m.get("request_url")
+    browser_b650m = next(
+        (r for r in browser_results if r.get("query_id") == "b650m_wifi"), None
     )
+    browser_b650m_captured = bool(browser_b650m and browser_b650m.get("request_url"))
 
     lines = []
 
@@ -575,18 +595,26 @@ def _verdict(
     lines.append("=== ACTION ID STABILITY ===")
     if not id_live and b650m_404:
         lines.append(
-            "ACTION_ID_ROTATED: YES — Static ID returns 404 'Server action not found'. "
-            "The Visão VIP build has been updated since the original probe (2026-09-23). "
-            "Action IDs are DEPLOY-COUPLED: they change on every Next.js build/deploy."
+            "ACTION_ID_ROTATED: YES — Static ID returns 4"
+            "04 'Server action not found'. The Visão VIP "
+            "build has been updated since the original pr"
+            "obe (2026-09-23). Action IDs are DEPLOY-COUP"
+            "LED: they change on every Next.js build/depl"
+            "oy."
         )
         lines.append(
-            "DISCOVERY_PATH: The SERP page HTML is served as a 5.8 KB Cloudflare shell "
-            "to raw HTTP requests. Dynamic action ID discovery REQUIRES a real browser "
-            "(Camoufox) to: (1) load the full SERP page, (2) intercept the Server Action "
-            "POST request made by the page JS, or (3) extract chunk JS URLs and scan them."
+            "DISCOVERY_PATH: The SERP page HTML is served"
+            " as a 5.8 KB Cloudflare shell to raw HTTP re"
+            "quests. Dynamic action ID discovery REQUIRES"
+            " a real browser (Camoufox) to: (1) load the "
+            "full SERP page, (2) intercept the Server Act"
+            "ion POST request made by the page JS, or (3)"
+            " extract chunk JS URLs and scan them."
         )
     elif id_live:
-        lines.append("ACTION_ID_LIVE: YES — Current static ID responds to POST (not 404).")
+        lines.append(
+            "ACTION_ID_LIVE: YES — Current static ID responds to POST (not 404)."
+        )
     else:
         lines.append("ACTION_ID_LIVE: UNKNOWN — Could not verify.")
 
@@ -596,11 +624,15 @@ def _verdict(
     if b650m_200 and b650m_prods:
         lines.append("HTTP B650M: ✓ 200 OK with products.")
     elif b650m_200:
-        lines.append("HTTP B650M: ⚠ 200 OK but 0 products (payload encoding needs calibration).")
+        lines.append(
+            "HTTP B650M: ⚠ 200 OK but 0 products (payload encoding needs calibration)."
+        )
     elif b650m_404:
         lines.append("HTTP B650M: ✗ 404 — action ID is stale (deploy-rotated).")
     else:
-        lines.append(f"HTTP B650M: ✗ status={b650m.response_status if b650m else 'N/A'}")
+        lines.append(
+            f"HTTP B650M: ✗ status={b650m.response_status if b650m else 'N/A'}"
+        )
 
     if s25_200 and s25_prods:
         lines.append("HTTP S25:   ✓ 200 OK with products.")
@@ -624,28 +656,33 @@ def _verdict(
     # The 404 confirms ID rotation, not endpoint death.
     # Strategy A is GO with the requirement: discovery via browser on each session.
     lines.append(
-        "GO (with condition) — Strategy A (Server Action HTTP) is viable.\n"
-        "\n"
-        "Evidence:\n"
-        "- Prior probe (2026-09-23, action_empty_arr.body): 200 OK with clean JSON.\n"
-        "  Response shape: {products:[...], facets:{...}, totalCount:N, currentPage:0, totalPages:N}\n"
-        "- Current 404: deploy happened between probe and now — IDs ROTATED, not dead.\n"
-        "- No session/cookie requirement observed (prior 200 OK without cookies).\n"
-        "- Response: Content-Type text/x-component (RSC), no CF challenge.\n"
-        "\n"
-        "Condition: action ID MUST be discovered fresh per browser session.\n"
-        "  Discovery path: Camoufox loads SERP page → intercepts actual Server Action\n"
-        "  POST → extracts Next-Action header value (or scans chunk JS returned in\n"
-        "  full HTML for createServerReference pattern).\n"
-        "\n"
-        "Payload (confirmed arg order from chunk_serp3 JS decompile):\n"
-        "  searchProducts(searchTerm, searchType, characteristics[], locale, page, perPage, stock)\n"
-        "  e.g.: ['asus-tuf-gaming-b650m-e-wifi', 'termo', [], 'pt-BR', 1, 24, 'all']\n"
-        "  Content-Type: text/plain;charset=UTF-8\n"
-        "  Next-Action: <discovered_id>\n"
-        "\n"
-        "Open question: S25 Ultra — whether 0 products means genuine empty or wrong payload.\n"
-        "  Requires re-probe with fresh action ID (Task 9 validation step)."
+        "GO (with condition) — Strategy A (Server Act"
+        "ion HTTP) is viable.\n\nEvidence:\n- Prior prob"
+        "e (2026-09-23, action_empty_arr.body): 200 O"
+        "K with clean JSON.\n  Response shape: {produc"
+        "ts:[...], facets:{...}, totalCount:N, curren"
+        "tPage:0, totalPages:N}\n- Current 404: deploy"
+        " happened between probe and now — IDs ROTATE"
+        "D, not dead.\n- No session/cookie requirement"
+        " observed (prior 200 OK without cookies).\n- "
+        "Response: Content-Type text/x-component (RSC"
+        "), no CF challenge.\n\nCondition: action ID MU"
+        "ST be discovered fresh per browser session.\n"
+        "  Discovery path: Camoufox loads SERP page →"
+        " intercepts actual Server Action\n  POST → ex"
+        "tracts Next-Action header value (or scans ch"
+        "unk JS returned in\n  full HTML for createSer"
+        "verReference pattern).\n\nPayload (confirmed a"
+        "rg order from chunk_serp3 JS decompile):\n  s"
+        "earchProducts(searchTerm, searchType, charac"
+        "teristics[], locale, page, perPage, stock)\n "
+        " e.g.: ['asus-tuf-gaming-b650m-e-wifi', 'ter"
+        "mo', [], 'pt-BR', 1, 24, 'all']\n  Content-Ty"
+        "pe: text/plain;charset=UTF-8\n  Next-Action: "
+        "<discovered_id>\n\nOpen question: S25 Ultra — "
+        "whether 0 products means genuine empty or wr"
+        "ong payload.\n  Requires re-probe with fresh "
+        "action ID (Task 9 validation step)."
     )
 
     return "GO", "\n".join(lines)
@@ -702,15 +739,20 @@ def update_working_log(report: ProbeReport) -> None:
 
     if _SA_SECTION_MARKER in content:
         pattern = re.compile(
-            r"(\n?" + re.escape(_SA_SECTION_MARKER) + r".*?)(?=\n## |\n### (?!"
-            + re.escape("Server Action") + r")|\Z)",
+            r"(\n?"
+            + re.escape(_SA_SECTION_MARKER)
+            + r".*?)(?=\n## |\n### (?!"
+            + re.escape("Server Action")
+            + r")|\Z)",
             re.DOTALL,
         )
         content = pattern.sub(block, content, count=1)
     elif "## Trilha VISAO_VIP_DISCOVERY" in content:
         insert_after = content.rfind("---", 0, len(content))
         if insert_after > 0:
-            content = content[:insert_after + 3] + "\n" + block + content[insert_after + 3:]
+            content = (
+                content[: insert_after + 3] + "\n" + block + content[insert_after + 3 :]
+            )
         else:
             content += "\n" + block
     else:
@@ -723,6 +765,7 @@ def update_working_log(report: ProbeReport) -> None:
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
+
 
 def main() -> int:
     parser = argparse.ArgumentParser(
@@ -782,7 +825,9 @@ def main() -> int:
 
     # Save JSON
     json_out = (
-        ROOT / "memory" / "working"
+        ROOT
+        / "memory"
+        / "working"
         / f"probe_search_action_{report.timestamp[:10]}.json"
     )
     try:

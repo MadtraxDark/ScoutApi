@@ -1,4 +1,5 @@
-"""BCP Referential provider — scrapes https://www.bcp.gov.py/webapps/web/cotizacion/monedas.
+"""BCP Referential provider — scrapes
+https://www.bcp.gov.py/webapps/web/cotizacion/monedas.
 
 Parses table#cotizacion-interbancaria for:
 - USD row: ₲/ME column → USD/PYG official rate
@@ -68,7 +69,9 @@ def _clean(s: str) -> str:
     return _HTML_TAG_RE.sub("", s).strip()
 
 
-def parse_bcp_html(html: str, *, fetched_at: datetime | None = None) -> list[FetchedRate]:
+def parse_bcp_html(
+    html: str, *, fetched_at: datetime | None = None
+) -> list[FetchedRate]:
     """Parse BCP cotización HTML.
 
     Args:
@@ -92,8 +95,10 @@ def parse_bcp_html(html: str, *, fetched_at: datetime | None = None) -> list[Fet
     table_html = table_match.group(1)
     rows = _TABLE_ROW_RE.findall(table_html)
 
-    rates_by_symbol: dict[str, tuple[str, str]] = {}  # symbol → (me_usd, guaranis_per_me)
-    for name_raw, symbol_raw, me_usd_raw, guaranis_raw in rows:
+    rates_by_symbol: dict[
+        str, tuple[str, str]
+    ] = {}  # symbol → (me_usd, guaranis_per_me)
+    for _name_raw, symbol_raw, me_usd_raw, guaranis_raw in rows:
         symbol = symbol_raw.strip().upper()
         rates_by_symbol[symbol] = (_clean(me_usd_raw), _clean(guaranis_raw))
 
@@ -128,7 +133,9 @@ def parse_bcp_html(html: str, *, fetched_at: datetime | None = None) -> list[Fet
     try:
         guaranis_per_brl = parse_py_decimal(guaranis_per_brl_raw)
     except ValueError as exc:
-        raise ValueError(f"bcp_referential: cannot parse guaranis_per_brl: {exc}") from exc
+        raise ValueError(
+            f"bcp_referential: cannot parse guaranis_per_brl: {exc}"
+        ) from exc
 
     if guaranis_per_brl == 0:
         raise ValueError("bcp_referential: guaranis_per_brl is zero")
@@ -177,7 +184,9 @@ class BcpReferentialProvider:
             fetched_at = datetime.now(UTC)
             return parse_bcp_html(html, fetched_at=fetched_at)
         except httpx.HTTPStatusError as exc:
-            logger.warning("bcp_referential_http_error", extra={"status": exc.response.status_code})
+            logger.warning(
+                "bcp_referential_http_error", extra={"status": exc.response.status_code}
+            )
             raise
         except httpx.TimeoutException:
             logger.warning("bcp_referential_timeout")

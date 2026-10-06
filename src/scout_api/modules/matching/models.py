@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Any
+from typing import Any, Literal
 
 from sqlalchemy import (
     Boolean,
@@ -76,9 +76,9 @@ class StoreMetadata(Base):
     logo_optimized_file_id: Mapped[str | None] = mapped_column(
         String(128), nullable=True
     )
-    logo_processing_status: Mapped[str] = mapped_column(
-        String(24), nullable=False, default="ready"
-    )
+    logo_processing_status: Mapped[
+        Literal["ready", "pending", "processing", "failed"]
+    ] = mapped_column(String(24), nullable=False, default="ready")
     logo_version: Mapped[str | None] = mapped_column(String(36), nullable=True)
     logo_processing_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
@@ -371,6 +371,9 @@ class ProductMatchRun(Base):
         Uuid(as_uuid=True), nullable=True, index=True
     )
     reference_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reference_payload: Mapped[dict[str, Any] | None] = mapped_column(
+        JSON, nullable=True
+    )
 
     started_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow, nullable=False
@@ -453,6 +456,8 @@ class MatchStoreRun(Base):
         Integer, default=0, nullable=False
     )
 
+    matched_decision: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    matched_payload: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     matched_listing_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True), nullable=True
     )

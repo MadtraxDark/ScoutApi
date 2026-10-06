@@ -1,4 +1,5 @@
 """Fetch Pichau Ryzen PDP, decode Next.js flight, dump Magento product blob."""
+
 from __future__ import annotations
 
 import json
@@ -141,11 +142,7 @@ def collect_extra_attrs(clean: dict) -> dict:
             for item in c:
                 if not isinstance(item, dict):
                     continue
-                code = (
-                    item.get("attribute_code")
-                    or item.get("code")
-                    or item.get("key")
-                )
+                code = item.get("attribute_code") or item.get("code") or item.get("key")
                 val = item.get("value") if "value" in item else item.get("valor")
                 if code and val not in (None, "", [], {}):
                     extra[f"{container_key}.{code}"] = val
@@ -206,8 +203,7 @@ def main() -> None:
         {
             k
             for k, v in clean.items()
-            if v not in (None, "", [], {})
-            and any(s in k.lower() for s in _INTERESTING)
+            if v not in (None, "", [], {}) and any(s in k.lower() for s in _INTERESTING)
         }
     )
     mpn_like: dict = {}
@@ -219,11 +215,7 @@ def main() -> None:
             mpn_like[k] = v
 
     media = clean.get("media_gallery") or clean.get("media_gallery_entries") or []
-    cats = (
-        clean.get("categories")
-        or clean.get("category")
-        or clean.get("category_ids")
-    )
+    cats = clean.get("categories") or clean.get("category") or clean.get("category_ids")
 
     # Non-null scalar/list attribute-looking keys (socket, cores, etc.)
     attr_values = {
@@ -242,9 +234,7 @@ def main() -> None:
     }
 
     summary = {
-        "flight_decode_works": bool(
-            product.get("pichau_prices") or product.get("sku")
-        ),
+        "flight_decode_works": bool(product.get("pichau_prices") or product.get("sku")),
         "flight_push_count": push_count,
         "flight_blob_size": len(blob),
         "sku": clean.get("sku"),

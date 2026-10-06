@@ -11,11 +11,11 @@ import pytest
 from scout_api.modules.crawler.core.exceptions import RequestError
 from scout_api.modules.crawler.core.fingerprints import canonicalize_url
 from scout_api.modules.crawler.models.product import ProductPriceItem
-from scout_api.modules.matching.search_candidate import SearchCandidate
 from scout_api.modules.crawler.services.store_resolver import eligible_match_store_keys
 from scout_api.modules.crawler.stores import STORE_CONFIGS
 from scout_api.modules.matching.product_match_service import ProductMatchService
 from scout_api.modules.matching.schemas import MatchRequest
+from scout_api.modules.matching.search_candidate import SearchCandidate
 
 
 def _item(**overrides: object) -> ProductPriceItem:
@@ -224,7 +224,9 @@ def test_browser_infrastructure_error_fail_fast_not_no_match() -> None:
     search.is_search_supported.return_value = True
     search_calls: list[str] = []
 
-    def _search(store_key: str, query: str, *, limit: int = 5, **_kwargs: object) -> list[SearchCandidate]:
+    def _search(
+        store_key: str, query: str, *, limit: int = 5, **_kwargs: object
+    ) -> list[SearchCandidate]:
         del limit
         search_calls.append(f"{store_key}:{query}")
         raise RequestError(
@@ -326,7 +328,9 @@ def test_match_wave2_stores_run_concurrently(
     peak = 0
     lock = threading.Lock()
 
-    def _search(store_key: str, query: str, *, limit: int = 5, **_kwargs: object) -> list[SearchCandidate]:
+    def _search(
+        store_key: str, query: str, *, limit: int = 5, **_kwargs: object
+    ) -> list[SearchCandidate]:
         del query, limit
         nonlocal active, peak
         with lock:

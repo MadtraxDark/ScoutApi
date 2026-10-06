@@ -58,7 +58,7 @@ _TIMESTAMP_RE = re.compile(r"(\d{2})/(\d{2})/(\d{4})\s+(\d{2}):(\d{2})")
 
 _TOURISM_TICKER_RE = re.compile(
     r'data-symbol=["\']USDBRLT_VALR["\'][^>]*>.*?'
-    r'ticker__item__value[^>]*>\s*R\$\s*([0-9.,]+)\s*<',
+    r"ticker__item__value[^>]*>\s*R\$\s*([0-9.,]+)\s*<",
     re.DOTALL | re.IGNORECASE,
 )
 
@@ -100,13 +100,13 @@ def parse_valor_table_html(
     for name_raw, buy_raw, sell_raw, ts_raw in rows:
         name_clean = name_raw.strip().lower()
         name_norm = _norm(name_raw)
-        for key, needles, types in _ROW_RULES:
-            if key in found:
+        for _key, needles, types in _ROW_RULES:
+            if _key in found:
                 continue
             if any(n in name_norm or n in name_clean for n in needles):
                 if "dolar" not in name_norm and "dólar" not in name_clean:
                     continue
-                found[key] = (
+                found[_key] = (
                     buy_raw.strip(),
                     sell_raw.strip(),
                     ts_raw.strip(),
@@ -118,7 +118,7 @@ def parse_valor_table_html(
         raise ValueError("valor_data: 'Dólar Turismo' row not found in HTML")
 
     results: list[FetchedRate] = []
-    for key, (buy_raw, sell_raw, ts_raw, (buy_type, sell_type)) in found.items():
+    for _key, (buy_raw, sell_raw, ts_raw, (buy_type, sell_type)) in found.items():
         buy_rate = parse_br_decimal(buy_raw)
         sell_rate = parse_br_decimal(sell_raw)
         source_ts = _parse_source_timestamp(ts_raw)
@@ -209,7 +209,9 @@ def parse_valor_converter_ptax(
     ]
 
 
-def parse_valor_html(html: str, *, fetched_at: datetime | None = None) -> list[FetchedRate]:
+def parse_valor_html(
+    html: str, *, fetched_at: datetime | None = None
+) -> list[FetchedRate]:
     """Backward-compatible entry: prefer table, else tourism ticker."""
     try:
         return parse_valor_table_html(html, fetched_at=fetched_at)
@@ -236,7 +238,9 @@ class ValorDataProvider:
             # 1) Try legacy/full table on valor-data
             moedas_html = client.get(_VALOR_MOEDAS_URL).text
             try:
-                results.extend(parse_valor_table_html(moedas_html, fetched_at=fetched_at))
+                results.extend(
+                    parse_valor_table_html(moedas_html, fetched_at=fetched_at)
+                )
             except ValueError:
                 logger.info("valor_data_table_unavailable_trying_fallbacks")
                 # 2) Tourism ticker on Valor Investe
@@ -250,7 +254,9 @@ class ValorDataProvider:
                         parse_valor_converter_ptax(moedas_html, fetched_at=fetched_at)
                     )
                 except ValueError as exc:
-                    logger.debug("valor_data_ptax_embed_skipped", extra={"error": str(exc)})
+                    logger.debug(
+                        "valor_data_ptax_embed_skipped", extra={"error": str(exc)}
+                    )
 
             duration_ms = int((time.perf_counter() - started) * 1000)
             logger.info(
@@ -258,7 +264,9 @@ class ValorDataProvider:
                 extra={"count": len(results), "duration_ms": duration_ms},
             )
             if not any(r.rate_type == RateType.TOURISM_SELL for r in results):
-                raise ValueError("valor_data: tourism_sell not obtained from any source")
+                raise ValueError(
+                    "valor_data: tourism_sell not obtained from any source"
+                )
             return results
         except httpx.HTTPStatusError as exc:
             logger.warning(

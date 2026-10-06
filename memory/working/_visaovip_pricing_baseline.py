@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import re
 import time
-from decimal import Decimal
 from pathlib import Path
 
 from scout_api.modules.crawler.core.scrape_guard import ScrapeGuard
@@ -36,7 +35,9 @@ def _item_snapshot(item) -> dict:
         "currency": getattr(item, "currency", None),
         "price": str(item.price) if getattr(item, "price", None) is not None else None,
         "pix_price": (
-            str(item.pix_price) if getattr(item, "pix_price", None) is not None else None
+            str(item.pix_price)
+            if getattr(item, "pix_price", None) is not None
+            else None
         ),
         "original_price": (
             str(item.original_price)
@@ -65,7 +66,11 @@ def _audit_html(html: str) -> dict:
     blob = spider._flight_blob(html)
     product = spider._parse_product_object(blob)
     keys = sorted(product.keys()) if product else []
-    money_keys = [k for k in keys if re.search(r"price|promo|currency|cambio|rate|iva|pix", k, re.I)]
+    money_keys = [
+        k
+        for k in keys
+        if re.search(r"price|promo|currency|cambio|rate|iva|pix", k, re.I)
+    ]
     body_has = {
         "U$": "U$" in html or "U\\$" in html,
         "G$": "G$" in html or "G\\$" in html,
@@ -91,7 +96,9 @@ def _audit_html(html: str) -> dict:
         "product_keys": keys,
         "money_related_keys": money_keys,
         "product_price": product.get("productPrice") if product else None,
-        "product_promotion_price": product.get("productPromotionPrice") if product else None,
+        "product_promotion_price": product.get("productPromotionPrice")
+        if product
+        else None,
         "is_product_promotion": product.get("isProductPromotion") if product else None,
         "product_subset": {
             k: product.get(k)
@@ -160,7 +167,11 @@ def main() -> None:
     for c in candidates:
         title = (c.title or "").casefold()
         url = (c.url or "").casefold()
-        if TITLE_HINT.casefold() in title or MPN_QUERY.casefold() in title or MPN_QUERY.casefold() in url:
+        if (
+            TITLE_HINT.casefold() in title
+            or MPN_QUERY.casefold() in title
+            or MPN_QUERY.casefold() in url
+        ):
             chosen = c
             break
     if chosen is None and candidates:
@@ -217,8 +228,14 @@ def main() -> None:
         ],
     }
 
-    OUT.write_text(json.dumps(payload, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
-    print(json.dumps({"wrote": str(OUT), "chosen": payload.get("chosen_candidate")}, indent=2))
+    OUT.write_text(
+        json.dumps(payload, indent=2, ensure_ascii=False, default=str), encoding="utf-8"
+    )
+    print(
+        json.dumps(
+            {"wrote": str(OUT), "chosen": payload.get("chosen_candidate")}, indent=2
+        )
+    )
     print("gt_in_serp", payload["match_serp_baseline"]["gt_in_serp"])
     if payload.get("crawl_full_no_images"):
         c = payload["crawl_full_no_images"]

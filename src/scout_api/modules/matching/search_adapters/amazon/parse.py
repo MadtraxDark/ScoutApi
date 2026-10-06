@@ -47,16 +47,19 @@ def parse_amazon_search_results(
         if canonical in seen:
             continue
         seen.add(canonical)
-        title = " ".join(
-            part.strip()
-            for part in card.css(
-                "h2 a span::text, h2 span.a-text-normal::text, h2 span::text, "
-                "a.a-link-normal.s-line-clamp-2 span::text, "
-                "span.a-size-medium.a-color-base.a-text-normal::text, "
-                "span.a-size-base-plus.a-color-base.a-text-normal::text"
-            ).getall()
-            if part and part.strip()
-        ) or None
+        title = (
+            " ".join(
+                part.strip()
+                for part in card.css(
+                    "h2 a span::text, h2 span.a-text-normal::text, h2 span::text, "
+                    "a.a-link-normal.s-line-clamp-2 span::text, "
+                    "span.a-size-medium.a-color-base.a-text-normal::text, "
+                    "span.a-size-base-plus.a-color-base.a-text-normal::text"
+                ).getall()
+                if part and part.strip()
+            )
+            or None
+        )
         candidates.append(
             SearchCandidate(
                 url=absolute,

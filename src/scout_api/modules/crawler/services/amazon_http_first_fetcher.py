@@ -209,13 +209,17 @@ class AmazonHttpFirstHtmlFetcher:
             try:
                 retry = self._http.fetch(url)
             except RequestError:
-                return self._annotate_http(response, url=url)
+                return self._browser.fetch(url)
             retry_text = retry.text or ""
-            if not (
-                is_challenge_page(retry_text)
-                or is_amazon_robot_check(retry_text)
-                or is_auth_wall_page(retry_text, url=str(retry.url or url))
-            ) and looks_like_amazon_pdp(retry):
+            if (
+                not (
+                    is_challenge_page(retry_text)
+                    or is_amazon_robot_check(retry_text)
+                    or is_auth_wall_page(retry_text, url=str(retry.url or url))
+                )
+                and looks_like_amazon_pdp(retry)
+                and (has_buybox_price_signal(retry) or looks_like_clear_oos(retry))
+            ):
                 logger.info(
                     "amazon_http_empty_buybox_retry",
                     extra={
@@ -225,7 +229,8 @@ class AmazonHttpFirstHtmlFetcher:
                 )
                 return self._annotate_http(retry, url=url)
 
-        return self._annotate_http(response, url=url)
+        logger.info("amazon_http_empty_buybox_fallback_browser", extra={"url": url})
+        return self._browser.fetch(url)
 
     @staticmethod
     def _annotate_http(response: HtmlResponse, *, url: str) -> HtmlResponse:

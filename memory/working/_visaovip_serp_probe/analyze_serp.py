@@ -47,11 +47,15 @@ def analyze_text(name: str, text: str) -> None:
     prods = sorted(set(PROD_PATH.findall(text)))
     next_f = len(re.findall(r"self\.__next_f\.push", text))
     urls = sorted({u for u in URL_PAT.findall(text) if APIISH.search(u)})
-    strings = sorted({m.group(1) for m in STRING_RE.finditer(text) if APIISH.search(m.group(1))})
+    strings = sorted(
+        {m.group(1) for m in STRING_RE.finditer(text) if APIISH.search(m.group(1))}
+    )
     flight_hits: list[str] = []
     for m in FLIGHT_RE.finditer(text):
         chunk = m.group(1)
-        if re.search(r"busca|product|result|termo|autocomplete|/prod/|nenhum", chunk, re.I):
+        if re.search(
+            r"busca|product|result|termo|autocomplete|/prod/|nenhum", chunk, re.I
+        ):
             sample = chunk[:260].replace("\\n", " | ").replace('\\"', '"')
             flight_hits.append(sample)
             if len(flight_hits) >= 8:

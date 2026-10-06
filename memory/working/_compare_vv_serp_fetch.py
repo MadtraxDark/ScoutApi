@@ -28,7 +28,8 @@ def main() -> None:
     http_ms = int((time.perf_counter() - t0) * 1000)
     http_n = _parse(http.content, str(http.url))
     print(
-        f"http status={http.status_code} ms={http_ms} candidates={http_n} len={len(http.content)}"
+        f"http status={http.status_code} ms={http_ms} "
+        f"candidates={http_n} len={len(http.content)}"
     )
 
     from scout_api.modules.crawler.services.product_scrape_service import (

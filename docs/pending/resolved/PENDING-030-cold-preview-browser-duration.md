@@ -1,6 +1,17 @@
 # PENDING-030 — Duração do preview frio Magazine Luiza
 
-- Status: OPEN
+- Status: RESOLVED
+- Resolvida: 2026-10-05
+
+## Resolução final
+
+Causa demonstrada por subestágios: warmup/networkidle aguardavam tráfego sem relação com oferta. Corrigida prontidão na homepage e PDP, preservando pausa configurada e resolução anti-bot. Budget escolhido pelo usuário: 15 s frio/1 s cache. Três amostras finais reais: 13.772,60/7.171,11/7.466,80 ms; cache 0,38/0,31/0,40 ms; 25 imagens e oferta válida em todas, sem proxy. Não representa P95 populacional.
+
+[Evidências e limites](../../performance/pending-recovery-2026-10-05.md).
+
+## Histórico anterior à resolução
+
+
 - Tipo: PERFORMANCE
 - Prioridade: P2
 - Área: crawler/magazineluiza
@@ -48,6 +59,6 @@ reduzir essa nova medição. Não é uma declaração de ausência de solução 
 
 ## Relacionado
 
-- [Relatório da importação](../performance/import-images-2026-10-05.md)
-- [Regras de performance](../../.cursor/rules/performance.mdc)
+- [Relatório da importação](../../performance/import-images-2026-10-05.md)
+- [Regras de performance](../../../.cursor/rules/performance.mdc)
 - ADR 0039 e ADR 0048.

@@ -4,13 +4,16 @@ Usage (inside Docker container or locally):
     python scripts/probe_profile_lock_multiprocess.py [--path PATH] [--redis REDIS_URL]
 
 What it tests:
-    Phase 1 — File lock exclusivity: process A holds LOCK_EX; process B cannot acquire simultaneously.
-    Phase 2 — File lock crash recovery: kill -9 A; measure until B acquires (OS releases on death).
+    Phase 1 — File lock exclusivity: process A holds LOCK_EX; process B cannot acquire
+    simultaneously.
+    Phase 2 — File lock crash recovery: kill -9 A; measure until B acquires (OS releases
+    on death).
     Phase 3 — Redis SET NX exclusivity: process A holds key; B's SET NX fails.
     Phase 4 — Redis TTL crash recovery: A os._exit; B polls until TTL expires.
 
 Decision gate: results are written to working log PROFILE_LOCK_PROOF and stdout.
-Exit code 0 = both backends proven usable. Exit code 1 = file lock unreliable on this volume.
+Exit code 0 = both backends proven usable. Exit code 1 = file lock unreliable on this
+volume.
 """
 
 from __future__ import annotations
@@ -28,15 +31,19 @@ from pathlib import Path
 # File lock helpers
 # ---------------------------------------------------------------------------
 
+
 def _try_import_fcntl() -> object:
     try:
         import fcntl
+
         return fcntl
     except ImportError:
         return None
 
 
-def _file_lock_holder(profile_path: str, hold_seconds: float, ready_event_path: str) -> None:
+def _file_lock_holder(
+    profile_path: str, hold_seconds: float, ready_event_path: str
+) -> None:
     """Child process: acquire exclusive file lock, signal ready, then hold."""
     lock_file = Path(profile_path) / ".profile.lock"
     lock_file.parent.mkdir(parents=True, exist_ok=True)
@@ -72,13 +79,17 @@ def _file_lock_challenger(
             try:
                 fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
                 elapsed = time.monotonic() - start
-                Path(result_path).write_text(json.dumps({"status": "ACQUIRED", "elapsed_s": elapsed}))
+                Path(result_path).write_text(
+                    json.dumps({"status": "ACQUIRED", "elapsed_s": elapsed})
+                )
                 fcntl.flock(f.fileno(), fcntl.LOCK_UN)
                 return
             except BlockingIOError:
                 if time.monotonic() >= deadline:
                     elapsed = time.monotonic() - start
-                    Path(result_path).write_text(json.dumps({"status": "TIMEOUT", "elapsed_s": elapsed}))
+                    Path(result_path).write_text(
+                        json.dumps({"status": "TIMEOUT", "elapsed_s": elapsed})
+                    )
                     return
                 time.sleep(0.05)
 
@@ -87,11 +98,13 @@ def _file_lock_challenger(
 # Redis lock helpers
 # ---------------------------------------------------------------------------
 
-def _redis_lock_holder(redis_url: str, key: str, token: str, ttl_ms: int, ready_path: str, hold_s: float) -> None:
+
+def _redis_lock_holder(
+    redis_url: str, key: str, token: str, ttl_ms: int, ready_path: str, hold_s: float
+) -> None:
     """Child process: SET NX the key, signal ready, hold, then release."""
     try:
         from redis import Redis
-        from redis.exceptions import RedisError
     except ImportError:
         Path(ready_path).write_text("REDIS_UNAVAILABLE")
         return
@@ -105,13 +118,24 @@ def _redis_lock_holder(redis_url: str, key: str, token: str, ttl_ms: int, ready_
         Path(ready_path).write_text("LOCKED")
         time.sleep(hold_s)
         # Clean release
-        _LUA = b"if redis.call('get',KEYS[1])==ARGV[1] then return redis.call('del',KEYS[1]) else return 0 end"
+        _LUA = (
+            b"if redis.call('get',KEYS[1])==ARGV[1] then re"
+            b"turn redis.call('del',KEYS[1]) else return 0 "
+            b"end"
+        )
         r.eval(_LUA, 1, key, token.encode())
     except Exception as exc:
         Path(ready_path).write_text(f"ERROR:{exc}")
 
 
-def _redis_lock_challenger(redis_url: str, key: str, token_b: str, ttl_ms: int, timeout_s: float, result_path: str) -> None:
+def _redis_lock_challenger(
+    redis_url: str,
+    key: str,
+    token_b: str,
+    ttl_ms: int,
+    timeout_s: float,
+    result_path: str,
+) -> None:
     """Child process: poll SET NX until success or timeout."""
     try:
         from redis import Redis
@@ -127,16 +151,21 @@ def _redis_lock_challenger(redis_url: str, key: str, token_b: str, ttl_ms: int, 
         if ok:
             elapsed = time.monotonic() - start
             r.delete(key)
-            Path(result_path).write_text(json.dumps({"status": "ACQUIRED", "elapsed_s": elapsed}))
+            Path(result_path).write_text(
+                json.dumps({"status": "ACQUIRED", "elapsed_s": elapsed})
+            )
             return
         time.sleep(0.05)
     elapsed = time.monotonic() - start
-    Path(result_path).write_text(json.dumps({"status": "TIMEOUT", "elapsed_s": elapsed}))
+    Path(result_path).write_text(
+        json.dumps({"status": "TIMEOUT", "elapsed_s": elapsed})
+    )
 
 
 # ---------------------------------------------------------------------------
 # Probe phases
 # ---------------------------------------------------------------------------
+
 
 def phase_file_exclusivity(profile_path: Path, tmp_dir: Path) -> dict:
     """Phase 1: process B must NOT acquire while A holds."""
@@ -160,7 +189,9 @@ def phase_file_exclusivity(profile_path: Path, tmp_dir: Path) -> dict:
             break
         time.sleep(0.05)
 
-    ready_msg = Path(ready_path).read_text() if Path(ready_path).exists() else "NO_SIGNAL"
+    ready_msg = (
+        Path(ready_path).read_text() if Path(ready_path).exists() else "NO_SIGNAL"
+    )
     if "UNAVAILABLE" in ready_msg:
         holder.join(timeout=2)
         return {"phase": 1, "status": "SKIPPED", "reason": ready_msg}
@@ -174,7 +205,11 @@ def phase_file_exclusivity(profile_path: Path, tmp_dir: Path) -> dict:
     challenger.start()
     challenger.join(timeout=5.0)
 
-    result_raw = Path(result_path).read_text() if Path(result_path).exists() else '{"status":"NO_RESULT"}'
+    result_raw = (
+        Path(result_path).read_text()
+        if Path(result_path).exists()
+        else '{"status":"NO_RESULT"}'
+    )
     result = json.loads(result_raw)
     holder.join(timeout=5.0)
 
@@ -210,7 +245,9 @@ def phase_file_crash_recovery(profile_path: Path, tmp_dir: Path) -> dict:
             break
         time.sleep(0.05)
 
-    ready_msg = Path(ready_path).read_text() if Path(ready_path).exists() else "NO_SIGNAL"
+    ready_msg = (
+        Path(ready_path).read_text() if Path(ready_path).exists() else "NO_SIGNAL"
+    )
     if "UNAVAILABLE" in ready_msg:
         holder.terminate()
         holder.join(timeout=2)
@@ -225,13 +262,17 @@ def phase_file_crash_recovery(profile_path: Path, tmp_dir: Path) -> dict:
     challenger.start()
     time.sleep(0.1)  # Let challenger reach the blocking flock call
 
-    kill_time = time.monotonic()
+    _kill_time = time.monotonic()
     os.kill(holder.pid, signal.SIGKILL)  # type: ignore[arg-type]
     holder.join(timeout=2.0)
 
     # Challenger should now unblock quickly
     challenger.join(timeout=10.0)
-    result_raw = Path(result_path).read_text() if Path(result_path).exists() else '{"status":"NO_RESULT"}'
+    result_raw = (
+        Path(result_path).read_text()
+        if Path(result_path).exists()
+        else '{"status":"NO_RESULT"}'
+    )
     result = json.loads(result_raw)
 
     elapsed_after_kill = result.get("elapsed_s", 0) - 0.1  # subtract pre-kill wait
@@ -243,7 +284,10 @@ def phase_file_crash_recovery(profile_path: Path, tmp_dir: Path) -> dict:
     status = "PASS" if recovered else "FAIL"
     print(f"  Holder killed (pid={holder.pid})")
     print(f"  Challenger result: {result}")
-    print(f"  → Phase 2: {status} (fast_recovery={recovered}, elapsed_after_kill={elapsed_after_kill:.3f}s)")
+    print(
+        f"  → Phase 2: {status} (fast_recovery={recovered}, "
+        f"elapsed_after_kill={elapsed_after_kill:.3f}s)"
+    )
     return result
 
 
@@ -251,6 +295,7 @@ def phase_redis_exclusivity(redis_url: str, tmp_dir: Path) -> dict:
     """Phase 3: Redis SET NX — process A holds; B must fail."""
     print("\n[Phase 3] Redis SET NX exclusivity ...")
     import hashlib
+
     key = f"scout:probe:profile_lock:{hashlib.sha256(b'probe_test').hexdigest()[:8]}"
     ready_path = str(tmp_dir / "redis_holder_ready.txt")
     result_path = str(tmp_dir / "redis_challenger_result.json")
@@ -269,7 +314,9 @@ def phase_redis_exclusivity(redis_url: str, tmp_dir: Path) -> dict:
             break
         time.sleep(0.05)
 
-    ready_msg = Path(ready_path).read_text() if Path(ready_path).exists() else "NO_SIGNAL"
+    ready_msg = (
+        Path(ready_path).read_text() if Path(ready_path).exists() else "NO_SIGNAL"
+    )
     if "UNAVAILABLE" in ready_msg or "ERROR" in ready_msg:
         holder.join(timeout=2)
         return {"phase": 3, "status": "SKIPPED", "reason": ready_msg}
@@ -283,7 +330,11 @@ def phase_redis_exclusivity(redis_url: str, tmp_dir: Path) -> dict:
     challenger.start()
     challenger.join(timeout=5.0)
 
-    result_raw = Path(result_path).read_text() if Path(result_path).exists() else '{"status":"NO_RESULT"}'
+    result_raw = (
+        Path(result_path).read_text()
+        if Path(result_path).exists()
+        else '{"status":"NO_RESULT"}'
+    )
     result = json.loads(result_raw)
     holder.join(timeout=5.0)
 
@@ -301,6 +352,7 @@ def phase_redis_crash_recovery(redis_url: str, tmp_dir: Path) -> dict:
     """Phase 4: Redis crash recovery — A os._exit, B should acquire within TTL."""
     print("\n[Phase 4] Redis TTL crash recovery ...")
     import hashlib
+
     key = f"scout:probe:profile_lock:{hashlib.sha256(b'probe_crash').hexdigest()[:8]}"
     ready_path = str(tmp_dir / "redis_crash_ready.txt")
     result_path = str(tmp_dir / "redis_crash_result.json")
@@ -321,7 +373,9 @@ def phase_redis_crash_recovery(redis_url: str, tmp_dir: Path) -> dict:
             break
         time.sleep(0.05)
 
-    ready_msg = Path(ready_path).read_text() if Path(ready_path).exists() else "NO_SIGNAL"
+    ready_msg = (
+        Path(ready_path).read_text() if Path(ready_path).exists() else "NO_SIGNAL"
+    )
     if "UNAVAILABLE" in ready_msg or "ERROR" in ready_msg:
         holder.join(timeout=2)
         return {"phase": 4, "status": "SKIPPED", "reason": ready_msg}
@@ -339,7 +393,11 @@ def phase_redis_crash_recovery(redis_url: str, tmp_dir: Path) -> dict:
     holder.join(timeout=2.0)
 
     challenger.join(timeout=10.0)
-    result_raw = Path(result_path).read_text() if Path(result_path).exists() else '{"status":"NO_RESULT"}'
+    result_raw = (
+        Path(result_path).read_text()
+        if Path(result_path).exists()
+        else '{"status":"NO_RESULT"}'
+    )
     result = json.loads(result_raw)
 
     elapsed = result.get("elapsed_s", 0)
@@ -357,6 +415,7 @@ def phase_redis_crash_recovery(redis_url: str, tmp_dir: Path) -> dict:
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Profile lock multiprocess probe")
@@ -393,7 +452,7 @@ def main() -> int:
     file_lock_reliable = True
     redis_lock_reliable = True
 
-    print(f"\n=== Profile Lock Probe ===")
+    print("\n=== Profile Lock Probe ===")
     print(f"Profile path: {profile_path}")
     print(f"Redis URL: {args.redis}")
 
@@ -437,7 +496,10 @@ def main() -> int:
         print("→ RECOMMENDATION: Use CAMOUFOX_PROFILE_LOCK=file (Redis unavailable)")
     else:
         recommended = "off"
-        print("→ WARNING: Both backends failed — CAMOUFOX_PROFILE_LOCK=off (NO protection)")
+        print(
+            "→ WARNING: Both backends failed — CAMOUFOX_PR"
+            "OFILE_LOCK=off (NO protection)"
+        )
 
     proof = {
         "profile_path": str(profile_path),

@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from decimal import Decimal
+from typing import Any, cast
 
 from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.orm import Session
 
 from scout_api.modules.exchange.domain import FetchedRate, RateStatus, RateType
@@ -100,7 +102,7 @@ class ExchangeRateRepository:
             .where(ExchangeRateLatest.fetched_at < cutoff)
             .values(status="stale", updated_at=datetime.now(UTC))
         )
-        return result.rowcount  # type: ignore[return-value]
+        return cast(CursorResult[Any], result).rowcount
 
     def increment_failures(
         self,

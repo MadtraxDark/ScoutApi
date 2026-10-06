@@ -1,6 +1,8 @@
 """Check the current content of the chunk vs what was captured."""
-import httpx
+
 import re
+
+import httpx
 
 BASE_URL = "https://www.visaovip.com"
 CHUNK = "/_next/static/chunks/5304c8ab31d35f98.js"

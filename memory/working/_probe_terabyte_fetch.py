@@ -28,7 +28,9 @@ def _title(html: str) -> str:
     return re.sub(r"\s+", " ", m.group(1)).strip() if m else ""
 
 
-def _signals(html: str, *, status: int, final_url: str, bytes_n: int, ms: float) -> dict:
+def _signals(
+    html: str, *, status: int, final_url: str, bytes_n: int, ms: float
+) -> dict:
     lower = html.casefold()
     title = _title(html)
     return {
@@ -113,7 +115,9 @@ def main() -> None:
         "curl_cffi_clean": curl_cffi_fetch(URL_CLEAN),
     }
     out_path = OUT / "http_baseline.json"
-    out_path.write_text(json.dumps(results, indent=2, ensure_ascii=False), encoding="utf-8")
+    out_path.write_text(
+        json.dumps(results, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
     print(json.dumps(results, indent=2, ensure_ascii=False))
 
 

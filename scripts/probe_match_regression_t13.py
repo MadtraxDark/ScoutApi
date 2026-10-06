@@ -49,10 +49,8 @@ from scout_api.modules.matching.identity import (
     identity_reference_item,
 )
 from scout_api.modules.matching.product_match_service import ProductMatchService
-from scout_api.modules.matching.schemas import MatchRequest
 from scout_api.modules.matching.search_candidate import SearchCandidate
 from scout_api.modules.matching.store_search_service import StoreSearchService
-
 
 # ---------------------------------------------------------------------------
 # Test subjects (plain data — no production hardcode)
@@ -70,7 +68,11 @@ SUBJECTS: list[dict[str, Any]] = [
     {
         "id": "b650m_wifi",
         "category": "motherboard",
-        "title": "Placa Mae Asus Tuf Gaming B650M-E WIFI, DDR5, Socket AMD AM5, M-ATX, Chipset AMD B650, TUF-GAMING-B650M-E-WIFI",
+        ("title"): (
+            "Placa Mae Asus Tuf Gaming B650M-E WIFI, DDR5,"
+            " Socket AMD AM5, M-ATX, Chipset AMD B650, TUF"
+            "-GAMING-B650M-E-WIFI"
+        ),
         "brand": "Asus",
         "model": None,
         "variant": None,
@@ -246,7 +248,10 @@ def probe_search_isolation(
 _MOCK_CANDIDATE_POOL: dict[str, dict[str, dict[str, str]]] = {
     "b650m_wifi": {
         "kabum": {
-            "title": "Placa-Mãe ASUS TUF Gaming B650M-E, WIFI, AMD AM5, B650, DDR5, Preto - 90MB1FV0-M0EAY0",
+            ("title"): (
+                "Placa-Mãe ASUS TUF Gaming B650M-E, WIFI, AMD "
+                "AM5, B650, DDR5, Preto - 90MB1FV0-M0EAY0"
+            ),
             "brand": "ASUS",
             "store": "kabum",
             "product_id": "523145",
@@ -283,6 +288,7 @@ def _make_mock_scrape_service(subject_id: str) -> MagicMock:
     """Mock ProductScrapeService that returns realistic candidate items."""
     from datetime import UTC, datetime
     from decimal import Decimal
+
     from scout_api.modules.crawler.models.product import ProductPriceItem
 
     candidates = _MOCK_CANDIDATE_POOL.get(subject_id, {})
@@ -290,20 +296,22 @@ def _make_mock_scrape_service(subject_id: str) -> MagicMock:
     scrape = MagicMock()
 
     def _scrape(url: str, **_kwargs: object) -> ProductPriceItem:
-        for store_key, info in candidates.items():
+        for _store_key, info in candidates.items():
             if info["url"] in url or info["product_id"] in url:
-                return ProductPriceItem.model_validate({
-                    "store": info["store"],
-                    "country": "BR",
-                    "product_id": info["product_id"],
-                    "url": info["url"],
-                    "canonical_url": info["url"],
-                    "title": info["title"],
-                    "brand": info.get("brand"),
-                    "currency": "BRL",
-                    "price": Decimal("4999.00"),
-                    "scraped_at": datetime.now(UTC),
-                })
+                return ProductPriceItem.model_validate(
+                    {
+                        "store": info["store"],
+                        "country": "BR",
+                        "product_id": info["product_id"],
+                        "url": info["url"],
+                        "canonical_url": info["url"],
+                        "title": info["title"],
+                        "brand": info.get("brand"),
+                        "currency": "BRL",
+                        "price": Decimal("4999.00"),
+                        "scraped_at": datetime.now(UTC),
+                    }
+                )
         raise RequestError(f"No mock for URL: {url}", code="UPSTREAM_BLOCKED")
 
     scrape.scrape.side_effect = _scrape
@@ -320,7 +328,9 @@ def _make_mock_search_service(
     search = MagicMock()
     search.is_search_supported.return_value = True
 
-    def _search(store: str, query: str, *, limit: int = 5, **_kwargs: object) -> list[SearchCandidate]:
+    def _search(
+        store: str, query: str, *, limit: int = 5, **_kwargs: object
+    ) -> list[SearchCandidate]:
         if store == blocked_store:
             raise RequestError(f"Blocked store {store}", code="UPSTREAM_BLOCKED")
         if store in candidates:
@@ -374,8 +384,7 @@ def probe_full_match(
 
             # Detect browser usage (any candidate call going through browser)
             browser_used = any(
-                "browser" in str(call).lower()
-                for call in scrape.scrape.call_args_list
+                "browser" in str(call).lower() for call in scrape.scrape.call_args_list
             )
 
             results.append(
@@ -438,9 +447,11 @@ def probe_blocked_store(
         )
         duration_ms = (time.perf_counter() - t0) * 1000
         # Blocked store should appear in errors, NOT hang the run
-        blocked_errored = any(e.store == blocked_store for e in resp.errors)
-        other_stores_ran = len(resp.matches) + len(resp.unmatched_stores) + len(
-            [e for e in resp.errors if e.store != blocked_store]
+        _blocked_errored = any(e.store == blocked_store for e in resp.errors)
+        other_stores_ran = (
+            len(resp.matches)
+            + len(resp.unmatched_stores)
+            + len([e for e in resp.errors if e.store != blocked_store])
         )
         return BlockedStoreResult(
             subject_id=subject_id,
@@ -487,20 +498,23 @@ def probe_visaovip_isolation() -> dict[str, Any]:
     # PDP scrape mock — independent path, succeeds
     from datetime import UTC, datetime
     from decimal import Decimal
+
     from scout_api.modules.crawler.models.product import ProductPriceItem
 
-    pdp_item = ProductPriceItem.model_validate({
-        "store": "visaovip",
-        "country": "PY",
-        "product_id": "41749",
-        "url": "https://www.visaovip.com/prod/placas-mae-amd/41749/",
-        "canonical_url": "https://www.visaovip.com/prod/placas-mae-amd/41749/",
-        "title": "Placa Mãe Asus Tuf Gaming B650M-E Wi-Fi Socket AM5 DDR5",
-        "brand": "ASUS",
-        "currency": "USD",
-        "price": Decimal("199.00"),
-        "scraped_at": datetime.now(UTC),
-    })
+    pdp_item = ProductPriceItem.model_validate(
+        {
+            "store": "visaovip",
+            "country": "PY",
+            "product_id": "41749",
+            "url": "https://www.visaovip.com/prod/placas-mae-amd/41749/",
+            "canonical_url": "https://www.visaovip.com/prod/placas-mae-amd/41749/",
+            "title": "Placa Mãe Asus Tuf Gaming B650M-E Wi-Fi Socket AM5 DDR5",
+            "brand": "ASUS",
+            "currency": "USD",
+            "price": Decimal("199.00"),
+            "scraped_at": datetime.now(UTC),
+        }
+    )
 
     scrape = MagicMock()
     # First call: reference URL PDP → success (separate from search path)
@@ -533,7 +547,9 @@ def probe_visaovip_isolation() -> dict[str, Any]:
         result["visaovip_search_error"] = vv_error.code if vv_error else None
         result["pdp_path_distinct"] = True  # PDP scrape still callable
         result["duration_ms"] = duration_ms
-        result["notes"].append("Run completed with search UPSTREAM_BLOCKED → correctly isolated.")
+        result["notes"].append(
+            "Run completed with search UPSTREAM_BLOCKED → correctly isolated."
+        )
         result["notes"].append(
             "PDP scrape path (scrape.scrape) is a separate code path from search;"
             " search error does not propagate to PDP calls."
@@ -557,7 +573,9 @@ def print_summary_table(summary: ProbeSummary) -> None:
 
     # Search results table
     print("\n### Search Isolation Results\n")
-    print(f"{'Subject':<22} {'Store':<16} {'Outcome':<12} {'Cands':<6} {'Duration':>10}")
+    print(
+        f"{'Subject':<22} {'Store':<16} {'Outcome':<12} {'Cands':<6} {'Duration':>10}"
+    )
     print("-" * 70)
     for r in summary.search_results:
         print(
@@ -571,7 +589,10 @@ def print_summary_table(summary: ProbeSummary) -> None:
 
     # Match results table
     print("\n### Full Match Results (mock search+scrape)\n")
-    print(f"{'Subject':<22} {'Category':<14} {'Outcome':<10} {'Matched':<20} {'Duration':>10}")
+    print(
+        f"{'Subject':<22} {'Category':<14} "
+        f"{'Outcome':<10} {'Matched':<20} {'Duration':>10}"
+    )
     print("-" * 70)
     for r in summary.match_results:
         matched = ", ".join(r.stores_matched) or "—"
@@ -611,8 +632,12 @@ def print_summary_table(summary: ProbeSummary) -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Task 13 multi-category regression probe")
-    parser.add_argument("--search-only", action="store_true", help="Skip mock match; live search only")
+    parser = argparse.ArgumentParser(
+        description="Task 13 multi-category regression probe"
+    )
+    parser.add_argument(
+        "--search-only", action="store_true", help="Skip mock match; live search only"
+    )
     parser.add_argument(
         "--stores",
         nargs="+",
@@ -637,7 +662,10 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    print(f"=== Task 13 Regression Probe — {time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())} ===")
+    print(
+        f"=== Task 13 Regression Probe — "
+        f"{time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())} ==="
+    )
     print(f"Stores (live search): {args.stores}")
     print(f"Match subjects: {args.match_subjects}")
     print(f"Blocked store test: {args.blocked_subject} / blocked={args.blocked_store}")
@@ -648,7 +676,7 @@ def main() -> int:
     print("\n--- Phase 1: Live search isolation ---")
     t_search = time.perf_counter()
     summary.search_results = probe_search_isolation(SUBJECTS, args.stores)
-    print(f"Search isolation done in {(time.perf_counter() - t_search)*1000:.0f}ms")
+    print(f"Search isolation done in {(time.perf_counter() - t_search) * 1000:.0f}ms")
 
     if not args.search_only:
         # --- 2. Full match with mock (B650M + S25) ---
@@ -659,7 +687,7 @@ def main() -> int:
             match_subjects,
             target_stores=["kabum", "magazineluiza", "pichau"],
         )
-        print(f"Match probe done in {(time.perf_counter() - t_match)*1000:.0f}ms")
+        print(f"Match probe done in {(time.perf_counter() - t_match) * 1000:.0f}ms")
 
         # --- 3. Blocked store probe ---
         print("\n--- Phase 3: Blocked store probe ---")
@@ -675,7 +703,10 @@ def main() -> int:
             blocked_store=args.blocked_store,
         )
         summary.blocked_store_results.append(blocked_result)
-        print(f"Blocked store probe done in {(time.perf_counter() - t_blocked)*1000:.0f}ms")
+        print(
+            f"Blocked store probe done in "
+            f"{(time.perf_counter() - t_blocked) * 1000:.0f}ms"
+        )
 
         # --- 4. VisaoVIP search ≠ PDP ---
         print("\n--- Phase 4: VisaoVIP search isolation from PDP ---")
@@ -684,7 +715,9 @@ def main() -> int:
     print_summary_table(summary)
 
     # Save JSON
-    out_path = ROOT / "memory" / "working" / f"regression_t13_{summary.timestamp[:10]}.json"
+    out_path = (
+        ROOT / "memory" / "working" / f"regression_t13_{summary.timestamp[:10]}.json"
+    )
     try:
         out_path.write_text(
             json.dumps(asdict(summary), indent=2, default=str),

@@ -193,9 +193,7 @@ class ProductScrapeService:
         cached = self._guard.get_cached(url)
         if cached is not None:
             if not include_images and cached.images:
-                return cached.model_copy(
-                    update={"images": [], "image_candidates": []}
-                )
+                return cached.model_copy(update={"images": [], "image_candidates": []})
             if include_images and cached.images:
                 return cached
             if not include_images:

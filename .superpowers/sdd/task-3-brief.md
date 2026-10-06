@@ -29,7 +29,7 @@ class StoreAttemptBudget:
 Settings (names exact):
 
 ```python
-match_search_query_budget: int = 5          # MAX, not mandatory count
+match_search_query_budget: int = 5  # MAX, not mandatory count
 match_external_attempt_budget: int = 12
 match_browser_navigation_budget: int = 8
 ```

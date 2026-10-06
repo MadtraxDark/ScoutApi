@@ -6,7 +6,7 @@ This module resolves only the FX rate.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 from enum import StrEnum
@@ -16,7 +16,10 @@ class RateType(StrEnum):
     TOURISM_BUY = "tourism_buy"
     """Dólar turismo — compra (instituição compra USD do cliente)."""
     TOURISM_SELL = "tourism_sell"
-    """Dólar turismo — venda (instituição vende USD ao cliente). Business default USD→BRL."""
+    (
+        "Dólar turismo — venda (instituição vende USD "
+        "ao cliente). Business default USD→BRL."
+    )
     PTAX_BUY = "ptax_buy"
     """PTAX BCB — compra (comercial, referência de auditoria)."""
     PTAX_SELL = "ptax_sell"

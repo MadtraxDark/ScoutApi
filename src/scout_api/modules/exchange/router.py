@@ -72,7 +72,9 @@ def list_exchange_rates(
     "/diagnostics",
     response_model=ExchangeRateDiagnosticsResponse,
     summary="Diagnóstico do subsistema de câmbio",
-    description="Retorna estado detalhado do scheduler e das taxas. Acesso restrito a admins.",
+    description=(
+        "Retorna estado detalhado do scheduler e das taxas. Acesso restrito a admins."
+    ),
 )
 def exchange_diagnostics(
     _: Annotated[AuthenticatedPrincipal, Depends(require_admin)],
@@ -85,9 +87,15 @@ def exchange_diagnostics(
     scheduler_info = {}
     if state:
         scheduler_info = {
-            "next_refresh_at": state.next_refresh_at.isoformat() if state.next_refresh_at else None,
-            "last_refresh_at": state.last_refresh_at.isoformat() if state.last_refresh_at else None,
-            "last_success_at": state.last_success_at.isoformat() if state.last_success_at else None,
+            "next_refresh_at": state.next_refresh_at.isoformat()
+            if state.next_refresh_at
+            else None,
+            "last_refresh_at": state.last_refresh_at.isoformat()
+            if state.last_refresh_at
+            else None,
+            "last_success_at": state.last_success_at.isoformat()
+            if state.last_success_at
+            else None,
             "last_error": state.last_error,
             "consecutive_failures": state.consecutive_failures,
         }
@@ -111,7 +119,9 @@ def exchange_diagnostics(
     "/refresh",
     response_model=ExchangeRateRefreshResponse,
     summary="Forçar atualização das taxas de câmbio",
-    description="Dispara um refresh imediato de todos os provedores. Acesso restrito a admins.",
+    description=(
+        "Dispara um refresh imediato de todos os provedores. Acesso restrito a admins."
+    ),
 )
 def trigger_refresh(
     _: Annotated[AuthenticatedPrincipal, Depends(require_admin)],

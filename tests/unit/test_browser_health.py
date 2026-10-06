@@ -8,13 +8,13 @@ import pytest
 
 from scout_api.modules.crawler.core.browser_health import (
     BrowserHealthState,
+    TrialToken,
     browser_unavailable_error,
     classify_browser_error,
     get_browser_circuit,
     is_browser_infrastructure_error,
     is_browser_launch_failure,
     reset_browser_circuit_for_tests,
-    TrialToken,
 )
 from scout_api.modules.crawler.services.html_fetcher import (
     classify_camoufox_navigation_error,

@@ -8,13 +8,13 @@ from pathlib import Path
 
 from scrapy.http import HtmlResponse
 
+from scout_api.core.config import get_settings
 from scout_api.modules.crawler.services.curl_cffi_fetcher import CurlCffiHtmlFetcher
 from scout_api.modules.crawler.services.html_fetcher import (
-    is_challenge_page,
     build_html_fetcher,
+    is_challenge_page,
 )
 from scout_api.modules.crawler.spiders.brazil.terabyteshop import TerabyteShopSpider
-from scout_api.core.config import get_settings
 
 URL_TRACKED = (
     "https://www.terabyteshop.com.br/produto/22809/"
@@ -49,7 +49,8 @@ def summarize(response: HtmlResponse, label: str) -> dict:
         "title": title[:180],
         "challenge": challenge,
         "fetch_metrics": metrics,
-        "has_jsonld_product": '"@type":"Product"' in text or '"@type": "Product"' in text,
+        "has_jsonld_product": '"@type":"Product"' in text
+        or '"@type": "Product"' in text,
         "has_price": '"price"' in text,
         "has_h1": bool(response.css("h1").get()),
     }

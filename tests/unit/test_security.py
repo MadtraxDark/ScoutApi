@@ -93,6 +93,13 @@ def test_product_search_requires_auth(auth_settings: str) -> None:
     assert "secret" not in response.text.lower()
 
 
+def test_match_run_live_requires_auth(auth_settings: str) -> None:
+    client = TestClient(app)
+    response = client.get(f"/match-runs/{uuid4()}/live")
+    assert response.status_code == 401
+    assert response.json()["detail"]["code"] == "UNAUTHORIZED"
+
+
 def test_crawl_rejects_invalid_token(auth_settings: str) -> None:
     client = TestClient(app)
     response = client.post(

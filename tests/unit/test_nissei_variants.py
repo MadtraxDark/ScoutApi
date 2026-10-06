@@ -36,7 +36,9 @@ def _response(name: str, url: str) -> HtmlResponse:
 
 def test_nissei_sole_options_without_storage_in_url() -> None:
     url = "https://nissei.com/br/phone-family-base"
-    item = NisseiSpider().parse_product(_response("configurable_sole_options_no_slug.html", url))
+    item = NisseiSpider().parse_product(
+        _response("configurable_sole_options_no_slug.html", url)
+    )
 
     assert item.canonical_url == url
     assert item.sku == "SKU-256-BLACK"
@@ -71,7 +73,9 @@ def test_nissei_simple_product_with_storage_in_url_and_specs() -> None:
 
 def test_nissei_selected_variant_wins_over_url_slug() -> None:
     url = "https://nissei.com/br/phone-family-base-256-gb-black-titanium-1"
-    item = NisseiSpider().parse_product(_response("structured_wins_over_slug.html", url))
+    item = NisseiSpider().parse_product(
+        _response("structured_wins_over_slug.html", url)
+    )
 
     assert item.metadata["variant"]["storage"] == "512 GB"
     assert item.metadata["variant"]["color"] == "Gray Titanium"
@@ -84,7 +88,9 @@ def test_nissei_selected_variant_wins_over_url_slug() -> None:
 
 def test_nissei_variant_consistency_selected_child() -> None:
     url = "https://nissei.com/br/phone-family-base"
-    item = NisseiSpider().parse_product(_response("variant_consistency_selected.html", url))
+    item = NisseiSpider().parse_product(
+        _response("variant_consistency_selected.html", url)
+    )
 
     assert item.metadata["variant"]["storage"] == "256 GB"
     assert item.metadata["variant"]["color"] == "Black"
@@ -95,7 +101,9 @@ def test_nissei_variant_consistency_selected_child() -> None:
 
 def test_nissei_unselected_multi_options_leave_storage_missing() -> None:
     url = "https://nissei.com/br/phone-family-base"
-    item = NisseiSpider().parse_product(_response("configurable_unselected_multi.html", url))
+    item = NisseiSpider().parse_product(
+        _response("configurable_unselected_multi.html", url)
+    )
 
     # Must NOT pick the first of many options.
     assert item.metadata.get("selected_variant") in ({}, None)
@@ -175,9 +183,7 @@ def test_galaxy_a_series_rejects_against_s_series_on_serp() -> None:
         )
     )
     assert reference.variant_attrs.get("storage") == "256gb"
-    reason = _serp_title_reject_reason(
-        reference, title="Samsung Galaxy S25 Ultra"
-    )
+    reason = _serp_title_reject_reason(reference, title="Samsung Galaxy S25 Ultra")
     assert reason is None
 
 
@@ -261,31 +267,33 @@ def test_nissei_search_keeps_family_candidate_without_storage_in_title() -> None
 
 
 def test_existing_nissei_installment_fixture_still_parses() -> None:
-    body = b"""
-    <main id="maincontent">
-      <title>Placa Madre Gigabyte X870 Aorus Stealth ICE AM5 DDR5 ATX</title>
-      <div class="product-info-main">
-        <h1><span class="base">Placa Madre Gigabyte X870 Aorus Stealth ICE AM5 DDR5 ATX</span></h1>
-        <a class="amshopby-brand-title-link">GIGABYTE</a>
-        <div class="price-box" data-role="priceBox" data-product-id="1644544">
-          <span class="price-wrapper" data-price-amount="3226999.996001"
-                data-price-type="finalPrice">
-            <span class="price">Gs. 3.227.000</span>
-          </span>
-          <meta itemprop="price" content="3226999.996001">
-        </div>
-        <div class="stock available"><span>En stock</span></div>
-        <div class="bancos-adheridos principal-cuotas">
-          <h3>Hasta <span>18</span> cuotas
-            <span>sin intereses de Gs. 179.278</span></h3>
-        </div>
-      </div>
-      <table id="product-attribute-specs-table">
-        <tr><th>UPC</th><td>889523051276</td></tr>
-      </table>
-      <form data-product-sku="148321"></form>
-    </main>
-    """
+    body = (
+        b'\n    <main id="maincontent">\n      <title>Pl'
+        b"aca Madre Gigabyte X870 Aorus Stealth ICE AM"
+        b'5 DDR5 ATX</title>\n      <div class="product'
+        b'-info-main">\n        <h1><span class="base">'
+        b"Placa Madre Gigabyte X870 Aorus Stealth ICE "
+        b'AM5 DDR5 ATX</span></h1>\n        <a class="a'
+        b'mshopby-brand-title-link">GIGABYTE</a>\n     '
+        b'   <div class="price-box" data-role="priceBo'
+        b'x" data-product-id="1644544">\n          <spa'
+        b'n class="price-wrapper" data-price-amount="3'
+        b'226999.996001"\n                data-price-ty'
+        b'pe="finalPrice">\n            <span class="pr'
+        b'ice">Gs. 3.227.000</span>\n          </span>\n'
+        b'          <meta itemprop="price" content="32'
+        b'26999.996001">\n        </div>\n        <div c'
+        b'lass="stock available"><span>En stock</span>'
+        b'</div>\n        <div class="bancos-adheridos '
+        b'principal-cuotas">\n          <h3>Hasta <span'
+        b">18</span> cuotas\n            <span>sin inte"
+        b"reses de Gs. 179.278</span></h3>\n        </d"
+        b'iv>\n      </div>\n      <table id="product-at'
+        b'tribute-specs-table">\n        <tr><th>UPC</t'
+        b"h><td>889523051276</td></tr>\n      </table>\n"
+        b'      <form data-product-sku="148321"></form'
+        b">\n    </main>\n    "
+    )
     url = "https://nissei.com/py/informatica/producto"
     item = NisseiSpider().parse_product(
         HtmlResponse(url, body=body, encoding="utf-8", request=Request(url))

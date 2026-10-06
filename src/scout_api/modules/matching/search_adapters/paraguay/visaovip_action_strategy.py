@@ -113,6 +113,7 @@ def resolve_action_id(
             return discovered
     return None
 
+
 # RSC payload line: "1:<json>" or "1:E<json>" (server error)
 _RSC_DATA_LINE = re.compile(r"^1:(.+)$", re.MULTILINE)
 
@@ -141,9 +142,9 @@ class StrategyResult(StrEnum):
     SUCCESS = "success"
     NO_RESULTS = "no_results"
     BLOCKED = "blocked"
-    UNAVAILABLE = "unavailable"       # action ID rotated / 404 / contract missing
+    UNAVAILABLE = "unavailable"  # action ID rotated / 404 / contract missing
     INVALID_RESPONSE = "invalid_response"  # unexpected JSON shape
-    ERROR = "error"                   # network / unexpected exception
+    ERROR = "error"  # network / unexpected exception
 
 
 # ---------------------------------------------------------------------------

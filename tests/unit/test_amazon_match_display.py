@@ -45,8 +45,9 @@ def test_long_smartphone_title_builds_identity_queries_not_raw_title() -> None:
         identity_reference_item(title, brand="Samsung", category="smartphone")
     )
     queries = build_search_queries(identity)
-    # Progressive ladder: family first, then capacity (ADR 0033 / Magento SERPs).
-    assert queries[0] == "samsung galaxy s25 ultra"
+    # Title-first retrieval preserves explicit category; family remains fallback.
+    assert queries[0] == "celular samsung galaxy s25 ultra 5g 256gb titanio preto"
+    assert "samsung galaxy s25 ultra" in queries
     assert "samsung galaxy s25 ultra 256gb" in queries
     assert title not in queries
     assert any("titanium black" in q or "black" in q for q in queries)
@@ -65,7 +66,8 @@ def test_generic_alphanumeric_model_is_kept_in_search_queries() -> None:
 
     queries = build_search_queries(identity)
 
-    assert queries[0] == "asus vg259q5a"
+    assert queries[0] == "monitor gamer asus tuf full hd fast ips preto vg259q5a"
+    assert "asus vg259q5a" in queries[:3]
     assert "vg259q5a" in queries
     assert "asus preto" not in queries[:2]
     assert title not in queries

@@ -54,8 +54,8 @@ CAPABILITY_TRIAL_TTL_SECONDS: int = 90
 
 
 class StoreCapabilityState(StrEnum):
-    HEALTHY = "healthy"          # CLOSED — normal operation
-    DEGRADED = "degraded"        # HALF_OPEN — one probe allowed
+    HEALTHY = "healthy"  # CLOSED — normal operation
+    DEGRADED = "degraded"  # HALF_OPEN — one probe allowed
     UNAVAILABLE = "unavailable"  # OPEN — fail-fast
 
 
@@ -196,9 +196,7 @@ class StoreCapabilityCircuit:
                 "failures": self._failures,
                 "failure_count": self.failure_count,
                 "circuit_open_count": self.circuit_open_count,
-                "opened_at": (
-                    self._opened_at.isoformat() if self._opened_at else None
-                ),
+                "opened_at": (self._opened_at.isoformat() if self._opened_at else None),
                 "active_trial": (
                     self._active_trial.token_id if self._active_trial else None
                 ),

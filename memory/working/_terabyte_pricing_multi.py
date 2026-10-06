@@ -8,8 +8,6 @@ import time
 from pathlib import Path
 from urllib.parse import urljoin
 
-from scrapy.http import HtmlResponse, Request
-
 from scout_api.modules.crawler.services.curl_cffi_fetcher import CurlCffiHtmlFetcher
 from scout_api.modules.crawler.spiders.brazil.terabyteshop import TerabyteShopSpider
 
@@ -28,9 +26,7 @@ OUT = Path("memory/working/_terabyte_probe/pricing_multi_category.json")
 
 
 def first_product(html: str, base: str) -> str | None:
-    for href in re.findall(
-        r"""href=["']([^"']*/produto/\d+/[^"']*)["']""", html, re.I
-    ):
+    for href in re.findall(r"""href=["']([^"']*/produto/\d+/[^"']*)["']""", html, re.I):
         return urljoin(base, href)
     return None
 

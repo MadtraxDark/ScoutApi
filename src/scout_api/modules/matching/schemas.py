@@ -5,9 +5,10 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import Decimal
 from typing import Any, Literal
+from urllib.parse import parse_qsl, urlsplit
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from scout_api.core.http_url import AbsoluteHttpUrl
 from scout_api.modules.crawler.models.product import ProductOffer, ProductPriceItem
@@ -648,6 +649,59 @@ class MatchStoreRunView(BaseModel):
 class MatchRunDetailView(BaseModel):
     run: MatchRunStatusView
     stores: list[MatchStoreRunView] = Field(default_factory=list)
+
+
+class MatchStoreLiveView(BaseModel):
+    id: UUID
+    store: str
+    store_display_name: str | None = None
+    status: MatchStoreRunStatus
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+    matched_decision: Literal["auto_match", "review"] | None = None
+    matched_listing_id: UUID | None = None
+    matched_store: str | None = None
+    matched_country: str | None = None
+    matched_product_id: str | None = None
+    matched_canonical_url: str | None = None
+    matched_url: str | None = None
+    matched_title: str | None = None
+    matched_price: Decimal | None = None
+    matched_currency: str | None = None
+    matched_confidence: Decimal | None = None
+    converted_price_brl: Decimal | None = None
+    exchange_rate_status: str | None = None
+    exchange_rate_updated_at: datetime | None = None
+    error_code: str | None = None
+
+    @field_validator("matched_url", "matched_canonical_url")
+    @classmethod
+    def public_offer_url(cls, value: str | None) -> str | None:
+        if not value:
+            return None
+        try:
+            parts = urlsplit(value)
+            if parts.scheme not in ("https", "http") or not parts.hostname:
+                return None
+            if parts.username is not None or parts.password is not None:
+                return None
+            private_keys = ("token", "secret", "password", "cookie", "credential")
+            if any(
+                word in key.lower()
+                for key, _ in parse_qsl(parts.query, max_num_fields=100)
+                for word in private_keys
+            ):
+                return None
+        except ValueError:
+            return None
+        return value
+
+
+class MatchRunLiveView(BaseModel):
+    run: MatchRunStatusView
+    is_effectively_active: bool
+    auto_matches_found: int = 0
+    stores: list[MatchStoreLiveView] = Field(default_factory=list)
 
 
 class NotificationView(BaseModel):

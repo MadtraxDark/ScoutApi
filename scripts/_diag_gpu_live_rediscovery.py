@@ -12,16 +12,15 @@ import logging
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from scout_api.modules.crawler.services.search_service import ProductSearchService
 from scrapy.http import HtmlResponse, Request
 
 from scout_api.modules.crawler.models.product import compose_product_price_item
 from scout_api.modules.crawler.services.product_scrape_service import (
     ProductScrapeService,
 )
-from scout_api.modules.crawler.services.search_service import ProductSearchService
 from scout_api.modules.crawler.spiders.paraguay.visaovip import VisaoVipSpider
 from scout_api.modules.matching.engine import MatchingEngine
 from scout_api.modules.matching.identity import (
@@ -30,6 +29,9 @@ from scout_api.modules.matching.identity import (
 )
 from scout_api.modules.matching.product_match_service import ProductMatchService
 from scout_api.modules.matching.schemas import MatchRequest
+
+ROOT = Path(__file__).resolve().parents[1]
+
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 logger = logging.getLogger("diag_gpu")
@@ -105,7 +107,11 @@ def main() -> None:
                 KABUM_EXPECTED_ID if store == "kabum" else MAGALU_EXPECTED_ID,
             }
             or (KABUM_EXPECTED_ID in (c.url or "") if store == "kabum" else False)
-            or (MAGALU_EXPECTED_ID in (c.url or "") if store == "magazineluiza" else False)
+            or (
+                MAGALU_EXPECTED_ID in (c.url or "")
+                if store == "magazineluiza"
+                else False
+            )
             for c in candidates
         )
         report["stores"][store] = {

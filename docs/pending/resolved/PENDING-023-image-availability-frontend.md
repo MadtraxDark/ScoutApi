@@ -1,6 +1,17 @@
 ﻿# PENDING-023 — Estados de disponibilidade de imagem no PriceScout
 
-- Status: IN_PROGRESS
+- Status: RESOLVED
+- Resolvida: 2026-10-05
+
+## Resolução final
+
+Drive operacional; 29/29 imagens/logos carregados no Chrome antes e após rollout. Contratos de disponibilidade/retry cobertos pelos 77 testes frontend e pela suíte backend. Typecheck/lint completos passaram; pytest via python eliminou o bloqueio do executável antigo.
+
+[Evidências e limites](../../performance/pending-recovery-2026-10-05.md).
+
+## Histórico anterior à resolução
+
+
 - Tipo: INCOMPLETE
 - Prioridade: P1
 - Área: frontend/images

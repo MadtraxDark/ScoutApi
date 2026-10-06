@@ -24,7 +24,9 @@ def main() -> None:
         print("script types", Counter(types).most_common(12))
 
         for m in re.finditer("jsonConfig", text):
-            print("jsonConfig at", m.start(), repr(text[m.start() - 40 : m.start() + 100]))
+            print(
+                "jsonConfig at", m.start(), repr(text[m.start() - 40 : m.start() + 100])
+            )
 
         for m in re.finditer("option-selected", text):
             print(

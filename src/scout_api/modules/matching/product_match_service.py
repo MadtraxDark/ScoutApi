@@ -78,6 +78,7 @@ from scout_api.modules.matching.match_progress import (
     MatchProgressPhase,
     MatchProgressTracker,
 )
+from scout_api.modules.matching.match_run_staging import stage_hit
 from scout_api.modules.matching.repository import MatchingRepository
 from scout_api.modules.matching.schemas import (
     MatchHit,
@@ -111,6 +112,8 @@ class MatchStoreOutcome:
     candidates_evaluated: int
     search_duration_ms: int
     candidate_fetch_duration_ms: int
+    matched_decision: str | None = None
+    matched_payload: dict[str, object] | None = None
     matched_url: str | None = None
     matched_title: str | None = None
     matched_price: Decimal | None = None
@@ -256,6 +259,12 @@ class ProductMatchService:
         *,
         on_progress: ProgressCallback | None = None,
         on_store_outcome: StoreOutcomeCallback | None = None,
+        restored_matches: list[MatchHit] | None = None,
+        target_stores: list[str] | None = None,
+        on_targets_resolved: Callable[[list[str], ProductPriceItem], None]
+        | None = None,
+        on_store_started: Callable[[str], None] | None = None,
+        before_persist: Callable[[], None] | None = None,
         skip_stores: frozenset[str] | set[str] | None = None,
         run_deadline: MonotonicDeadline | None = None,
         progress_tracker: MatchProgressTracker | None = None,
@@ -294,6 +303,11 @@ class ProductMatchService:
             clear_reference_price=False,
             on_progress=on_progress,
             on_store_outcome=on_store_outcome,
+            restored_matches=restored_matches,
+            target_stores=target_stores,
+            on_targets_resolved=on_targets_resolved,
+            on_store_started=on_store_started,
+            before_persist=before_persist,
             skip_stores=skip_stores,
             run_deadline=run_deadline,
             progress_tracker=progress_tracker,
@@ -313,6 +327,12 @@ class ProductMatchService:
         clear_reference_price: bool = True,
         on_progress: ProgressCallback | None = None,
         on_store_outcome: StoreOutcomeCallback | None = None,
+        restored_matches: list[MatchHit] | None = None,
+        target_stores: list[str] | None = None,
+        on_targets_resolved: Callable[[list[str], ProductPriceItem], None]
+        | None = None,
+        on_store_started: Callable[[str], None] | None = None,
+        before_persist: Callable[[], None] | None = None,
         skip_stores: frozenset[str] | set[str] | None = None,
         run_deadline: MonotonicDeadline | None = None,
         progress_tracker: MatchProgressTracker | None = None,
@@ -339,6 +359,11 @@ class ProductMatchService:
             canonical_product_id=canonical_product_id,
             on_progress=on_progress,
             on_store_outcome=on_store_outcome,
+            restored_matches=restored_matches,
+            target_stores=target_stores,
+            on_targets_resolved=on_targets_resolved,
+            on_store_started=on_store_started,
+            before_persist=before_persist,
             skip_stores=skip_stores,
             run_deadline=run_deadline,
             progress_tracker=progress_tracker,
@@ -358,6 +383,12 @@ class ProductMatchService:
         canonical_product_id: UUID | None = None,
         on_progress: ProgressCallback | None = None,
         on_store_outcome: StoreOutcomeCallback | None = None,
+        restored_matches: list[MatchHit] | None = None,
+        target_stores: list[str] | None = None,
+        on_targets_resolved: Callable[[list[str], ProductPriceItem], None]
+        | None = None,
+        on_store_started: Callable[[str], None] | None = None,
+        before_persist: Callable[[], None] | None = None,
         skip_stores: frozenset[str] | set[str] | None = None,
         run_deadline: MonotonicDeadline | None = None,
         progress_tracker: MatchProgressTracker | None = None,
@@ -391,23 +422,31 @@ class ProductMatchService:
                     retryable=False,
                 )
 
-        target_stores = self._resolve_stores(
-            stores,
-            reference,
-            reference_has_gtin=bool(ref_identity.gtin),
+        target_stores = (
+            target_stores
+            if target_stores is not None
+            else self._resolve_stores(
+                stores,
+                reference,
+                reference_has_gtin=bool(ref_identity.gtin),
+            )
         )
+        if on_targets_resolved is not None:
+            on_targets_resolved(target_stores, reference)
         if skip_stores:
             skip = {s.strip().lower() for s in skip_stores if s and str(s).strip()}
             if skip:
                 target_stores = [s for s in target_stores if s not in skip]
 
-        matches: list[MatchHit] = []
+        matches: list[MatchHit] = list(restored_matches or [])
         unmatched: list[str] = []
         errors: list[MatchStoreError] = []
         best_by_store: dict[str, MatchHit] = {}
         learned: TrustedGtin | None = None
         if ref_identity.gtin:
             learned = TrustedGtin(gtin=ref_identity.gtin, source="reference")
+        elif matches:
+            learned = resolve_trusted_gtin(ref_identity, matches)
 
         seq = 0
         # Request-scoped caches (one Match execution).
@@ -434,6 +473,8 @@ class ProductMatchService:
             nonlocal ref_identity, learned
             ensure_run_budget()
             display_name = _store_label(store_key)
+            if on_store_started is not None:
+                on_store_started(store_key)
             with state_lock:
                 local_identity = ref_identity
             store_config = STORE_CONFIGS.get(store_key)
@@ -1003,13 +1044,15 @@ class ProductMatchService:
                     price = None
                     currency = None
                     if offer is not None:
-                        price = offer.pix_price or offer.original_price
+                        price = offer.pix_price or offer.price or offer.original_price
                         currency = offer.currency
                     on_store_outcome(
                         MatchStoreOutcome(
                             store=store_key,
                             display_name=display_name,
                             status="match",
+                            matched_decision=hit.decision,
+                            matched_payload=stage_hit(hit),
                             duration_ms=int(round(store_elapsed_ms)),
                             queries=tuple(executed_queries),
                             candidates_found=candidates_seen,
@@ -1207,7 +1250,7 @@ class ProductMatchService:
         trusted = resolve_trusted_gtin(ref_identity, matches)
         if trusted is None and learned and learned.source == "reference":
             trusted = learned
-        elif trusted is not None:
+        else:
             learned = trusted
 
         if learned and learned.source != "reference" and not reference.gtin:
@@ -1220,6 +1263,8 @@ class ProductMatchService:
                     "Persistência requer DATABASE_URL / sessão SQLAlchemy",
                     code="DATABASE_UNAVAILABLE",
                 )
+            if before_persist is not None:
+                before_persist()
             canonical_id = self._persist(
                 reference,
                 matches,

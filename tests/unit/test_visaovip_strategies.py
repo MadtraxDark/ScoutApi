@@ -3,6 +3,7 @@
 Step 1: Failing tests for parse success, zero results, invalid contract,
 action ID discovery, HTTP call, and adapter flag.
 """
+
 from __future__ import annotations
 
 import json
@@ -178,7 +179,7 @@ class TestParseRscResponse:
         assert build_id == _BUILD_ID
 
     def test_no_build_id_returns_none(self) -> None:
-        body = "0:{}\n1:{\"products\":[],\"totalCount\":0}\n"
+        body = '0:{}\n1:{"products":[],"totalCount":0}\n'
         _, _, build_id = parse_rsc_response(body)
         assert build_id is None
 
@@ -219,11 +220,11 @@ class TestDiscoverActionId:
 
     _SEARCH_PRODUCTS_CHUNK = (
         'createServerReference("7f674263c13a9d8d28d0768c8016b1791b8051502a",'
-        "d.callServer,void 0,d.findSourceMapURL,\"searchProducts\")"
+        'd.callServer,void 0,d.findSourceMapURL,"searchProducts")'
     )
     _SEARCH_FACETS_CHUNK = (
         'createServerReference("784f2ef5d5603dc817ded8e27c904518fc45af1b63",'
-        "d.callServer,void 0,d.findSourceMapURL,\"searchFacets\")"
+        'd.callServer,void 0,d.findSourceMapURL,"searchFacets")'
     )
 
     def test_extracts_search_products_id(self) -> None:
@@ -245,7 +246,7 @@ class TestDiscoverActionId:
         _id = "7f674263c13a9d8d28d0768c8016b1791b8051502a"
         chunk_snippet = (
             f'let p=(0,d.createServerReference)("{_id}",'
-            "d.callServer,void 0,d.findSourceMapURL,\"searchProducts\")"
+            'd.callServer,void 0,d.findSourceMapURL,"searchProducts")'
         )
         action_id = discover_action_id_from_chunk_js(chunk_snippet)
         assert action_id == _id
@@ -301,9 +302,7 @@ class TestCallSearchProducts:
     def test_200_empty_returns_no_results(self) -> None:
         body = _make_rsc_body([])
         with patch(_HTTPX_CLIENT_PATH, return_value=_make_mock_client(200, body)):
-            result, candidates = call_search_products(
-                "samsung-galaxy-s25", "fresh_id"
-            )
+            result, candidates = call_search_products("samsung-galaxy-s25", "fresh_id")
         assert result == StrategyResult.NO_RESULTS
         assert candidates == []
 
@@ -385,9 +384,7 @@ class TestCallSearchProducts:
         assert args[6] == "all"
 
         headers = (
-            kwargs.get("headers")
-            or mock_client.post.call_args[1].get("headers")
-            or {}
+            kwargs.get("headers") or mock_client.post.call_args[1].get("headers") or {}
         )
         assert "Next-Action" in headers
         assert headers["Next-Action"] == "some_id"
@@ -406,6 +403,7 @@ class TestVisaoVipAdapterStrategyA:
         from scout_api.modules.matching.search_adapters.paraguay.visaovip import (
             VisaoVipSearchAdapter,
         )
+
         adapter = VisaoVipSearchAdapter()
         assert hasattr(adapter, "try_strategy_a")
 
@@ -413,6 +411,7 @@ class TestVisaoVipAdapterStrategyA:
         from scout_api.modules.matching.search_adapters.paraguay.visaovip import (
             VisaoVipSearchAdapter,
         )
+
         adapter = VisaoVipSearchAdapter()
         result, candidates = adapter.try_strategy_a(
             "B650M E WIFI",
@@ -426,6 +425,7 @@ class TestVisaoVipAdapterStrategyA:
         from scout_api.modules.matching.search_adapters.paraguay.visaovip import (
             VisaoVipSearchAdapter,
         )
+
         body = _make_rsc_body(_SAMPLE_PRODUCTS)
         adapter = VisaoVipSearchAdapter()
 
@@ -444,6 +444,7 @@ class TestVisaoVipAdapterStrategyA:
         from scout_api.modules.matching.search_adapters.paraguay.visaovip import (
             VisaoVipSearchAdapter,
         )
+
         adapter = VisaoVipSearchAdapter()
         bad_body = "garbage body text"
         with patch(_HTTPX_CLIENT_PATH, return_value=_make_mock_client(200, bad_body)):

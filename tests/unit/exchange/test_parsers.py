@@ -74,7 +74,9 @@ def test_bcp_usd_and_pyg_brl() -> None:
     assert usd_pyg.rate == Decimal("5935.01")
     assert pyg_brl.quote_currency == "BRL"
     # 1 / 1161.47
-    assert abs(pyg_brl.rate - (Decimal("1") / Decimal("1161.47"))) < Decimal("0.0000001")
+    assert abs(pyg_brl.rate - (Decimal("1") / Decimal("1161.47"))) < Decimal(
+        "0.0000001"
+    )
 
 
 def test_bcb_sml_pyg_brl() -> None:

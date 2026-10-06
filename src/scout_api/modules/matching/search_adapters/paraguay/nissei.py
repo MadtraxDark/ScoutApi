@@ -76,9 +76,7 @@ class NisseiSearchAdapter:
                     "//a[contains(@class,'product-item-link')]"
                 )
                 title_bits = [
-                    t.strip()
-                    for t in sibling.css("::text").getall()
-                    if t and t.strip()
+                    t.strip() for t in sibling.css("::text").getall() if t and t.strip()
                 ]
                 title = " ".join(title_bits) or None
             candidates.append(

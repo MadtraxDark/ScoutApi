@@ -1,9 +1,12 @@
 """One-off live fetch for Pichau Ryzen baseline evidence (no spider changes)."""
+
 from __future__ import annotations
 
 from pathlib import Path
 
-from scout_api.modules.crawler.services.product_scrape_service import get_shared_html_fetcher
+from scout_api.modules.crawler.services.product_scrape_service import (
+    get_shared_html_fetcher,
+)
 
 URL = (
     "https://www.pichau.com.br/processador-amd-ryzen-7-5800x3d-8-core-16-threads"

@@ -7,11 +7,11 @@ import time
 from pathlib import Path
 
 from scout_api.modules.crawler.core.scrape_guard import ScrapeGuard
+from scout_api.modules.crawler.models.product import ProductPriceItem
 from scout_api.modules.crawler.services.product_scrape_service import (
     ProductScrapeService,
     get_shared_html_fetcher,
 )
-from scout_api.modules.crawler.models.product import ProductPriceItem
 from scout_api.modules.matching.identity import (
     build_search_queries,
     identity_from_price_item,
@@ -33,7 +33,7 @@ def main() -> None:
     search = StoreSearchService()
 
     # Reference from the known good Black Titanium PDP (simple product).
-    ref_url = (
+    _ref_url = (
         "https://nissei.com/br/samsung-galaxy-s25-ultra-sm-s938bz-ds-5g-dual"
         "-256-gb-black-titanium-1"
     )

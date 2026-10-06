@@ -134,10 +134,10 @@ def main() -> None:
             include_images=False,
             max_candidates_per_store=3,
         )
-        store_hit = None
+        _store_hit = None
         for offer in result.offers or []:
             if getattr(offer, "store", None) == "nissei":
-                store_hit = offer
+                _store_hit = offer
                 break
         # MatchResponse shape may use matches/stores — dump compact.
         report["match"] = {
@@ -157,7 +157,9 @@ def main() -> None:
     print(json.dumps(report["match"], ensure_ascii=False, indent=2)[:4000], flush=True)
 
     path = OUT / "live_validation.json"
-    path.write_text(json.dumps(report, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
+    path.write_text(
+        json.dumps(report, ensure_ascii=False, indent=2, default=str), encoding="utf-8"
+    )
     print("WROTE", path, flush=True)
 
 

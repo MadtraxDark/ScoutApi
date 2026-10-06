@@ -1,6 +1,8 @@
 """Debug chunk discovery."""
-import httpx
+
 import re
+
+import httpx
 
 BASE_URL = "https://www.visaovip.com"
 slug = "asus-tuf-gaming-b650m-e-wifi"
@@ -25,7 +27,9 @@ for c in chunks[:30]:
 
 # Now check which chunks contain searchProducts
 ACTION_ID_RE = re.compile(
-    r'createServerReference\("([0-9a-f]{40,})",.+?callServer.+?,void 0,.+?findSourceMapURL,"(\w+)"\)'
+    'createServerReference\\("([0-9a-f]{40,})",.+?c'
+    'allServer.+?,void 0,.+?findSourceMapURL,"(\\w+'
+    ')"\\)'
 )
 print("\n=== Fetching chunks to find searchProducts ===")
 with httpx.Client(timeout=20) as client:

@@ -80,17 +80,20 @@ Itens resolvidos **não** ficam no índice ativo.
 
 ## Índice ativo
 
-| ID | Título | Status | Tipo | Prioridade | Área |
-|---|---|---|---|---|---|
-| [PENDING-016](PENDING-016-shopee-match-wall-time.md) | Shopee domina wall-time Product Match full-store | OPEN | PERFORMANCE | P1 | crawler/shopee |
-| [PENDING-017](PENDING-017-match-reenable-ml-shopee.md) | Reativar ML/Shopee no Product Match após login estável | OPEN | INCOMPLETE | P1 | matching |
-| [PENDING-019](PENDING-019-pricescout-match-start-failure-smoke.md) | Completar smoke de falhas no start do Product Match | OPEN | TESTING | P2 | frontend/product-match |
-| [PENDING-020](PENDING-020-product-match-monitor-live-smoke.md) | Validar Product Match live em vários monitores reais | IN_PROGRESS | TESTING | P2 | matching/monitor |
-| [PENDING-021](PENDING-021-store-logo-deployment-smoke.md) | Aplicar e validar o fluxo de logos no ambiente integrado | IN_PROGRESS | TESTING | P1 | matching/store-admin |
-| [PENDING-028](PENDING-028-baseline-quality-gates.md) | Falhas preexistentes nos checks globais | OPEN | TESTING | P2 | matching/quality |
-| [PENDING-029](PENDING-029-camoufox-rebuild-fpgen-permissions.md) | Rebuild Docker falha nas permissões do modelo fpgen | OPEN | TECH_DEBT | P1 | docker/camoufox |
+Nenhuma pendência acionável aberta. **Pendências ativas: 0.**
 
-*(pendências ativas: 7)*
+Encerramento e reconciliação em 2026-10-05:
+
+- [PENDING-023](resolved/PENDING-023-image-availability-frontend.md)
+- [PENDING-028](resolved/PENDING-028-baseline-quality-gates.md)
+- [PENDING-029](resolved/PENDING-029-camoufox-rebuild-fpgen-permissions.md)
+- [PENDING-030](resolved/PENDING-030-cold-preview-browser-duration.md)
+- [PENDING-026](resolved/PENDING-026-match-wave-c1-browser-queue-timeout.md)
+- [PENDING-027](resolved/PENDING-027-match-c1-store-wall-time.md)
+
+[Validações, limitações e rollout](../performance/pending-recovery-2026-10-05.md).
+Os itens 016/017/019/020/021 já estavam arquivados; a listagem antiga foi corrigida.
+ML/Shopee continuam desativadas conforme a decisão anterior do usuário.
 
 Resolvida em 2026-09-24:
 
@@ -148,7 +151,6 @@ Resolvida em 2026-09-19:
 - PENDING-010 Validação live Mercado Livre (Docker + curl_cffi) — arquivo
   apagado; live `/crawl*` + `/match` multi-loja OK (ADR 0025)
 
-- [PENDING-030 — Preview frio Magazine Luiza](PENDING-030-cold-preview-browser-duration.md) — OPEN / PERFORMANCE / P2; browser_fetch de 61,1 s, cache de 51 ms.
 
 ## Resolvidas
 

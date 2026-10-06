@@ -1,0 +1,23 @@
+{
+  "duration_seconds": 8.17,
+  "status": "completed",
+  "failure_code": null,
+  "stores": [
+    {
+      "store": "kabum",
+      "status": "no_match",
+      "decision": null,
+      "error_code": null,
+      "duration_ms": 1503,
+      "listing_linked": false
+    },
+    {
+      "store": "pichau",
+      "status": "match",
+      "decision": "auto_match",
+      "error_code": null,
+      "duration_ms": 6357,
+      "listing_linked": true
+    }
+  ]
+}

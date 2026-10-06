@@ -473,9 +473,7 @@ class AliExpressSpider(BaseStoreSpider):
                 if cls._id_str(row.get("skuId") or row.get("skuIdStr")) == wanted:
                     return row
 
-        price_block = (
-            cls._as_dict(result.get("PRICE"))
-        )
+        price_block = cls._as_dict(result.get("PRICE"))
         selected_id = cls._id_str(
             sku_block.get("selectedSkuIdStr")
             or sku_block.get("selectedSkuId")
@@ -677,9 +675,7 @@ class AliExpressSpider(BaseStoreSpider):
                     return "out_of_stock", "sku-stock"
             except (TypeError, ValueError):
                 pass
-        quantity = (
-            cls._as_dict(result.get("QUANTITY_PC"))
-        )
+        quantity = cls._as_dict(result.get("QUANTITY_PC"))
         total = quantity.get("totalAvailableInventory")
         if total is not None:
             try:
@@ -697,15 +693,11 @@ class AliExpressSpider(BaseStoreSpider):
 
     @classmethod
     def _seller(cls, result: dict[str, Any]) -> tuple[str | None, str]:
-        shop = (
-            cls._as_dict(result.get("SHOP_CARD_PC"))
-        )
+        shop = cls._as_dict(result.get("SHOP_CARD_PC"))
         name = shop.get("storeName") or shop.get("shopName")
         if name and str(name).strip():
             return str(name).strip(), "shop-card"
-        seller_info = (
-            cls._as_dict(shop.get("sellerInfo"))
-        )
+        seller_info = cls._as_dict(shop.get("sellerInfo"))
         for key in ("storeName", "companyName", "sellerName"):
             value = seller_info.get(key)
             if value and str(value).strip():
@@ -714,12 +706,8 @@ class AliExpressSpider(BaseStoreSpider):
 
     @classmethod
     def _seller_metadata(cls, result: dict[str, Any]) -> dict[str, Any]:
-        shop = (
-            cls._as_dict(result.get("SHOP_CARD_PC"))
-        )
-        seller_info = (
-            cls._as_dict(shop.get("sellerInfo"))
-        )
+        shop = cls._as_dict(result.get("SHOP_CARD_PC"))
+        seller_info = cls._as_dict(shop.get("sellerInfo"))
         meta: dict[str, Any] = {}
         store_num = cls._id_str(seller_info.get("storeNum") or shop.get("storeNum"))
         if store_num:
@@ -740,9 +728,7 @@ class AliExpressSpider(BaseStoreSpider):
 
     @classmethod
     def _title(cls, result: dict[str, Any]) -> str:
-        block = (
-            cls._as_dict(result.get("PRODUCT_TITLE"))
-        )
+        block = cls._as_dict(result.get("PRODUCT_TITLE"))
         text = block.get("text") or block.get("title")
         if text:
             return str(text).strip()
@@ -751,9 +737,7 @@ class AliExpressSpider(BaseStoreSpider):
 
     @classmethod
     def _specifications(cls, result: dict[str, Any]) -> dict[str, Any]:
-        props = (
-            cls._as_dict(result.get("PRODUCT_PROP_PC"))
-        )
+        props = cls._as_dict(result.get("PRODUCT_PROP_PC"))
         out: dict[str, Any] = {}
         for key in ("showedProps", "outerProps"):
             rows = props.get(key)
@@ -890,9 +874,7 @@ class AliExpressSpider(BaseStoreSpider):
         sku_id: str | None,
         base_url: str,
     ) -> list[str]:
-        images = (
-            cls._as_dict(result.get("HEADER_IMAGE_PC"))
-        )
+        images = cls._as_dict(result.get("HEADER_IMAGE_PC"))
         ordered: list[Any] = []
         if sku_id:
             sku_map = images.get("skuImagesMap")
@@ -989,9 +971,7 @@ class AliExpressSpider(BaseStoreSpider):
 
     @classmethod
     def _shipping_metadata(cls, result: dict[str, Any]) -> dict[str, Any]:
-        ship = (
-            cls._as_dict(result.get("SHIPPING"))
-        )
+        ship = cls._as_dict(result.get("SHIPPING"))
         layouts = (
             ship.get("deliveryLayoutInfo") or ship.get("originalLayoutResultList") or []
         )
@@ -1040,18 +1020,14 @@ class AliExpressSpider(BaseStoreSpider):
                     ):
                         if key in parsed:
                             out[key] = parsed[key]
-        coupon = (
-            cls._as_dict(result.get("COUPON_BLOCK_PC"))
-        )
+        coupon = cls._as_dict(result.get("COUPON_BLOCK_PC"))
         if coupon and coupon.get("hideCouponBlock") in (False, "False", "false"):
             out["coupon_block_visible"] = True
         return out
 
     @classmethod
     def _global_data(cls, result: dict[str, Any]) -> dict[str, Any]:
-        block = (
-            cls._as_dict(result.get("GLOBAL_DATA"))
-        )
+        block = cls._as_dict(result.get("GLOBAL_DATA"))
         nested = block.get("globalData")
         return nested if isinstance(nested, dict) else block
 

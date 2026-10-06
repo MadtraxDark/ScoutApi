@@ -18,6 +18,7 @@ class FailureDomain(StrEnum):
     STORE_CAPABILITY = "store_capability"
     OPERATION = "operation"
 
+
 @dataclass
 class BrowserSlot:
     slot_id: int
@@ -29,9 +30,14 @@ class BrowserSlot:
     fetch_count: int
     health: str
 
+
 class BrowserScheduler:
-    def __init__(self, *, capacity: int, queue_capacity: int, queue_timeout_ms: int): ...
-    def acquire(self, *, cancel_event: threading.Event | None = None) -> BrowserSlotLease: ...
+    def __init__(
+        self, *, capacity: int, queue_capacity: int, queue_timeout_ms: int
+    ): ...
+    def acquire(
+        self, *, cancel_event: threading.Event | None = None
+    ) -> BrowserSlotLease: ...
     def release(self, lease: BrowserSlotLease, *, poison: bool = False) -> None: ...
     def snapshot(self) -> dict[str, object]: ...  # depth, capacity, active, waits
 ```

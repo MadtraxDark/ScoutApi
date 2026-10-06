@@ -7,7 +7,7 @@ idx = text.find(marker)
 if idx < 0:
     raise SystemExit("marker not found")
 prefix = text[:idx]
-new_tail = '''def test_cpu_x3d_suffix_rejects_base_sku() -> None:
+new_tail = """def test_cpu_x3d_suffix_rejects_base_sku() -> None:
     score = MatchingEngine().score(
         _identity(
             brand="amd",
@@ -35,6 +35,6 @@ def test_motherboard_parse_model_excludes_socket_marketing_tail() -> None:
     assert "chipset" not in model
     assert "ddr5" not in model
     assert "m-atx" not in model and "matx" not in model.replace(" ", "")
-'''
+"""
 p.write_text(prefix + new_tail, encoding="utf-8")
 print("ok", len(prefix + new_tail))

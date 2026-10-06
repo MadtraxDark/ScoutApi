@@ -35,7 +35,7 @@ PriceScout (localhost:3000)
 | get/discard preview | preview TTL | — | OBSOLETE_FRONTEND_BEHAVIOR | estado local FE |
 | import | `POST …/import` | `POST /products` | FRONTEND_ADAPTER | `ProductRegisterRequest` |
 | other-store prices | sync legado | `POST /match` | DIRECT_MAPPING | tooling / sync |
-| other-store match run | job + poll | `POST /products/{id}/match-runs` + `GET /match-runs/{id}` | DIRECT_MAPPING | job persistente (ADR 0036); sem SSE |
+| other-store match run | job + poll | `POST /products/{id}/match-runs` + `GET /match-runs/{id}/live` | DIRECT_MAPPING | job persistente (ADR 0036) e ofertas progressivas (ADR 0049) |
 | other-store active | — | `GET /products/{id}/match-runs/active` | DIRECT_MAPPING | banner / botão |
 | other-store history/detail | — | `GET …/match-runs` + `GET /match-runs/{id}/details` | DIRECT_MAPPING | log consultável |
 | notifications | — | `GET/POST /notifications*` | DIRECT_MAPPING | central persistente |
@@ -126,11 +126,12 @@ SSE (`POST /match/stream`) foi **removido**. O fluxo do botão
    (se já houver Run **efetivamente** ativa, devolve a existente com
    `already_active=true`)
 2. Product Match roda em background (worker com lease PostgreSQL + heartbeat)
-3. Frontend: polling leve em `GET /match-runs/{id}` +
-   `GET /products/{id}/match-runs/active` para banner/botão
+3. Frontend: descobrir Run via `GET /products/{id}/match-runs/active` e
+   consultar `GET /match-runs/{id}/live` para ofertas/progresso/banner/botão
    (rate scope `poll`, bucket separado do CRUD — ver
    [`docs/security/api-auth.md`](../security/api-auth.md))
-4. Ao terminal (`completed`/`failed`): refetch `GET /products/{id}`,
+4. Ao terminal (`completed`/`failed`): atualizar ofertas via `GET /products/{id}`
+   sem sobrescrever campos em edição,
    toast efêmero, notificação persistente, log em
    `GET /match-runs/{id}/details`
 
@@ -194,3 +195,78 @@ Falha posterior de imagem não transforma produto salvo em importação falha.
 A importação respeita o limite atual de 20 imagens por produto: preview com mais
 URLs envia as primeiras 20 URLs únicas e informa explicitamente a quantidade
 excedente na mensagem de conclusão. Não aumenta o limite de persistência.
+
+## Resultados progressivos de Match (ADR 0049)
+
+Após descobrir a Run, consultar `GET /match-runs/{run_id}/live` a cada quatro
+segundos, somente com página visível. O endpoint conhecido substitui active
++ status em cada ciclo. Em idle, descobrir novas Runs a cada 60 segundos;
+ao abrir o produto sem Run ativa, recuperar a última pelo histórico.
+Lease expirada preserva observações e mostra recuperação pendente.
+`is_effectively_active` decide bloqueio do botão e timer.
+
+Resposta `MatchRunLiveView`:
+
+- `run`: contrato leve `MatchRunStatusView` existente.
+- `is_effectively_active`: considera lease, não apenas status.
+- `auto_matches_found`: outcomes `match` com decisão `auto_match`.
+- `stores`: roster com `pending|running|match|no_match|error`, início/fim,
+  decisão explícita, identidade comercial, listing final, título, URL,
+  preço, moeda, confiança, erro classificado e conversão BRL opcional.
+
+Não expõe candidates, reasons, queries, staging ou referência.
+`matched_store`, `matched_country`, `matched_product_id` e
+`matched_canonical_url` identificam o produto comercial; `store` continua
+sendo a capability operacional (`amazon_br` versus `amazon`). FX usa cotação
+existente, sem atualização externa no polling. BRL faz uma query de dados;
+moeda estrangeira adiciona no máximo uma leitura das cotações.
+
+Autenticação, permissão `match` e visibility/ownership obrigatórias.
+Run inexistente/inacessível retorna `404 RUN_NOT_FOUND`.
+Resposta `Cache-Control: private, no-store`; rate scope `poll`, com `429`
+e backoff canônico do client. `401/403` e falhas do banco seguem o envelope
+de erro existente da API.
+
+Somente `auto_match` vira oferta parcial. Reviews não participam da oferta
+confirmada ou do menor preço. Merge por listing, `(store,country,product_id)`
+ou URL canônica evita duplicação; preço canônico existente é mantido durante
+a Run. Sem cotação, moeda estrangeira fica ao fim da ordenação comparável.
+
+Ao terminal, reter o snapshot e atualizar apenas `variants` do produto e do
+rascunho, com até três tentativas. Não recarregar galeria ou campos editáveis.
+Cards não reconciliados mantêm identificação explícita; falha/cancelamento
+mostra observação não confirmada no catálogo. Navegação cancela leitura,
+nunca a Run. Respostas antigas não podem substituir o snapshot atual.
+
+### Migration e rollout
+
+Aplicar Alembic `0032_match_live` antes do backend/worker e do frontend.
+As três colunas nullable preservam histórico. Drenar Runs antigas antes de
+trocar worker: hit legado sem staging não é recuperável integralmente
+(`MATCH_RECOVERY_INCOMPLETE`). Não inferir `auto_match` para backfill.
+Manter `CAMOUFOX_BROWSER_CAPACITY=1`. Docker continua a execução oficial.
+
+Rollback: voltar frontend ao polling anterior, drenar/voltar worker e API,
+manter colunas aditivas. Downgrade apaga staging e exige backup e ausência
+de workers novos. Staging não substitui catálogo/snapshots/identificadores.
+
+### Validação reproduzível
+
+Testes: `tests/unit/test_match_run_live.py`,
+`tests/unit/test_match_run_progressive.py` e
+`tests/integration/test_match_run_progressive_postgres.py`. PostgreSQL exige
+`TEST_DATABASE_URL` exclusivamente em `scout_progressive_test`, com schema
+via Alembic; nunca apontar para banco do aplicativo.
+
+Harnesses: `tests/e2e/progressive_match_browser.py` (Chrome, API local 8011,
+PriceScout local 3011) e `tests/e2e/progressive_match_load.py` (1/10/50
+observadores autenticados em grupos simultâneos, quatro segundos, 600s por
+padrão). Fixtures controladas, sem coleta em lojas; evidências em
+`.tmp/progressive-browser/`. JWT de teste somente no servidor isolado.
+
+Validação Docker: `docker compose config --quiet` e build de `api`/
+`match-runner` aprovados; a imagem importou o OpenAPI live e conferiu a
+migration no PostgreSQL isolado. Rollout local concluído em 2026-10-05: nove Runs
+concluídas, workers parados durante a troca, migration 0032_match_live antes
+da API/worker novos, API saudável e os três workers reiniciados. C1 permanece 1.
+[Evidências atuais](../performance/pending-recovery-2026-10-05.md).

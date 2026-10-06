@@ -101,7 +101,5 @@ def downgrade() -> None:
     op.drop_index("uq_product_images_product_main", table_name="product_images")
     op.drop_index("uq_product_images_product_sha256", table_name="product_images")
     op.drop_index("ix_product_images_product_position", table_name="product_images")
-    op.drop_index(
-        "ix_product_images_canonical_product_id", table_name="product_images"
-    )
+    op.drop_index("ix_product_images_canonical_product_id", table_name="product_images")
     op.drop_table("product_images")

@@ -12,6 +12,7 @@ class BrowserCircuitBreaker:
     def allow(self) -> bool: ...  # False if OPEN (not half-open grant)
     def claim_trial(self, *, now: datetime | None = None) -> TrialToken | None: ...
     def complete_trial(self, token: TrialToken, *, success: bool) -> None: ...
+
     # Crash safety: token has expires_at; snapshot() reaps expired trials → reopen OPEN
 ```
 

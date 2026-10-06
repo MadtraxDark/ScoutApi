@@ -28,18 +28,28 @@ and release on slot release, regardless of success/failure.
 from __future__ import annotations
 
 import hashlib
+import importlib
 import logging
 import threading
 import time
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import IO, TYPE_CHECKING, Protocol
+from typing import IO, TYPE_CHECKING, Protocol, cast
 
 from scout_api.modules.crawler.core.exceptions import RequestError
 
 if TYPE_CHECKING:
     from scout_api.modules.crawler.core.redis_client import RedisGateway
+
+
+class _FcntlModule(Protocol):
+    LOCK_EX: int
+    LOCK_NB: int
+    LOCK_UN: int
+
+    def flock(self, fd: int, operation: int) -> None: ...
+
 
 logger = logging.getLogger(__name__)
 
@@ -387,7 +397,7 @@ class FileProfileLock:
 
     def acquire(self, profile_path: Path, *, timeout_ms: int) -> ProfileLockLease:
         try:
-            import fcntl as _fcntl
+            _fcntl = cast(_FcntlModule, importlib.import_module("fcntl"))
         except ImportError:
             logger.warning(
                 "profile_lock_file_unavailable",
@@ -457,7 +467,7 @@ class FileProfileLock:
         if fd is None:
             return
         try:
-            import fcntl as _fcntl
+            _fcntl = cast(_FcntlModule, importlib.import_module("fcntl"))
 
             _fcntl.flock(fd.fileno(), _fcntl.LOCK_UN)
         except Exception:

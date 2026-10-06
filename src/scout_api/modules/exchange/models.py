@@ -53,9 +53,7 @@ class ExchangeRateLatest(Base):
     fetched_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
     )
-    status: Mapped[str] = mapped_column(
-        String(16), nullable=False, default="fresh"
-    )
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="fresh")
     """fresh | stale | unavailable"""
     consecutive_failures: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0

@@ -32,13 +32,18 @@ No FX conversion in spiders.
   (ex.: Titânio Preto vs Titânio Branco).
 - **Query forms matter more than anti-bot on BR:** compact tokens like
   `mzv9s1t0bam` / `990evoplus` often return sibling SKUs (990 PRO, 870 EVO).
-  Matching builds SERP queries as `GTIN → MZ-V9S1T0B/AM (display MPN) →
-  brand + spaced series + capacity → compacted fallback → title tokens`, then
-  re-ranks SERP cards by query/title overlap before scraping candidates.
+  O título natural normalizado lidera, com categoria explícita e cor localizadas
+  na mesma posição. Identificadores exatos, séries legíveis e aliases continuam
+  como fallbacks; ver [contrato canônico](../../matching/README.md). Cor preserva
+  acabamento (`Titânio Preto` → `black titanium` em en-US), sem traduzir modelo/MPN.
+  Cards continuam sendo reordenados por overlap antes de raspar candidatos.
 - HTTP-first still applies to SERP URLs (ADR 0016 + ADR 0032): clean SERP HTML
   with `s-search-result` cards is accepted **without** Camoufox; challenge/robot
   pages escalate. Empty SERP after a clean 200 is usually a **query
   quality** issue, not an anti-bot miss.
+- PDP sem Buy Box e sem OOS explícito: retry HTTP uma vez; se continuar
+  incompleta ou o retry falhar, browser direto. Proxy só após bloqueio
+  classificado. OOS explícito não dispara browser nem fabrica preço.
 
 ## Offer source
 

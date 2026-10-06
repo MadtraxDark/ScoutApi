@@ -5,9 +5,12 @@ from __future__ import annotations
 import logging
 import uuid
 from datetime import UTC, datetime, timedelta
+from typing import Any, cast
 
 from sqlalchemy import Select, and_, or_, select, update
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.orm import Session
+from sqlalchemy.sql.elements import ColumnElement
 
 from scout_api.core.config import Settings, get_settings
 from scout_api.modules.matching.models import ProductMatchRun
@@ -65,7 +68,7 @@ def is_stale_running(run: ProductMatchRun, *, now: datetime | None = None) -> bo
     return (run.status or "").lower() == "running" and not lease_valid(run, now=now)
 
 
-def _due_filter(*, now: datetime) -> object:
+def _due_filter(*, now: datetime) -> ColumnElement[bool]:
     """Pending never claimed, or running/pending with expired lease."""
     lease_expired = or_(
         ProductMatchRun.claim_expires_at.is_(None),
@@ -197,7 +200,7 @@ def _claim_portable(
                 last_activity_at=now,
             )
         )
-        if result.rowcount:
+        if cast(CursorResult[Any], result).rowcount:
             session.refresh(run)
             claimed.append(run)
     return claimed
@@ -236,7 +239,7 @@ def heartbeat_claim(
             last_activity_at=moment,
         )
     )
-    if result.rowcount:
+    if cast(CursorResult[Any], result).rowcount:
         run.claim_expires_at = claim_expires
         run.last_activity_at = moment
         logger.debug(

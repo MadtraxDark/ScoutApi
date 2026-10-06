@@ -37,6 +37,7 @@ def _sched(
 # Teste 1: capacity=1; segundo job entra na fila e aguarda
 # ---------------------------------------------------------------------------
 
+
 def test_capacity_one_second_job_waits_or_queues() -> None:
     """capacity=1 → segundo acquire bloqueia até o primeiro ser liberado."""
     sched = _sched(capacity=1)
@@ -69,6 +70,7 @@ def test_capacity_one_second_job_waits_or_queues() -> None:
 # ---------------------------------------------------------------------------
 # Teste 2: fila saturada → falha controlada, não trava
 # ---------------------------------------------------------------------------
+
 
 def test_queue_saturated_fails_fast() -> None:
     """capacity=1, queue_capacity=1; terceiro acquire → RequestError imediato."""
@@ -108,6 +110,7 @@ def test_queue_saturated_fails_fast() -> None:
 # Teste 3: cancelamento enquanto enfileirado → nunca navega
 # ---------------------------------------------------------------------------
 
+
 def test_cancel_while_queued_does_not_get_slot() -> None:
     """Job com cancel_event na fila → sai da fila sem navegar."""
     sched = _sched(capacity=1, timeout_ms=10_000)
@@ -146,6 +149,7 @@ def test_cancel_while_queued_does_not_get_slot() -> None:
 # ---------------------------------------------------------------------------
 # Teste 4: fairness FIFO — três waiters obtêm slot na ordem de enqueue
 # ---------------------------------------------------------------------------
+
 
 def test_fifo_order() -> None:
     """Três waiters; slot é concedido na ordem de enqueue (FIFO)."""
@@ -189,6 +193,7 @@ def test_fifo_order() -> None:
 # Teste 5: snapshot() retorna métricas esperadas
 # ---------------------------------------------------------------------------
 
+
 def test_snapshot_reflects_state() -> None:
     """snapshot() deve refletir depth, capacity, active, queue_capacity."""
     sched = _sched(capacity=2, queue_capacity=5)
@@ -211,6 +216,7 @@ def test_snapshot_reflects_state() -> None:
 # Teste 6: slot_id é um int e é distinto por slot ativo
 # ---------------------------------------------------------------------------
 
+
 def test_slot_id_assigned() -> None:
     """BrowserSlotLease.slot_id deve ser int >= 0."""
     sched = _sched(capacity=1)
@@ -223,6 +229,7 @@ def test_slot_id_assigned() -> None:
 # ---------------------------------------------------------------------------
 # Teste 7: BROWSER_QUEUE_TIMEOUT — caller aguarda além do limite
 # ---------------------------------------------------------------------------
+
 
 def test_queue_timeout() -> None:
     """Caller que aguarda além de queue_timeout_ms recebe BROWSER_QUEUE_TIMEOUT."""

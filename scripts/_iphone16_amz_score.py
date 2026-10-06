@@ -11,7 +11,6 @@ from scout_api.modules.matching.engine import MatchingEngine
 from scout_api.modules.matching.identity import (
     build_search_queries,
     identity_from_price_item,
-    rank_candidates_for_query,
 )
 from scout_api.modules.matching.store_search_service import StoreSearchService
 
@@ -31,9 +30,7 @@ def main() -> None:
     score = MatchingEngine().score(ref_i, amz_i)
     search = StoreSearchService()
     hits = search.search("amazon_br", "apple iphone 16 128gb preto", limit=5)
-    ranked = [
-        {"title": h.title, "product_id": h.product_id} for h in hits
-    ]
+    ranked = [{"title": h.title, "product_id": h.product_id} for h in hits]
     print(
         json.dumps(
             {

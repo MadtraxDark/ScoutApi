@@ -5,11 +5,12 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from scrapy.http import HtmlResponse, Request
+
 from scout_api.modules.crawler.services.product_scrape_service import (
     get_shared_html_fetcher,
 )
 from scout_api.modules.crawler.spiders.paraguay.visaovip import VisaoVipSpider
-from scrapy.http import HtmlResponse, Request
 
 URL = (
     "https://www.visaovip.com/prod/placas-mae-amd/"

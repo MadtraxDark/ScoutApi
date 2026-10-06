@@ -17,7 +17,9 @@ from scout_api.core.config import get_settings
 from scout_api.modules.crawler.services.html_fetcher import profile_dirs_for_base
 
 
-def _probe(label: str, user_data_dir: Path, *, launch_timeout_ms: int) -> dict[str, float | str]:
+def _probe(
+    label: str, user_data_dir: Path, *, launch_timeout_ms: int
+) -> dict[str, float | str]:
     user_data_dir.mkdir(parents=True, exist_ok=True)
     out: dict[str, float | str] = {"locale": label, "profile": str(user_data_dir)}
     t0 = time.perf_counter()

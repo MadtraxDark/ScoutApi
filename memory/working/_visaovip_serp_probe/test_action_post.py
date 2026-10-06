@@ -1,6 +1,8 @@
 """Quick HTTP POST test for searchProducts action."""
-import httpx
+
 import json
+
+import httpx
 
 BASE_URL = "https://www.visaovip.com"
 ACTION_ID = "7f674263c13a9d8d28d0768c8016b1791b8051502a"
@@ -13,7 +15,8 @@ test_cases = [
 
 for query_id, slug, search_term in test_cases:
     post_url = f"{BASE_URL}/busca/termo/{slug}/"
-    # Next.js Server Action JSON payload: [searchTerm, type, filters, locale, page, perPage, stock]
+    # Next.js Server Action JSON payload: [searchTerm, type, filters, locale, page,
+    # perPage, stock]
     payload = json.dumps(
         [search_term, "termo", [], "pt-BR", 1, 24, "all"],
         ensure_ascii=False,
@@ -27,7 +30,9 @@ for query_id, slug, search_term in test_cases:
             post_url,
             content=payload,
             headers={
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                ("User-Agent"): (
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+                ),
                 "Next-Action": ACTION_ID,
                 "Content-Type": "text/plain;charset=UTF-8",
                 "Accept": "text/x-component,*/*",
@@ -44,6 +49,7 @@ for query_id, slug, search_term in test_cases:
     print(f"Response body: {resp.text[:500]!r}")
 
     import re
+
     count_m = re.search(r'"totalCount":(\d+)', resp.text)
     if count_m:
         print(f"totalCount: {count_m.group(1)}")

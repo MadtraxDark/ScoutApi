@@ -57,3 +57,4 @@ Governança de documentação: [`.cursor/rules/documentation-governance.mdc`](..
 | Amazon (BR/US) | [`crawler/stores/amazon.md`](crawler/stores/amazon.md) |
 
 - [Investigação e medições da importação de imagens (2026-10-05)](performance/import-images-2026-10-05.md).
+- [Plano de ofertas progressivas em Product Match (2026-10-05)](../tasks/plan.md) — investigação inicial e fases; contrato implementado no ADR 0049.
