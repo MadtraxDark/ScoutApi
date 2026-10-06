@@ -548,7 +548,11 @@ class MatchingRepository:
         return self._session.scalars(stmt).first()
 
     def append_snapshot_from_offer(
-        self, listing: StoreListing, offer: ProductOffer
+        self,
+        listing: StoreListing,
+        offer: ProductOffer,
+        *,
+        title: str | None = None,
     ) -> OfferSnapshot:
         snapshot = OfferSnapshot(
             listing_id=listing.id,
@@ -558,7 +562,9 @@ class MatchingRepository:
             availability=offer.availability,
             available=offer.available,
             fingerprint=fingerprint_from_offer(offer),
-            payload=snapshot_dict_from_offer(offer),
+            payload=snapshot_dict_from_offer(
+                offer, title=title or listing.title
+            ),
             scraped_at=offer.scraped_at,
         )
         self._session.add(snapshot)

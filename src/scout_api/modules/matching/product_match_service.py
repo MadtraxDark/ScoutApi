@@ -112,6 +112,7 @@ class MatchStoreOutcome:
     candidates_evaluated: int
     search_duration_ms: int
     candidate_fetch_duration_ms: int
+    search_locale: str | None = None
     matched_decision: str | None = None
     matched_payload: dict[str, object] | None = None
     matched_url: str | None = None
@@ -480,6 +481,12 @@ class ProductMatchService:
             store_config = STORE_CONFIGS.get(store_key)
             query_locale = store_config.query_locale if store_config else None
             local_queries = build_search_queries(local_identity, locale=query_locale)
+            logger.info(
+                "match_store_search_locale store=%s search_locale=%s queries=%r",
+                store_key,
+                query_locale,
+                local_queries[:5],
+            )
             # --- Phase 3: per-store attempt budget ---
             settings = get_settings()
             budget = StoreAttemptBudget(
@@ -525,6 +532,7 @@ class ProductMatchService:
                             status="error",
                             duration_ms=0,
                             queries=(),
+                            search_locale=query_locale,
                             candidates_found=0,
                             candidates_evaluated=0,
                             search_duration_ms=0,
@@ -593,6 +601,7 @@ class ProductMatchService:
                             status="error",
                             duration_ms=elapsed_ms,
                             queries=tuple(executed_queries),
+                            search_locale=query_locale,
                             candidates_found=candidates_seen,
                             candidates_evaluated=scrapes_done,
                             search_duration_ms=int(round(search_ms_total)),
@@ -1055,6 +1064,7 @@ class ProductMatchService:
                             matched_payload=stage_hit(hit),
                             duration_ms=int(round(store_elapsed_ms)),
                             queries=tuple(executed_queries),
+                            search_locale=query_locale,
                             candidates_found=candidates_seen,
                             candidates_evaluated=scrapes_done,
                             search_duration_ms=int(round(search_ms_total)),
@@ -1096,6 +1106,7 @@ class ProductMatchService:
                                 status="error",
                                 duration_ms=int(round(store_elapsed_ms)),
                                 queries=tuple(executed_queries),
+                                search_locale=query_locale,
                                 candidates_found=candidates_seen,
                                 candidates_evaluated=scrapes_done,
                                 search_duration_ms=int(round(search_ms_total)),
@@ -1128,6 +1139,7 @@ class ProductMatchService:
                                 status="error",
                                 duration_ms=int(round(store_elapsed_ms)),
                                 queries=tuple(executed_queries),
+                                search_locale=query_locale,
                                 candidates_found=candidates_seen,
                                 candidates_evaluated=scrapes_done,
                                 search_duration_ms=int(round(search_ms_total)),
@@ -1154,6 +1166,7 @@ class ProductMatchService:
                                 status="no_match",
                                 duration_ms=int(round(store_elapsed_ms)),
                                 queries=tuple(executed_queries),
+                                search_locale=query_locale,
                                 candidates_found=candidates_seen,
                                 candidates_evaluated=scrapes_done,
                                 search_duration_ms=int(round(search_ms_total)),

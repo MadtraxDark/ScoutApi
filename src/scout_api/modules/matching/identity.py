@@ -6,7 +6,7 @@ import re
 import unicodedata
 from dataclasses import dataclass, field
 from decimal import Decimal
-from typing import Any
+from typing import Any, Literal
 
 from scout_api.modules.crawler.models.product import ProductPriceItem
 from scout_api.modules.crawler.utils.product_identity import (
@@ -22,8 +22,10 @@ VARIANT_GATE_KEYS = frozenset(
 # Map common PT/EN/ES color labels to a single canonical token for gates.
 COLOR_CANONICAL: dict[str, str] = {
     "preto": "black",
+    "preta": "black",
     "black": "black",
     "negro": "black",
+    "negra": "black",
     "noir": "black",
     # Finish + base hue (marketing labels) → base hue for gates/search.
     "titanio preto": "black",
@@ -38,8 +40,10 @@ COLOR_CANONICAL: dict[str, str] = {
     "gray titanium": "gray",
     "grey titanium": "gray",
     "branco": "white",
+    "branca": "white",
     "white": "white",
     "blanco": "white",
+    "blanca": "white",
     "blanc": "white",
     "azul": "blue",
     "blue": "blue",
@@ -1858,6 +1862,14 @@ _SEARCH_TITLE_NOISE: frozenset[str] = frozenset(
         "polegadas",
         "inch",
         "inches",
+        # Connectivity marketing that is usually implicit for modern phones /
+        # tablets and often absent from store titles — hurts SERP recall.
+        "5g",
+        "4g",
+        "lte",
+        "wifi6",
+        "wifi6e",
+        "wifi7",
     }
 )
 
@@ -2143,18 +2155,141 @@ def form_factor_conflict(
     return None
 
 
-def looks_like_used_condition(title: str | None) -> bool:
-    """True when the listing title indicates refurbished / used / CPO stock."""
+# Commercial offer condition — orthogonal to ProductIdentity (ADR 0050).
+OfferConditionCode = Literal[
+    "new",
+    "renewed",
+    "refurbished",
+    "used",
+    "open_box",
+    "unknown",
+]
+
+
+@dataclass(frozen=True)
+class OfferCondition:
+    """Structured commercial condition for a listing/offer."""
+
+    code: OfferConditionCode
+    grade: str | None = None  # e.g. "premium" for Renewed Premium
+
+    @property
+    def is_factory_new(self) -> bool:
+        return self.code in {"new", "unknown"}
+
+    @property
+    def is_renewed_family(self) -> bool:
+        return self.code in {"renewed", "refurbished"}
+
+    @property
+    def blocks_against_new(self) -> bool:
+        """USED / OPEN_BOX still reject against an implicitly new reference."""
+        return self.code in {"used", "open_box"}
+
+
+_RENEWED_PREMIUM_RE = re.compile(
+    r"\brenewed\s+premium\b|\brenovado\s+premium\b",
+    re.IGNORECASE,
+)
+_CARRIER_TITLE_RE = re.compile(
+    r"\b(verizon|at\s*&\s*t|att|t[\s-]?mobile|tmobile)\b",
+    re.IGNORECASE,
+)
+
+
+def parse_offer_condition(
+    title: str | None,
+    *,
+    metadata: dict[str, Any] | None = None,
+) -> OfferCondition:
+    """Detect commercial condition without treating it as product identity.
+
+    Tokens remain available on the original title; callers must not erase them
+    from persisted listing data.
+    """
+    meta = metadata if isinstance(metadata, dict) else {}
+    raw = meta.get("condition") or meta.get("item_condition") or meta.get("offer_condition")
+    if raw is not None and str(raw).strip():
+        folded = fold_text(str(raw))
+        grade = None
+        raw_grade = meta.get("condition_grade")
+        if raw_grade is not None and str(raw_grade).strip():
+            grade = fold_text(str(raw_grade)).replace(" ", "_")
+        if "premium" in folded and ("renewed" in folded or "renovado" in folded):
+            return OfferCondition(code="renewed", grade=grade or "premium")
+        if "renewed" in folded or "renovado" in folded:
+            return OfferCondition(code="renewed", grade=grade)
+        if any(
+            token in folded
+            for token in (
+                "refurbished",
+                "reconditioned",
+                "recondicionado",
+                "reacondicionado",
+            )
+        ):
+            return OfferCondition(code="refurbished", grade=grade)
+        if "open" in folded and "box" in folded:
+            return OfferCondition(code="open_box", grade=grade)
+        if any(token in folded for token in ("used", "usado", "seminovo", "cpo")):
+            return OfferCondition(code="used", grade=grade)
+        if any(token in folded for token in ("new", "novo", "nueva", "nuevo")):
+            return OfferCondition(code="new", grade=grade)
+
     folded = fold_text(title or "")
     if not folded:
-        return False
-    for token in _CONDITION_TOKENS:
-        if " " in token or "-" in token:
-            if token in folded:
-                return True
-        elif re.search(rf"\b{re.escape(token)}\b", folded):
-            return True
-    return False
+        return OfferCondition(code="unknown")
+    if _RENEWED_PREMIUM_RE.search(title or ""):
+        return OfferCondition(code="renewed", grade="premium")
+    if re.search(r"\brenewed\b|\brenovad[oa]\b", folded):
+        return OfferCondition(code="renewed")
+    if re.search(
+        r"\b(?:refurbished|reconditioned|recondicionad[oa]|reacondicionad[oa])\b",
+        folded,
+    ):
+        return OfferCondition(code="refurbished")
+    if "open box" in folded or "open-box" in folded or "caixa aberta" in folded or "caja abierta" in folded:
+        return OfferCondition(code="open_box")
+    if re.search(r"\b(?:used|usad[oa]s?|seminov[oa]|cpo)\b", folded):
+        return OfferCondition(code="used")
+    if re.search(r"\b(?:new|novo|nova|nuevo|nueva)\b", folded):
+        return OfferCondition(code="new")
+    return OfferCondition(code="unknown")
+
+
+def strip_condition_tokens(text: str) -> str:
+    """Remove commercial-condition tokens from a normalized title string."""
+    drop = set(_CONDITION_TOKENS) | {"premium", "excellent"}
+    return " ".join(tok for tok in text.split() if fold_text(tok) not in drop)
+
+
+def enrich_commercial_metadata(
+    title: str | None,
+    metadata: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Attach structured condition/carrier without mutating product identity."""
+    meta = dict(metadata) if isinstance(metadata, dict) else {}
+    condition = parse_offer_condition(title, metadata=meta)
+    if condition.code != "unknown":
+        meta.setdefault("condition", condition.code)
+        if condition.grade:
+            meta.setdefault("condition_grade", condition.grade)
+    carrier = meta.get("carrier")
+    if carrier is None or not str(carrier).strip():
+        from_title = _carrier_from_title(title)
+        if from_title:
+            meta["carrier"] = from_title
+    return meta
+
+
+def looks_like_used_condition(title: str | None) -> bool:
+    """True when the listing is USED / OPEN_BOX (not renewed/refurbished)."""
+    return parse_offer_condition(title).blocks_against_new
+
+
+def looks_like_renewed_family(title: str | None) -> bool:
+    """True for Renewed / Refurbished / Recondicionado commercial offers."""
+    return parse_offer_condition(title).is_renewed_family
 
 
 def _network_lock_from_title(title: str | None) -> str | None:
@@ -2165,18 +2300,41 @@ def _network_lock_from_title(title: str | None) -> str | None:
         return "unlocked"
     if re.search(r"\b(?:locked|bloquead[oa])\b", folded):
         return "locked"
+    if _CARRIER_TITLE_RE.search(title or ""):
+        return "locked"
     return None
+
+
+def _carrier_from_title(title: str | None) -> str | None:
+    match = _CARRIER_TITLE_RE.search(title or "")
+    if not match:
+        return None
+    token = fold_text(match.group(1)).replace(" ", "")
+    if token in {"att", "at&t"}:
+        return "at&t"
+    if token in {"tmobile", "t-mobile"}:
+        return "t-mobile"
+    if token == "verizon":
+        return "verizon"
+    return token
 
 
 def condition_conflict(
     reference_title: str | None,
     candidate_title: str | None,
+    *,
+    reference_metadata: dict[str, Any] | None = None,
+    candidate_metadata: dict[str, Any] | None = None,
 ) -> str | None:
-    """Reject used/refurbished candidates when the reference is a new listing."""
-    if looks_like_used_condition(candidate_title) and not looks_like_used_condition(
-        reference_title
-    ):
-        return "condition_mismatch:new!=used"
+    """Reject USED/OPEN_BOX against an implicitly new reference.
+
+    Renewed / Refurbished are the same canonical product with a different
+    commercial condition — they must not reject identity matching.
+    """
+    ref = parse_offer_condition(reference_title, metadata=reference_metadata)
+    cand = parse_offer_condition(candidate_title, metadata=candidate_metadata)
+    if cand.blocks_against_new and ref.is_factory_new:
+        return f"condition_mismatch:new!={cand.code}"
     return None
 
 
@@ -2226,6 +2384,18 @@ def identity_from_price_item(item: ProductPriceItem) -> ProductIdentity:
             and str(value).strip().lower() != "none"
         ):
             extra[key] = value
+    # Carrier metadata (Best Buy etc.) is commercial lock evidence, not a
+    # separate identity key — map into network_lock when explicit.
+    carrier_meta = meta.get("carrier")
+    carrier_locked = meta.get("carrier_locked")
+    if carrier_locked is True:
+        extra.setdefault("network_lock", "locked")
+    elif carrier_meta is not None:
+        carrier_fold = fold_text(str(carrier_meta))
+        if carrier_fold in {"unlocked", "carrier unlocked", "sim free"}:
+            extra.setdefault("network_lock", "unlocked")
+        elif _CARRIER_TITLE_RE.search(str(carrier_meta)):
+            extra.setdefault("network_lock", "locked")
     # Bare Magalu-style variant ("Preto") → treat as color when no key:value form.
     # Wi-Fi / wireless labels are connectivity attributes, never color gates.
     variant = item.variant
@@ -2690,16 +2860,15 @@ def build_search_queries(
         hue = next((word for word in canon.split() if word in _COLOR_HUES), canon)
         language = (locale or "").replace("_", "-").split("-", 1)[0].lower()
         preferred = _COLOR_SEARCH_LOCALE_LABELS.get(hue, {}).get(language)
+        # One preferred locale label first — do not explode black+preto+negro
+        # for every store. Cross-locale synonyms remain available only when the
+        # preferred label is missing (unknown hue / unsupported language).
         if preferred:
             color_labels.append(preferred)
-        if color not in color_labels:
+        elif color:
             color_labels.append(color)
-        synonyms = _COLOR_SEARCH_SYNONYMS.get(canon, ()) + _COLOR_SEARCH_SYNONYMS.get(
-            hue, (canon,)
-        )
-        for synonym in synonyms:
-            if synonym not in color_labels:
-                color_labels.append(synonym)
+        elif hue:
+            color_labels.append(hue)
 
     for color_label in color_labels:
         colored = [part for part in (identity.brand, series) if part]

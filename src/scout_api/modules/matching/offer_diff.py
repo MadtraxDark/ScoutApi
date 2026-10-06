@@ -63,8 +63,25 @@ def fingerprint_from_offer(offer: ProductOffer) -> str:
     )
 
 
-def snapshot_dict_from_offer(offer: ProductOffer) -> dict[str, Any]:
-    return {
+def snapshot_dict_from_offer(
+    offer: ProductOffer,
+    *,
+    title: str | None = None,
+) -> dict[str, Any]:
+    from scout_api.modules.matching.identity import (
+        enrich_commercial_metadata,
+        parse_offer_condition,
+    )
+
+    base_meta = dict(offer.metadata) if isinstance(offer.metadata, dict) else {}
+    if title:
+        base_meta.setdefault("title", title)
+    meta = enrich_commercial_metadata(title or base_meta.get("title"), base_meta)
+    condition = parse_offer_condition(
+        title or (str(meta.get("title")) if meta.get("title") else None),
+        metadata=meta,
+    )
+    payload: dict[str, Any] = {
         "price": _decimal_str(offer.price),
         "currency": offer.currency,
         "seller": offer.seller,
@@ -79,8 +96,16 @@ def snapshot_dict_from_offer(offer: ProductOffer) -> dict[str, Any]:
         "canonical_url": offer.canonical_url,
         "store": offer.store,
         "country": offer.country,
-        "metadata": offer.metadata,
+        "metadata": meta,
     }
+    if condition.code != "unknown":
+        payload["condition"] = condition.code
+        if condition.grade:
+            payload["condition_grade"] = condition.grade
+    carrier = meta.get("carrier")
+    if carrier:
+        payload["carrier"] = carrier
+    return payload
 
 
 @dataclass(frozen=True)

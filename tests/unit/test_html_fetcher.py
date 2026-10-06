@@ -121,6 +121,12 @@ def test_locale_and_warmup_for_url() -> None:
         "https://www.bestbuy.com/product/ps5/JXHQ37TYYL"
     ) == ("https://www.bestbuy.com/")
     assert warmup_url_for("https://nissei.com/py/produto") == "https://nissei.com/py/"
+    assert warmup_url_for(
+        "https://nissei.com/br/catalogsearch/result/?q=iphone"
+    ) == "https://nissei.com/br/"
+    assert warmup_url_for("https://nissei.com/br/apple-iphone-17") == (
+        "https://nissei.com/br/"
+    )
     assert warmup_url_for("https://www.magazineluiza.com.br/p/1") == (
         "https://www.magazineluiza.com.br/"
     )

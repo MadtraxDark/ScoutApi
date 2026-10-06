@@ -27,8 +27,10 @@ class StoreConfig:
     # User-facing label (never the catalog slug). Catalog dict key stays snake_case.
     display_name: str = ""
 
-    # Locale preferred by the store's search integration for localized query
-    # attributes. Product identifiers and model phrases remain unchanged.
+    # Language of the store's *search index* for localizable query attributes
+    # (color/category labels). STORE COUNTRY ≠ SEARCH LANGUAGE — set explicitly
+    # when the catalog indexes English (or another language) despite country=PY.
+    # Product identifiers and model phrases are never translated.
     search_locale: str | None = None
 
     # Valid markets belong to the integration. Empty uses its configured default.
@@ -40,8 +42,10 @@ class StoreConfig:
 
     @property
     def query_locale(self) -> str:
+        """Search-attribute locale: explicit ``search_locale``, else country fallback."""
         if self.search_locale:
             return self.search_locale
+        # Last-resort only for stores without integration evidence yet.
         return {"BR": "pt-BR", "US": "en-US", "PY": "es-PY"}.get(
             self.country.upper(), "en"
         )
@@ -59,7 +63,13 @@ class StoreConfig:
 
 STORE_CONFIGS = {
     "kabum": StoreConfig(
-        "kabum", "BR", "BRL", ("kabum.com.br",), True, display_name="KaBuM!"
+        "kabum",
+        "BR",
+        "BRL",
+        ("kabum.com.br",),
+        True,
+        display_name="KaBuM!",
+        search_locale="pt-BR",
     ),
     "magazineluiza": StoreConfig(
         "magazineluiza",
@@ -68,6 +78,7 @@ STORE_CONFIGS = {
         ("magazineluiza.com.br",),
         True,
         display_name="Magazine Luiza",
+        search_locale="pt-BR",
     ),
     "mercadolivre": StoreConfig(
         "mercadolivre",
@@ -81,9 +92,16 @@ STORE_CONFIGS = {
         match_enabled=False,
         match_disabled_reason="login instability",
         display_name="Mercado Livre",
+        search_locale="pt-BR",
     ),
     "pichau": StoreConfig(
-        "pichau", "BR", "BRL", ("pichau.com.br",), True, display_name="Pichau"
+        "pichau",
+        "BR",
+        "BRL",
+        ("pichau.com.br",),
+        True,
+        display_name="Pichau",
+        search_locale="pt-BR",
     ),
     "terabyteshop": StoreConfig(
         "terabyteshop",
@@ -92,6 +110,7 @@ STORE_CONFIGS = {
         ("terabyteshop.com.br",),
         True,
         display_name="TerabyteShop",
+        search_locale="pt-BR",
     ),
     "shopee": StoreConfig(
         "shopee",
@@ -110,6 +129,7 @@ STORE_CONFIGS = {
         match_enabled=False,
         match_disabled_reason="login instability",
         display_name="Shopee",
+        search_locale="pt-BR",
     ),
     "aliexpress": StoreConfig(
         "aliexpress",
@@ -120,6 +140,8 @@ STORE_CONFIGS = {
         proxy_policy=ProxyPolicy.FALLBACK,
         image_fetch_cost="high",
         display_name="AliExpress",
+        # BR storefront UI is pt-BR; search terms for localizable attrs follow UI.
+        search_locale="pt-BR",
     ),
     "amazon_br": StoreConfig(
         "amazon",
@@ -128,6 +150,7 @@ STORE_CONFIGS = {
         ("amazon.com.br",),
         True,
         display_name="Amazon Brasil",
+        search_locale="pt-BR",
     ),
     "amazon_us": StoreConfig(
         "amazon",
@@ -136,16 +159,35 @@ STORE_CONFIGS = {
         ("amazon.com",),
         True,
         display_name="Amazon US",
+        search_locale="en-US",
     ),
     "bestbuy": StoreConfig(
-        "bestbuy", "US", "USD", ("bestbuy.com",), True, display_name="Best Buy"
+        "bestbuy",
+        "US",
+        "USD",
+        ("bestbuy.com",),
+        True,
+        display_name="Best Buy",
+        search_locale="en-US",
     ),
-    "ebay": StoreConfig("ebay", "US", "USD", ("ebay.com",), display_name="eBay"),
+    "ebay": StoreConfig(
+        "ebay", "US", "USD", ("ebay.com",), display_name="eBay", search_locale="en-US"
+    ),
     "gamestop": StoreConfig(
-        "gamestop", "US", "USD", ("gamestop.com",), display_name="GameStop"
+        "gamestop",
+        "US",
+        "USD",
+        ("gamestop.com",),
+        display_name="GameStop",
+        search_locale="en-US",
     ),
     "newegg": StoreConfig(
-        "newegg", "US", "USD", ("newegg.com",), display_name="Newegg"
+        "newegg",
+        "US",
+        "USD",
+        ("newegg.com",),
+        display_name="Newegg",
+        search_locale="en-US",
     ),
     "microcenter": StoreConfig(
         "microcenter",
@@ -153,9 +195,18 @@ STORE_CONFIGS = {
         "USD",
         ("microcenter.com",),
         display_name="Micro Center",
+        search_locale="en-US",
     ),
     "nissei": StoreConfig(
-        "nissei", "PY", "PYG", ("nissei.com",), True, display_name="Nissei"
+        "nissei",
+        "PY",
+        "PYG",
+        ("nissei.com",),
+        True,
+        display_name="Nissei",
+        # Search path is /br/ (PT UI), but catalog titles/swatches index English
+        # color tokens (Black). Country=PY must not force es-PY query attrs.
+        search_locale="en-US",
     ),
     "cellshop": StoreConfig(
         "cellshop", "PY", "PYG", ("cellshop.com",), display_name="Cellshop"
@@ -174,6 +225,9 @@ STORE_CONFIGS = {
         ("shoppingchina.com.py", "shoppingchina.com.br"),
         True,
         display_name="Shopping China",
+        # Catalog titles use English color tokens (BLACK). Live quick_search:
+        # `black` recovers the SKU; `negro` returned a wrong sibling.
+        search_locale="en-US",
         supported_country_currency_pairs=(("PY", "PYG"), ("PY", "BRL")),
     ),
     "visaovip": StoreConfig(
@@ -183,6 +237,9 @@ STORE_CONFIGS = {
         ("visaovip.com",),
         True,
         display_name="Visão VIP",
+        # UI default is pt-BR, but search index/product titles are English-first
+        # for electronics; country=PY must not force es-PY color tokens.
+        search_locale="en-US",
         supported_country_currency_pairs=(("PY", "USD"),),
     ),
 }

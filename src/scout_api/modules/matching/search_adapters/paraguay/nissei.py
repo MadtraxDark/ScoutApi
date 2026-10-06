@@ -31,7 +31,9 @@ class NisseiSearchAdapter:
                 f"q={quote_plus(query.strip())}"
             ),
             method="GET",
-            prefer_browser=False,
+            # Cloudflare blocks plain HTTP / curl_cffi (403 challenge). Browser
+            # (Camoufox + warmup) is required; Prefer HTTP-first is impossible.
+            prefer_browser=True,
         )
 
     def parse_candidates(self, response: Response) -> list[SearchCandidate]:
@@ -91,4 +93,44 @@ class NisseiSearchAdapter:
         return candidates
 
     def classify_empty_result(self, response: Response) -> EmptySearchClassification:
+        """Distinguish Magento zero-hits from CF/home shells (ERROR ≠ NO_MATCH)."""
+        page_url = str(response.url or "").casefold()
+        text = response.text or ""
+        folded = text.casefold()
+        genuine_empty = any(
+            marker in folded
+            for marker in (
+                "your search returned no results",
+                "não encontramos resultados",
+                "nao encontramos resultados",
+                "não encontramos nenhum produto",
+                "nao encontramos nenhum produto",
+                "sin resultados",
+                "no results",
+                "0 resultados",
+                "nenhum resultado",
+                "sua busca não retornou",
+                "sua busca nao retornou",
+            )
+        )
+        if genuine_empty:
+            return "genuine_empty"
+        # Bare /catalogsearch without locale redirects to home — incomplete shell.
+        if "catalogsearch" not in page_url:
+            return "incomplete"
+        # Magento product grid markers missing → blocked/partial HTML, not NO_MATCH.
+        has_grid = any(
+            marker in folded
+            for marker in (
+                "product-item",
+                "products list",
+                'class="products"',
+                "ol.products",
+                "search results",
+                "resultados da pesquisa",
+                "resultados de búsqueda",
+            )
+        )
+        if not has_grid and len(text) < 120_000:
+            return "incomplete"
         return "unknown"

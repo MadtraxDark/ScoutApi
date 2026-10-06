@@ -178,6 +178,34 @@ def test_nissei_parse_search_results() -> None:
     assert results[0].url.endswith("/py/apple-iphone-17-a3258-dual")
 
 
+def test_nissei_search_prefers_browser_for_cloudflare() -> None:
+    req = NisseiSearchAdapter().build_search_request("rtx 4060")
+    assert req.prefer_browser is True
+    assert "nissei.com/br/catalogsearch/result" in req.url
+
+
+def test_nissei_classify_empty_incomplete_home_shell() -> None:
+    adapter = NisseiSearchAdapter()
+    # Locale-less catalogsearch redirects to home — must not look like NO_MATCH.
+    home = _response(
+        "https://nissei.com/",
+        "<html><body><h1>Nissei</h1></body></html>",
+    )
+    assert adapter.classify_empty_result(home) == "incomplete"
+    cf_shell = _response(
+        "https://nissei.com/br/catalogsearch/result/?q=x",
+        "<html><head><title>Just a moment...</title></head>"
+        "<body>cf-challenge</body></html>",
+    )
+    assert adapter.classify_empty_result(cf_shell) == "incomplete"
+    genuine = _response(
+        "https://nissei.com/br/catalogsearch/result/?q=zzzz",
+        "<html><body><div class='message notice'>"
+        "Your search returned no results.</div></body></html>",
+    )
+    assert adapter.classify_empty_result(genuine) == "genuine_empty"
+
+
 def test_shoppingchina_parse_search_results() -> None:
     html = """
     <html><body>

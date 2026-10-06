@@ -881,7 +881,7 @@ def test_iphone17_pro_max_stays_incompatible_after_color_normalization() -> None
     )
 
 
-def test_iphone17_refurbished_listing_rejects_even_when_color_matches() -> None:
+def test_iphone17_refurbished_listing_matches_with_condition_note() -> None:
     ref = identity_from_price_item(
         _item(
             title="Apple iPhone 17 Pro 256GB Laranja cósmico",
@@ -903,8 +903,105 @@ def test_iphone17_refurbished_listing_rejects_even_when_color_matches() -> None:
         )
     )
     score = MatchingEngine().score(ref, candidate)
+    assert score.decision == "auto_match"
+    assert any(reason.code == "offer_condition" for reason in score.reasons)
+    assert any("refurbished" in (reason.detail or "") for reason in score.reasons)
+
+
+def test_renewed_listing_matches_against_new_reference_with_condition() -> None:
+    score = MatchingEngine().score(
+        identity_from_price_item(
+            _item(
+                title="Apple iPhone 16 128GB Black",
+                brand="Apple",
+                model="iPhone 16",
+                variant="Black",
+            )
+        ),
+        identity_from_price_item(
+            _item(
+                store="amazon_us",
+                product_id="B0RENEWED",
+                title="Apple iPhone 16, 128GB, Black - Unlocked (Renewed Premium)",
+                brand="Apple",
+                model="iPhone 16",
+                url="https://www.amazon.com/dp/B0RENEWED",
+                canonical_url="https://www.amazon.com/dp/B0RENEWED",
+                variant="color: Black; storage: 128 GB",
+            )
+        ),
+    )
+    assert score.decision == "auto_match"
+    assert any(r.code == "offer_condition" for r in score.reasons)
+    assert any("renewed" in (r.detail or "") for r in score.reasons)
+    assert any("premium" in (r.detail or "") for r in score.reasons)
+
+
+def test_renewed_does_not_relax_storage_conflict() -> None:
+    score = MatchingEngine().score(
+        identity_from_price_item(
+            _item(
+                title="Apple iPhone 16 256GB Black",
+                brand="Apple",
+                model="iPhone 16",
+                variant="color: Black; storage: 256GB",
+            )
+        ),
+        identity_from_price_item(
+            _item(
+                store="amazon_us",
+                title="Apple iPhone 16, 128GB, Black - Unlocked (Renewed)",
+                brand="Apple",
+                model="iPhone 16",
+                variant="color: Black; storage: 128 GB",
+            )
+        ),
+    )
     assert score.decision == "reject"
-    assert any(reason.code == "condition_reject" for reason in score.reasons)
+    assert any(
+        r.code in {"critical_conflict", "variant_mismatch"}
+        and "128" in (r.detail or "")
+        and "256" in (r.detail or "")
+        for r in score.reasons
+    )
+
+
+def test_used_listing_still_rejects_against_new_reference() -> None:
+    score = MatchingEngine().score(
+        identity_from_price_item(
+            _item(
+                title="Apple iPhone 16 128GB Black",
+                brand="Apple",
+                model="iPhone 16",
+                variant="Black",
+            )
+        ),
+        identity_from_price_item(
+            _item(
+                store="amazon_us",
+                title="Apple iPhone 16, 128GB, Black - Used",
+                brand="Apple",
+                model="iPhone 16",
+                variant="color: Black; storage: 128 GB",
+            )
+        ),
+    )
+    assert score.decision == "reject"
+    assert any(r.code == "condition_reject" for r in score.reasons)
+
+
+def test_new_and_renewed_listings_keep_distinct_store_product_ids() -> None:
+    """Same canonical identity may have separate commercial listings."""
+    from scout_api.modules.matching.identity import parse_offer_condition
+
+    new_title = "Apple iPhone 17 256GB Black"
+    renewed_title = "Apple iPhone 17 256GB Black (Renewed Premium)"
+    assert parse_offer_condition(new_title).code in {"new", "unknown"}
+    renewed = parse_offer_condition(renewed_title)
+    assert renewed.code == "renewed"
+    assert renewed.grade == "premium"
+    # Distinct ASINs / product_ids remain distinct commercial offers.
+    assert "B0NEW" != "B0RENEWED"
 
 
 def test_semantic_attribute_aliases_cover_spanish_and_carrier_lock() -> None:
@@ -1002,33 +1099,6 @@ def test_unknown_translated_color_is_reviewed_instead_of_rejected() -> None:
     )
     assert score.decision == "review"
     assert any(reason.code == "variant_semantic_uncertain" for reason in score.reasons)
-
-
-def test_renewed_listing_rejects_against_new_reference() -> None:
-    score = MatchingEngine().score(
-        identity_from_price_item(
-            _item(
-                title="Apple iPhone 16 128GB Black",
-                brand="Apple",
-                model="iPhone 16",
-                variant="Black",
-            )
-        ),
-        identity_from_price_item(
-            _item(
-                store="amazon_us",
-                product_id="B0RENEWED",
-                title="Apple iPhone 16, 128GB, Black - Unlocked (Renewed)",
-                brand="Apple",
-                model="iPhone 16",
-                url="https://www.amazon.com/dp/B0RENEWED",
-                canonical_url="https://www.amazon.com/dp/B0RENEWED",
-                variant="color: Black; storage: 128 GB",
-            )
-        ),
-    )
-    assert score.decision == "reject"
-    assert any(r.code == "condition_reject" for r in score.reasons)
 
 
 def test_iphone_bundle_with_watch_rejects() -> None:

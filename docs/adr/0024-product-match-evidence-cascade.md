@@ -25,8 +25,10 @@ antes de recall. Embeddings/ML descartados no momento (custo/opacidade).
    1. conflito de variante / `critical_identity_conflict` → `reject`
    2. acessório → `reject`
    3. kit/bundle (ex.: iPhone + Apple Watch) → `reject`
-   4. condição usada/recondicionada vs referência nova → `reject`
-   5. mesmo `store`+`product_id` → `auto_match`
+4. condição **USED/OPEN_BOX** vs referência nova → `reject`;
+   Renewed/Refurbished **não** rejeitam identidade (ADR 0050) — geram
+   `offer_condition` e persistem rotulados
+5. mesmo `store`+`product_id` → `auto_match`
    6. GTIN validado → `auto_match` (brand conflict → `review`)
    7. **MPN** normalizado → `auto_match` (brand conflict → `review`)
    8. brand + model compatível (série comercial / MPN cruzado no título) → `auto_match`

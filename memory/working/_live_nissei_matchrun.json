@@ -1,0 +1,189 @@
+{
+  "canonical_product_id": null,
+  "reference": {
+    "store": "synthetic",
+    "country": "BR",
+    "product_id": "identity:apple-iphone-17",
+    "sku": null,
+    "gtin": null,
+    "title": "Apple iPhone 17 256GB Black",
+    "brand": "Apple",
+    "model": "iPhone 17",
+    "variant": "color: Black; storage: 256 GB",
+    "seller": null,
+    "url": "scout://identity/apple-iphone-17",
+    "canonical_url": "scout://identity/apple-iphone-17",
+    "currency": "BRL",
+    "price": "1.00",
+    "original_price": null,
+    "discount_percentage": null,
+    "pix_price": null,
+    "availability": "available",
+    "installment_price": null,
+    "installment_count": null,
+    "shipping_price": null,
+    "available": true,
+    "images": [],
+    "image_candidates": [],
+    "scraped_at": "2026-10-06T02:20:16.381181Z",
+    "last_changed_at": null,
+    "metadata": {
+      "identity_only": true,
+      "source": "identity-reference",
+      "category": "smartphone",
+      "variant": {
+        "storage": "256 GB",
+        "color": "Black"
+      }
+    }
+  },
+  "matches": [
+    {
+      "store": "nissei",
+      "store_display_name": "Nissei",
+      "country": "PY",
+      "listing_id": null,
+      "decision": "auto_match",
+      "confidence": "0.92",
+      "reasons": [
+        {
+          "code": "brand_match",
+          "detail": "apple",
+          "score": 1.0
+        },
+        {
+          "code": "brand_model_exact",
+          "detail": "apple:iphone17~iphone17",
+          "score": 1.0
+        },
+        {
+          "code": "title_similarity",
+          "detail": "token_set_ratio=0.625",
+          "score": 0.625
+        }
+      ],
+      "product": {
+        "store": "nissei",
+        "country": "PY",
+        "product_id": "164244",
+        "sku": "164244",
+        "gtin": null,
+        "title": "Apple iPhone 17 A3520 Dual 256 GB - Preto (Anatel)",
+        "brand": "APPLE",
+        "model": "iPhone 17",
+        "variant": "color: Preto; storage: 256 GB",
+        "seller": null,
+        "url": "https://nissei.com/br/apple-iphone-17-a3520-dual-256-gb-negro",
+        "canonical_url": "https://nissei.com/br/apple-iphone-17-a3520-dual-256-gb-negro",
+        "currency": "USD",
+        "price": "990",
+        "original_price": null,
+        "discount_percentage": null,
+        "pix_price": null,
+        "availability": "available",
+        "installment_price": null,
+        "installment_count": null,
+        "shipping_price": null,
+        "available": true,
+        "images": [],
+        "image_candidates": [],
+        "scraped_at": "2026-10-06T02:20:38.193526Z",
+        "last_changed_at": null,
+        "metadata": {
+          "source": {
+            "price": "json-ld-or-magento",
+            "sku": "json-ld-or-magento",
+            "availability": "json-ld-or-page",
+            "title": "json-ld-or-h1",
+            "specifications": "product-attribute-specs-table",
+            "selected_variant": "not-found",
+            "brand": "structured-data",
+            "model": "product-title-fallback",
+            "color": "product-specifications",
+            "storage": "product-specifications",
+            "size": "product-specifications"
+          },
+          "variant": {
+            "color": "Preto",
+            "storage": "256 GB"
+          },
+          "selected_variant": {},
+          "url_evidence": {
+            "storage": "256 GB",
+            "color": "negro"
+          },
+          "parent_product_id": "1754928",
+          "variant_product_id": null,
+          "variant_conflicts": [
+            {
+              "attribute": "color",
+              "specifications": "Preto",
+              "url_evidence": "negro",
+              "chosen": "Preto",
+              "winner_source": "product-specifications"
+            }
+          ],
+          "specifications": {
+            "Cor": "Preto",
+            "Garantia": "1 Ano de Assistência Técnica",
+            "Tipo de SIM": "eSIM",
+            "Tamanho da tela": "6.3\"",
+            "Bandas 3G": "2 (1900 Mhz), 4 (1700/2100 Mhz) AWS, 5 (850 Mhz), 8 (900 Mhz)",
+            "Conectividade Sem Fio": "Beidou, GALILEO , GLONASS, GPS, NFC, QZSS, NavIC, Wifi 802.11 a/b/g/n/ac/6/7, Bluetooth v6.0",
+            "Bateria": "3692 mAh",
+            "Bandas 2G": "850 - 900 - 1800 - 1900",
+            "Memoria Interna": "256 GB",
+            "Leitores de acesso": "Face ID",
+            "Tecnologia de tela": "LTPO Super Retina XDR OLED",
+            "Câmera Traseira": "Dual 48Mp + 48Mp",
+            "Sistema Operativo": "iOS 26",
+            "Resolução de vídeo": "4k",
+            "Flash LED": "Sí",
+            "Câmera frontal": "18Mp",
+            "Bandas 4G Latinas": "B13 (700 Mhz), B17 (700 Mhz), B2 (1900 Mhz), B28 (700 Mhz), B3 (1800 Mhz), B4 (1700-2100 Mhz), B7 (2600 Mhz), B1(2100 Mhz), B5 (850 Mhz), B8 (900 Mhz), B12 (700 Mhz), B20 (800 Mhz), B66 (AWS-3), B40 (2300 Mhz), B41 (2500 Mhz), B19 (850 MHz), B38 (2600 MHz), B18 (850 MHz), B26 (850 MHz), B48 (3600 MHz), B71 (600 MHz)",
+            "Procesador Gráfico": "Apple GPU (5-core graphics)",
+            "Resistência à água": "IP68 Certificado",
+            "Otras Bandas 4G": "32 (1500 Mhz), 39 (1900 Mhz), 34 (2100 MHz), B25 (1900 MHz), B29 (700 MHz), B30 (2300 MHz), B14 (700 MHz)",
+            "Dual SIM": "Sim",
+            "Interfaz": "USB 2.0 Type-C",
+            "Resolução": "1206 x 2622p",
+            "Chipset": "Apple A19",
+            "Bandas 5G": "n1, n2, n3, n5, n7, n8, n12, n20, n25, n28, n29, n30, n38, n40, n41, n48, n66, n71, n77, n78, n79, n26, n75, n14, n70",
+            "Intervalo da tela": "Maior ou similar a 5.5",
+            "Processador CPU / Núcleos": "(6) Hexa-core",
+            "color": "Preto",
+            "storage": "256 GB",
+            "size": "6.3\"",
+            "screen_size": "6.3\"",
+            "processor": "Apple GPU (5-core graphics)",
+            "connectivity": "Beidou, GALILEO , GLONASS, GPS, NFC, QZSS, NavIC, Wifi 802.11 a/b/g/n/ac/6/7, Bluetooth v6.0",
+            "memory_type": "256 GB",
+            "chipset": "Apple A19",
+            "cores": "Preto",
+            "resolution": "4k",
+            "case_size": "6.3\"",
+            "included_storage": "256 GB",
+            "fan_size": "6.3\""
+          }
+        }
+      },
+      "search_query": "apple iphone 17 256gb black"
+    }
+  ],
+  "unmatched_stores": [],
+  "errors": [],
+  "discovered_gtin": null,
+  "gtin_source": null,
+  "_meta": {
+    "total_ms": 21851.0,
+    "queries": [
+      "apple iphone 17 256gb black",
+      "smartphone apple iphone 17",
+      "apple iphone 17",
+      "iphone 17",
+      "apple iphone 17 256gb",
+      "iphone 17 256gb"
+    ],
+    "reference_title": "Apple iPhone 17 256GB Black"
+  }
+}

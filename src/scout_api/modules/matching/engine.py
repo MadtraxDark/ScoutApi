@@ -18,6 +18,7 @@ from scout_api.modules.matching.identity import (
     looks_like_bundle,
     models_compatible,
     motherboard_soft_model_title_exempt,
+    parse_offer_condition,
     processor_model_exact,
     processor_socket,
     token_set_ratio,
@@ -44,6 +45,37 @@ class MatchScore:
     decision: MatchDecision
     confidence: Decimal
     reasons: tuple[MatchReason, ...]
+
+
+def _carrier_review_needed(ref: ProductIdentity, cand: ProductIdentity) -> bool:
+    """True when candidate is carrier-locked and reference lock is unknown."""
+    return (
+        not ref.variant_attrs.get("network_lock")
+        and cand.variant_attrs.get("network_lock") == "locked"
+    )
+
+
+def _maybe_carrier_review(
+    reference: ProductIdentity,
+    candidate: ProductIdentity,
+    reasons: list[MatchReason],
+    *,
+    confidence: Decimal,
+) -> MatchScore | None:
+    if not _carrier_review_needed(reference, candidate):
+        return None
+    reasons.append(
+        MatchReason(
+            code="carrier_variant_uncertain",
+            detail="reference_lock_unknown:candidate_locked",
+            score=0.5,
+        )
+    )
+    return MatchScore(
+        decision="review",
+        confidence=min(confidence, Decimal("0.8800")),
+        reasons=tuple(reasons),
+    )
 
 
 def _variant_conflict(ref: ProductIdentity, cand: ProductIdentity) -> str | None:
@@ -237,6 +269,36 @@ class MatchingEngine:
                 reasons=tuple(reasons),
             )
 
+        cand_condition = parse_offer_condition(candidate.title)
+        if cand_condition.is_renewed_family:
+            detail = cand_condition.code
+            if cand_condition.grade:
+                detail = f"{detail}:{cand_condition.grade}"
+            reasons.append(
+                MatchReason(
+                    code="offer_condition",
+                    detail=detail,
+                    score=1.0,
+                )
+            )
+
+        ref_lock = reference.variant_attrs.get("network_lock")
+        cand_lock = candidate.variant_attrs.get("network_lock")
+        # Explicit unlocked vs carrier-locked is a commercial variant conflict.
+        if ref_lock == "unlocked" and cand_lock == "locked":
+            reasons.append(
+                MatchReason(
+                    code="carrier_lock_reject",
+                    detail="network_lock:unlocked!=locked",
+                    score=0.0,
+                )
+            )
+            return MatchScore(
+                decision="reject",
+                confidence=Decimal("0.0000"),
+                reasons=tuple(reasons),
+            )
+
         if monitor_code_exact:
             reasons.append(
                 MatchReason(
@@ -316,6 +378,11 @@ class MatchingEngine:
                     confidence=Decimal("0.8500"),
                     reasons=tuple(reasons),
                 )
+            carrier_review = _maybe_carrier_review(
+                reference, candidate, reasons, confidence=Decimal("0.9900")
+            )
+            if carrier_review is not None:
+                return carrier_review
             return MatchScore(
                 decision="auto_match",
                 confidence=Decimal("0.9900"),
@@ -575,6 +642,13 @@ class MatchingEngine:
                     confidence=Decimal("0.8800"),
                     reasons=tuple(reasons),
                 )
+            # Carrier-locked candidate vs unspecified reference → review, not
+            # silent auto_match as unlocked-equivalent.
+            carrier_review = _maybe_carrier_review(
+                reference, candidate, reasons, confidence=confidence
+            )
+            if carrier_review is not None:
+                return carrier_review
             return MatchScore(
                 decision="auto_match",
                 confidence=min(confidence, Decimal("0.9700")),

@@ -46,7 +46,7 @@ def test_long_smartphone_title_builds_identity_queries_not_raw_title() -> None:
     )
     queries = build_search_queries(identity)
     # Title-first retrieval preserves explicit category; family remains fallback.
-    assert queries[0] == "celular samsung galaxy s25 ultra 5g 256gb titanio preto"
+    assert queries[0] == "celular samsung galaxy s25 ultra 256gb titanio preto"
     assert "samsung galaxy s25 ultra" in queries
     assert "samsung galaxy s25 ultra 256gb" in queries
     assert title not in queries
@@ -96,9 +96,16 @@ def test_localized_color_query_follows_search_integration_locale() -> None:
 def test_store_query_locales_are_market_metadata_and_keep_identifiers() -> None:
     from scout_api.modules.crawler.stores import STORE_CONFIGS
 
+    assert STORE_CONFIGS["bestbuy"].search_locale == "en-US"
+    assert STORE_CONFIGS["amazon_us"].search_locale == "en-US"
+    assert STORE_CONFIGS["amazon_br"].search_locale == "pt-BR"
+    assert STORE_CONFIGS["shoppingchina"].search_locale == "en-US"
+    assert STORE_CONFIGS["visaovip"].search_locale == "en-US"
+    assert STORE_CONFIGS["nissei"].search_locale == "en-US"
     assert STORE_CONFIGS["bestbuy"].query_locale == "en-US"
     assert STORE_CONFIGS["amazon_us"].query_locale == "en-US"
     assert STORE_CONFIGS["amazon_br"].query_locale == "pt-BR"
+    assert STORE_CONFIGS["shoppingchina"].query_locale == "en-US"
 
     identity = identity_from_price_item(
         identity_reference_item(
@@ -115,7 +122,28 @@ def test_store_query_locales_are_market_metadata_and_keep_identifiers() -> None:
         assert identifier in joined
 
 
-def test_serp_prefilter_rejects_renewed_when_reference_is_new() -> None:
+def test_shoppingchina_search_locale_prefers_english_color_not_spanish() -> None:
+    from scout_api.modules.crawler.stores import STORE_CONFIGS
+
+    identity = identity_from_price_item(
+        identity_reference_item(
+            "Apple iPhone 17 256GB Preto 5G",
+            brand="Apple",
+            model="iPhone 17",
+            category="smartphone",
+            variant="color: Preto; storage: 256GB",
+        )
+    )
+    locale = STORE_CONFIGS["shoppingchina"].query_locale
+    queries = build_search_queries(identity, locale=locale)
+    assert locale == "en-US"
+    assert queries
+    assert "negro" not in queries[0]
+    assert "black" in queries[0]
+    assert "5g" not in queries[0]
+
+
+def test_serp_prefilter_allows_renewed_when_reference_is_new() -> None:
     ref = identity_from_price_item(
         identity_reference_item(
             "Samsung Galaxy S25 Ultra 256GB Titanium Black",
@@ -126,6 +154,21 @@ def test_serp_prefilter_rejects_renewed_when_reference_is_new() -> None:
     reason = _serp_title_reject_reason(
         ref,
         title="Samsung Galaxy S25 Ultra, 256GB, Titanium Black - Unlocked (Renewed)",
+    )
+    assert reason is None
+
+
+def test_serp_prefilter_still_rejects_used_when_reference_is_new() -> None:
+    ref = identity_from_price_item(
+        identity_reference_item(
+            "Samsung Galaxy S25 Ultra 256GB Titanium Black",
+            brand="Samsung",
+            category="smartphone",
+        )
+    )
+    reason = _serp_title_reject_reason(
+        ref,
+        title="Samsung Galaxy S25 Ultra 256GB Titanium Black Used",
     )
     assert reason is not None
     assert "condition" in reason
@@ -158,3 +201,137 @@ def test_asin_length_gate_in_search_parser() -> None:
 
 def test_market_isolation_display_names() -> None:
     assert store_display_name("amazon_br") != store_display_name("amazon_us")
+
+
+def test_multi_category_search_locale_localizes_only_translatable_attrs() -> None:
+    from scout_api.modules.crawler.stores import STORE_CONFIGS
+
+    cases = [
+        (
+            "smartphone",
+            "Apple iPhone 17 256GB Preto",
+            "Apple",
+            "iPhone 17",
+            "color: Preto; storage: 256GB",
+            "black",
+            "preto",
+        ),
+        (
+            "gpu",
+            "Placa de Video XFX Radeon RX 7600 Preta",
+            "XFX",
+            "RX 7600",
+            "color: Preta",
+            "black",
+            "preto",
+        ),
+        (
+            "cpu",
+            "Processador AMD Ryzen 7 5800X3D",
+            "AMD",
+            "Ryzen 7 5800X3D",
+            None,
+            None,
+            None,
+        ),
+        (
+            "ssd",
+            "SSD Samsung 990 EVO Plus 1TB",
+            "Samsung",
+            "990 EVO Plus",
+            "capacity: 1TB",
+            None,
+            None,
+        ),
+        (
+            "motherboard",
+            "Placa Mae ASUS TUF B650M-E WIFI Preta",
+            "ASUS",
+            "B650M-E",
+            "color: Preta",
+            "black",
+            "preto",
+        ),
+        (
+            "monitor",
+            'Monitor Gamer ASUS TUF 24.5" Preto VG259Q5A',
+            "ASUS",
+            "VG259Q5A",
+            "color: Preto",
+            "black",
+            "preto",
+        ),
+    ]
+    for category, title, brand, model, variant, en_color, pt_color in cases:
+        identity = identity_from_price_item(
+            identity_reference_item(
+                title,
+                brand=brand,
+                model=model,
+                category=category,
+                variant=variant or "",
+            )
+        )
+        sc = build_search_queries(
+            identity, locale=STORE_CONFIGS["shoppingchina"].query_locale
+        )
+        br = build_search_queries(
+            identity, locale=STORE_CONFIGS["kabum"].query_locale
+        )
+        joined_sc = " ".join(sc).lower()
+        joined_br = " ".join(br).lower()
+        # Identifiers / model codes never localized.
+        assert brand.casefold().split()[0] in joined_sc or model.casefold() in joined_sc
+        if en_color:
+            assert en_color in joined_sc
+            assert "negro" not in sc[0]
+        if pt_color:
+            assert pt_color in joined_br
+
+
+def test_carrier_locked_candidate_rejects_unlocked_reference() -> None:
+    from decimal import Decimal
+
+    from scout_api.modules.crawler.models.product import ProductPriceItem
+    from scout_api.modules.matching.engine import MatchingEngine
+    from scout_api.modules.matching.identity import identity_from_price_item
+
+    def _phone(
+        title: str,
+        *,
+        store: str = "synthetic",
+        metadata: dict | None = None,
+    ) -> ProductPriceItem:
+        return ProductPriceItem.model_validate(
+            {
+                "store": store,
+                "country": "US",
+                "product_id": "x",
+                "title": title,
+                "brand": "Apple",
+                "model": "iPhone 17",
+                "variant": "color: Black; storage: 256GB",
+                "url": "https://example.com/p",
+                "canonical_url": "https://example.com/p",
+                "currency": "USD",
+                "price": Decimal("799.00"),
+                "metadata": {"category": "smartphone", **(metadata or {})},
+            }
+        )
+
+    ref = identity_from_price_item(_phone("Apple iPhone 17 256GB Black Unlocked"))
+    cand = identity_from_price_item(
+        _phone("Apple iPhone 17 256GB Black Verizon", store="bestbuy")
+    )
+    cand_meta = identity_from_price_item(
+        _phone(
+            "Apple iPhone 17 256GB Black",
+            store="bestbuy",
+            metadata={"carrier": "Verizon", "carrier_locked": True},
+        )
+    )
+    assert ref.variant_attrs.get("network_lock") == "unlocked"
+    assert cand.variant_attrs.get("network_lock") == "locked"
+    assert cand_meta.variant_attrs.get("network_lock") == "locked"
+    assert MatchingEngine().score(ref, cand).decision == "reject"
+    assert MatchingEngine().score(ref, cand_meta).decision == "reject"

@@ -20,6 +20,10 @@
 - SERP JSON: `https://www.shoppingchina.com.py/quick_search?search={query}`
   (legacy Magento `/catalogsearch/result` returns 404)
 - Fallback HTML parser for `/site/search?query=` pages when JSON is absent
+- **Search locale:** `search_locale=en-US` (ADR 0050). Catalog titles index
+  English color tokens (`BLACK`); country=PY must not force `es-PY`/`negro`.
+  Live evidence (2026-10-05): `… black` recovers the SKU; `… negro` returned a
+  wrong sibling.
 - Product URLs: `/produto/` and `/producto/`
 - On **`.com.py`**, `quick_search` may still emit `/produto/` slugs that soft-404;
   spider rewrites them to `/producto/` in search candidates and

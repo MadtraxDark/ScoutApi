@@ -408,6 +408,19 @@ class ProductListingView(BaseModel):
     promotion_price: Decimal | None = None
     promotion_conditions: dict[str, Any] = Field(default_factory=dict)
     promotion_commercially_active: bool = False
+    # Commercial offer dimensions (orthogonal to canonical product identity).
+    condition: str | None = Field(
+        default=None,
+        description="Condição comercial: new, renewed, refurbished, used, open_box.",
+    )
+    condition_grade: str | None = Field(
+        default=None,
+        description="Granularidade da condição (ex.: premium para Renewed Premium).",
+    )
+    carrier: str | None = Field(
+        default=None,
+        description="Operadora / lock comercial quando aplicável (ex.: Verizon).",
+    )
     # Pure FX conversion (ADR 0034) — never overwrites price/currency.
     converted_price_brl: Decimal | None = Field(
         default=None,

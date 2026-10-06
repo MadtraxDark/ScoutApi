@@ -224,7 +224,7 @@ _p(
         "carrier",
         "mpn",
     ),
-    critical=("storage", "color", "condition"),
+    critical=("storage", "color"),
     strong=("mpn", "storage", "gtin"),
     filters=("brand", "model", "storage", "color", "variant"),
     variant_from=("color", "storage"),

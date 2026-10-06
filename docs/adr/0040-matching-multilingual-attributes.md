@@ -58,9 +58,10 @@ variante e condição?
 6. Capacidade e assinatura de modelo continuam bloqueadores anteriores ao
    score; `Pro` e `Pro Max` permanecem modelos distintos.
 7. `renewed`, `refurbished`, `reconditioned`, `used`, `open box` e aliases
-   localizados continuam condição comercial, nunca stopwords. Oferta usada,
-   recondicionada ou open-box é rejeitada contra referência implicitamente
-   nova, conforme ADR 0024.
+   localizados continuam condição comercial, nunca stopwords.
+   **Atualização (ADR 0050):** Renewed/Refurbished podem representar o mesmo
+   produto canônico e **não** rejeitam automaticamente contra referência nova;
+   USED/OPEN_BOX preservam rejeição. A condição é persistida e exibida.
 8. Part numbers com estrutura alfanumérica e sufixo regional `/A` são extraídos
    como MPN e só fortalecem identidade quando iguais nos dois lados. Códigos
    `A####` são extraídos como model number apenas em contexto de telefone. A

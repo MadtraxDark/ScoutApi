@@ -672,6 +672,36 @@ def _to_listing_view(
     original_price = (
         Decimal(str(original_raw)) if original_raw not in (None, "") else None
     )
+    from scout_api.modules.matching.identity import (
+        enrich_commercial_metadata,
+        parse_offer_condition,
+    )
+
+    commercial = enrich_commercial_metadata(
+        listing.title,
+        {
+            **(payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}),
+            **{
+                k: payload[k]
+                for k in ("condition", "condition_grade", "carrier")
+                if k in payload
+            },
+        },
+    )
+    condition = parse_offer_condition(listing.title, metadata=commercial)
+    condition_code = (
+        condition.code
+        if condition.code != "unknown"
+        else (str(commercial.get("condition")) if commercial.get("condition") else None)
+    )
+    condition_grade = condition.grade or (
+        str(commercial["condition_grade"])
+        if commercial.get("condition_grade")
+        else None
+    )
+    carrier = (
+        str(commercial["carrier"]) if commercial.get("carrier") else None
+    )
     price = latest.price if latest is not None else None
     currency = latest.currency if latest is not None else None
     fx: dict[str, object] = {
@@ -723,6 +753,9 @@ def _to_listing_view(
         promotion_price=listing.promotion_price,
         promotion_conditions=dict(listing.promotion_conditions or {}),
         promotion_commercially_active=is_promotion_commercially_active(listing),
+        condition=condition_code if condition_code not in {None, "unknown"} else None,
+        condition_grade=condition_grade,
+        carrier=carrier,
         converted_price_brl=fx.get("converted_price_brl"),  # type: ignore[arg-type]
         exchange_rate=fx.get("exchange_rate"),  # type: ignore[arg-type]
         exchange_rate_type=fx.get("exchange_rate_type"),  # type: ignore[arg-type]

@@ -43,9 +43,15 @@ def build_embedding_texts(identity: ProductIdentity) -> EmbeddingTexts:
     they are not added as structured fields (a source title may still contain
     them). Model and variant attributes remain available so the benchmark can
     measure whether the model preserves those discriminants across languages.
+
+    Commercial condition tokens (renewed/refurbished/used/…) are stripped from
+    normalized/structured forms so embedding ranking does not hide a valid
+    same-product candidate solely for being Renewed.
     """
+    from scout_api.modules.matching.identity import strip_condition_tokens
+
     raw = identity.title.strip()
-    normalized = identity.title_normalized.strip()
+    normalized = strip_condition_tokens(identity.title_normalized.strip())
 
     fields: list[tuple[str, str | None]] = [
         ("category", identity.category),

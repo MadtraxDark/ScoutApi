@@ -431,7 +431,13 @@ def warmup_url_for(url: str) -> str | None:
     if not hostname or not parsed.scheme:
         return None
     if hostname == "nissei.com" or hostname.endswith(".nissei.com"):
-        return f"{parsed.scheme}://{parsed.netloc}/py/"
+        # Mint CF cookies on the same Magento storefront as the target URL.
+        # SERP uses `/br/catalogsearch/…`; PDPs may be `/br/…` or `/py/…`.
+        # Warming the wrong view can leave the session on a mismatched store
+        # cookie and yield empty/home shells that look like NO_MATCH.
+        path = (parsed.path or "").lower()
+        storefront = "br" if path == "/br" or path.startswith("/br/") else "py"
+        return f"{parsed.scheme}://{parsed.netloc}/{storefront}/"
     if hostname == "shopee.com.br" or hostname.endswith(".shopee.com.br"):
         return f"{parsed.scheme}://{parsed.netloc}/"
     if is_aliexpress_url(url):

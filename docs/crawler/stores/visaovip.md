@@ -139,6 +139,9 @@ Fixing PDP pricing must not change Search query generation or matcher thresholds
   - Storefront search form converts whitespace to hyphens in the path
     (`ASUS TUF Gaming B650M-E WIFI` → `ASUS-TUF-Gaming-B650M-E-WIFI`)
   - Naive `/busca/?q=` is a soft 404 — do not use
+- **Search locale:** `search_locale=en-US` (ADR 0050). UI default is pt-BR, but
+  catalog/search terms for electronics are English-first; country=PY must not
+  force Spanish color tokens.
 - Parser: `a[href*="/prod/"]` whose path matches `/prod/.../{productCode}/`
   (stable productCode = same ID as PDP). CDN gallery URLs under
   `cdn.visaovip.com/img/prod/...` are ignored

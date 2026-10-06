@@ -22,6 +22,9 @@
   (locale prefix is required — bare `/catalogsearch/…` redirects to home;
   `/br/` ranks the BR storefront PDPs used by Product Match; `/py/` also works
   but may demote some S-series results)
+- **Search locale:** `search_locale=en-US` (ADR 0050), validated independently
+  from Shopping China. Magento swatches/titles use English color labels
+  (`Black`); country=PY must not force `es-PY`.
 - Parser: Magento product item links (slug PDPs and `.html`)
 - SERP often returns the **family / parent** title without storage/color —
   that is **not** an early reject; full PDP fetch resolves the selected variant
@@ -86,8 +89,13 @@ variant and record `metadata.variant_conflicts` when useful.
 
 ## Fetch strategy
 
-- Cloudflare-sensitive; warm-up / locale `es-PY` (ADR 0010)
+- Cloudflare-sensitive; Camoufox + warm-up required (plain HTTP / curl_cffi → 403)
+- Warm-up follows the Magento storefront of the target URL (`/br/` or `/py/`)
+  so CF cookies and store-view match the SERP/PDP (ADR 0010)
+- Browser fingerprint locale remains `es-PY`; **search queries** use
+  `search_locale=en-US` (ADR 0050) — fingerprint ≠ query language
 - Proxy Cost Mode `FALLBACK`
+- Search adapter sets `prefer_browser=True` (HTTP-first is not viable under CF)
 - Prefer structured Magento HTML/JS already in the SSR payload — no extra
   browser navigation only to read visible swatch text when sole-option /
   `contentsWithIds` already determine the variant
@@ -95,6 +103,9 @@ variant and record `metadata.variant_conflicts` when useful.
 ## Known blocking
 
 - Cloudflare challenge / hard-block via fetcher
+- Empty SERP without Magento grid / redirected away from `catalogsearch` is
+  classified `incomplete` → `SEARCH_INCOMPLETE_RESPONSE` (ERROR), never
+  silent `NO_MATCH`
 
 ## Important invariants
 

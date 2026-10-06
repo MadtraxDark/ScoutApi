@@ -59,15 +59,27 @@ mantidos integralmente. As queries genéricas de OPN continuam como fallback
 dentro do mesmo budget.
 
 Consultas com atributos localizáveis usam o `query_locale` configurado na
-integração da loja (`StoreConfig`). Por padrão, a metadata deriva `pt-BR`,
-`en-US` ou `es-PY` do país; lojas podem sobrescrever esse locale explicitamente.
-Cada loja recebe sua própria ladder: por exemplo, cor `Rosa` mantém uma query
-`rosa` para pt-BR e prioriza `pink` para en-US, inclusive no título principal.
-O acabamento também é preservado: `Titânio Preto` vira `black titanium` em
-en-US e continua `titanio preto` em pt-BR. Identificadores, códigos de
-modelo e frases comerciais não são traduzidos. Os aliases de cor restantes
-continuam disponíveis como fallback sem multiplicar a quantidade de queries;
-a ladder preserva seu dedup e o budget existente por loja.
+integração da loja (`StoreConfig.search_locale` explícito, com fallback de
+país só como último recurso — ADR 0050). **País da loja ≠ idioma do índice de
+busca.** Por exemplo, Shopping China/Visão VIP/Nissei (`country=PY`) usam
+`search_locale=en-US` porque o catálogo indexa cores em inglês (`BLACK`),
+enquanto lojas BR usam `pt-BR`. Cada loja recebe sua própria ladder: cor
+`Rosa` mantém uma query `rosa` para pt-BR e prioriza `pink` para en-US,
+inclusive no título principal. O acabamento também é preservado: `Titânio Preto`
+vira `black titanium` em en-US e continua `titanio preto` em pt-BR.
+Identificadores, códigos de modelo e frases comerciais não são traduzidos.
+Apenas a representação preferida do locale entra na ladder colorida (sem
+explodir black+preto+negro). Tokens de marketing redundantes (`5g`/`4g`/`lte`)
+são removidos do título de busca.
+
+### Condição comercial ≠ identidade
+
+Renewed / Refurbished / Recondicionado são a **mesma** identidade canônica com
+condição comercial diferente (ADR 0050). O matcher não rejeita só por Renewed;
+persiste `condition` (+ `condition_grade` para Renewed Premium) e o frontend
+exibe rótulo pt-BR. USED / OPEN_BOX contra referência nova continuam
+rejeitados. Ranking comercial prefere New sobre Renewed ao destacar menor
+preço.
 
 ### Verificação live de queries (2026-09-26)
 
