@@ -2432,7 +2432,8 @@ def test_long_smartphone_title_does_not_drive_raw_serp_query() -> None:
     assert identity.variant_attrs.get("color") == "titanio preto"
     queries = build_search_queries(identity)
     # Explicit category stays in its title position; promotional detail is removed.
-    assert queries[0] == "celular samsung galaxy s25 ultra 5g 256gb titanio preto"
+    # Connectivity slogans like ``5G`` are SERP noise (see ``_SEARCH_TITLE_NOISE``).
+    assert queries[0] == "celular samsung galaxy s25 ultra 256gb titanio preto"
     assert "samsung galaxy s25 ultra 256gb" in queries
     assert any(q == "samsung galaxy s25 ultra" for q in queries)
     assert any("256gb" in q and "preto" in q for q in queries)
@@ -2443,6 +2444,7 @@ def test_long_smartphone_title_does_not_drive_raw_serp_query() -> None:
     assert "5000mah" not in joined
     assert "quadrupla" not in joined
     assert "dual chip" not in joined.casefold()
+    assert " 5g " not in f" {joined} "
 
 
 def test_smartphone_marketing_noise_does_not_change_identity() -> None:
@@ -2468,7 +2470,7 @@ def test_smartphone_marketing_noise_does_not_change_identity() -> None:
         build_search_queries(base)[0] == "samsung galaxy s25 ultra 256gb titanio preto"
     )
     assert build_search_queries(noisy)[0] == (
-        "celular samsung galaxy s25 ultra 5g 256gb titanio preto"
+        "celular samsung galaxy s25 ultra 256gb titanio preto"
     )
 
 

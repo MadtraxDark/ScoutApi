@@ -1,0 +1,80 @@
+{
+  "canonical_product_id": null,
+  "reference": {
+    "store": "synthetic",
+    "country": "BR",
+    "product_id": "identity:apple-iphone-17",
+    "sku": null,
+    "gtin": null,
+    "title": "Apple iPhone 17 256GB Sage",
+    "brand": "Apple",
+    "model": "iPhone 17",
+    "variant": "color: Sage; storage: 256 GB",
+    "seller": null,
+    "url": "scout://identity/apple-iphone-17",
+    "canonical_url": "scout://identity/apple-iphone-17",
+    "currency": "BRL",
+    "price": "1.00",
+    "original_price": null,
+    "discount_percentage": null,
+    "pix_price": null,
+    "availability": "available",
+    "installment_price": null,
+    "installment_count": null,
+    "shipping_price": null,
+    "available": true,
+    "images": [],
+    "image_candidates": [],
+    "scraped_at": "2026-10-06T03:30:34.951336Z",
+    "last_changed_at": null,
+    "metadata": {
+      "variant": {
+        "color": "Sage",
+        "storage": "256 GB"
+      },
+      "category": "smartphone"
+    }
+  },
+  "matches": [],
+  "unmatched_stores": [
+    "nissei"
+  ],
+  "errors": [],
+  "discovered_gtin": null,
+  "gtin_source": null,
+  "_meta": {
+    "synthetic": {
+      "raw_title": "Apple iPhone 17 MG6C4VC/A A3519 256GB / eSIM - Sage",
+      "ref_model": "iphone17",
+      "cand_model": "iphone17",
+      "cand_attrs": {
+        "color": "sage",
+        "storage": "256gb"
+      },
+      "cand_mpn": "mg6c4vca",
+      "cand_model_numbers": [
+        "a3519"
+      ],
+      "connectivity": "esim",
+      "market_variant": null,
+      "canonical_color": "sage",
+      "decision": "auto_match",
+      "confidence": 0.92,
+      "reasons": [
+        [
+          "brand_match",
+          "apple"
+        ],
+        [
+          "brand_model_exact",
+          "apple:iphone17~iphone17"
+        ],
+        [
+          "title_similarity",
+          "token_set_ratio=0.625"
+        ]
+      ]
+    },
+    "total_ms": 45934.3
+  }
+}

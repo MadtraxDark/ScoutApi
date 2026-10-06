@@ -28,3 +28,15 @@ data/fetch-cost-metrics/
 .vscode/*.code-snippets
 .DS_Store
 Thumbs.db
+
+# Local scratch / parallel worktrees / pytest temp dirs
+.tmp/
+.pytest_tmp*/
+.pytest_tmp_codex_*/
+.codex-uv-cache/
+.playwright-mcp/
+
+# Agent terminal captures (keep intentional working notes/scripts)
+memory/working/*.out.txt
+memory/working/*.out[0-9].txt
+memory/working/*.out[0-9][0-9].txt

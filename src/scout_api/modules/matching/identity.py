@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 import unicodedata
 from dataclasses import dataclass, field
@@ -14,6 +15,8 @@ from scout_api.modules.crawler.utils.product_identity import (
     extract_gpu_chip,
     parse_title_identity,
 )
+
+logger = logging.getLogger(__name__)
 
 VARIANT_GATE_KEYS = frozenset(
     {"color", "storage", "size", "capacity", "ram", "pack", "network_lock"}
@@ -96,6 +99,42 @@ COLOR_CANONICAL: dict[str, str] = {
     "orange": "orange",
     "laranja": "orange",
     "naranja": "orange",
+    # Commercial named colors — keep specific identity (do NOT collapse to
+    # basic hues). Matching prefers commercial equality; missing ≠ conflict.
+    "sage": "sage",
+    "burgundy": "burgundy",
+    "vinho": "burgundy",
+    "bordo": "burgundy",
+    "bordeaux": "burgundy",
+    "glacier": "glacier",
+    "midnight": "midnight",
+    "starlight": "starlight",
+    "graphite": "graphite",
+    "sierra blue": "sierra blue",
+    "alpine green": "alpine green",
+    "midnight black": "midnight black",
+    "desert titanium": "desert titanium",
+    "natural titanium": "natural titanium",
+    "deep blue": "deep blue",
+    "deep purple": "deep purple",
+}
+
+# Optional color-family hints for observability / soft evidence only.
+# Never treat family equality alone as a strong commercial-color match.
+COLOR_FAMILY: dict[str, str] = {
+    "sage": "green",
+    "alpine green": "green",
+    "burgundy": "red",
+    "glacier": "blue",
+    "sierra blue": "blue",
+    "deep blue": "blue",
+    "deep purple": "purple",
+    "midnight": "black",
+    "midnight black": "black",
+    "starlight": "white",
+    "graphite": "gray",
+    "desert titanium": "beige",
+    "natural titanium": "beige",
 }
 
 # Color finish words are retained as semantic qualifiers, but their translated
@@ -207,6 +246,18 @@ _COLOR_SEARCH_SYNONYMS: dict[str, tuple[str, ...]] = {
         "laranja cosmico",
         "naranja cosmico",
     ),
+    "sage": ("sage",),
+    "burgundy": ("burgundy", "vinho", "bordo", "bordeaux"),
+    "glacier": ("glacier",),
+    "midnight": ("midnight", "midnight black"),
+    "starlight": ("starlight",),
+    "graphite": ("graphite",),
+    "deep blue": ("deep blue",),
+    "deep purple": ("deep purple",),
+    "alpine green": ("alpine green",),
+    "desert titanium": ("desert titanium",),
+    "natural titanium": ("natural titanium",),
+    "sierra blue": ("sierra blue",),
 }
 
 _COLOR_SEARCH_LOCALE_LABELS: dict[str, dict[str, str]] = {
@@ -281,6 +332,20 @@ _CONDITION_TOKENS = frozenset(
 # iPhone 16e must win over bare "16"; allow glued suffix (16e) and spaced trims.
 _IPHONE_MODEL_RE = re.compile(
     r"\biphone\s*(1[0-9]e|[6-9]e|1[0-9]|[6-9])(?:\s*(pro\s*max|pro|plus))?\b",
+)
+
+# Apple "A3519"-style model numbers — identity evidence, never part of model token.
+_APPLE_MODEL_NUMBER_RE = re.compile(r"\bA\d{4}[A-Z]?\b", re.IGNORECASE)
+
+# Connectivity / market tokens frequently glued onto Magento titles.
+_CONNECTIVITY_TITLE_RE = re.compile(
+    r"\b(?:e[\s\-]?sim|dual[\s\-]?e?sim|dual[\s\-]?sim)\b",
+    re.IGNORECASE,
+)
+_MARKET_QUALIFIER_RE = re.compile(
+    r"\((?:americano|americana|vers[aã]o\s+americana|anatel|us|usa)\)|"
+    r"\b(?:americano|americana|anatel|vers[aã]o\s+americana)\b",
+    re.IGNORECASE,
 )
 
 # Trailing marketing noise stripped before soft model comparison.
@@ -1021,7 +1086,21 @@ def _title_search_phrase(identity: ProductIdentity, locale: str | None) -> str |
     language = (locale or "").split("-", 1)[0].lower()
     if color and language:
         canonical_color = normalize_variant_value("color", color)
-        hue = next((key for key in _COLOR_HUES if key in canonical_color), None)
+        hue = next(
+            (
+                key
+                for key in sorted(_COLOR_HUES, key=len, reverse=True)
+                if key == canonical_color
+                or (
+                    len(key) > 2
+                    and re.search(
+                        rf"(?<![a-z0-9]){re.escape(key)}(?![a-z0-9])",
+                        canonical_color,
+                    )
+                )
+            ),
+            None,
+        )
         localized_color = _COLOR_SEARCH_LOCALE_LABELS.get(hue or "", {}).get(language)
         if localized_color:
             if re.search(r"\b(?:titanio|titanium)\b", color):
@@ -1582,16 +1661,76 @@ def infer_model_from_title(title: str | None) -> str | None:
     return None
 
 
+def _strip_non_model_tokens(text: str | None) -> str:
+    """Remove color / MPN / connectivity / market tokens from a model string.
+
+    Colors and Apple model numbers are first-class attributes elsewhere; leaving
+    them inside ``model`` (e.g. ``iPhone 17 Sage`` → ``iphone17sage``) falsely
+    breaks brand+model equality against a clean ``iphone17`` reference.
+    """
+    if not text or not str(text).strip():
+        return ""
+    original = str(text)
+    folded = fold_text(original)
+    # Drop compact MPN tokens before slash/hyphen normalization so codes like
+    # ``MG6C4VC/A`` stay matchable as a single manufacturer PN.
+    for _norm, display in extract_all_mpn_forms(original):
+        for token in {fold_text(display), _norm, display.casefold()}:
+            if token and len(token) >= 6:
+                folded = re.sub(rf"\b{re.escape(token)}\b", " ", folded)
+                folded = folded.replace(token, " ")
+    folded = re.sub(r"[-_/]+", " ", folded)
+    folded = re.sub(r"\s+", " ", folded).strip()
+    # Longest commercial color labels first (Titanium Black before Black).
+    for label in sorted(COLOR_CANONICAL, key=len, reverse=True):
+        folded = re.sub(rf"\b{re.escape(label)}\b", " ", folded)
+    for label in sorted(_COLOR_DESCRIPTOR_CANONICAL, key=len, reverse=True):
+        folded = re.sub(rf"\b{re.escape(label)}\b", " ", folded)
+    folded = _APPLE_MODEL_NUMBER_RE.sub(" ", folded)
+    folded = _CONNECTIVITY_TITLE_RE.sub(" ", folded)
+    folded = _MARKET_QUALIFIER_RE.sub(" ", folded)
+    # Capacity tokens belong in storage, not model.
+    folded = re.sub(r"\b\d+\s*(?:gb|tb|mb)\b", " ", folded)
+    return re.sub(r"\s+", " ", folded).strip()
+
+
+def extract_connectivity_from_title(title: str | None) -> str | None:
+    """Return a normalized connectivity token when explicitly stated."""
+    folded = fold_text(title or "")
+    if not folded:
+        return None
+    if re.search(r"\be[\s\-]?sim\b", folded) and not re.search(
+        r"\bdual[\s\-]?e?sim\b|\bdual[\s\-]?sim\b", folded
+    ):
+        return "esim"
+    if re.search(r"\bdual[\s\-]?e?sim\b|\bdual[\s\-]?sim\b", folded):
+        return "dual_sim"
+    return None
+
+
+def extract_market_qualifier_from_title(title: str | None) -> str | None:
+    """Preserve market/region qualifiers without letting them pollute model."""
+    if not title:
+        return None
+    match = _MARKET_QUALIFIER_RE.search(fold_text(title))
+    if not match:
+        return None
+    token = re.sub(r"[^\w\s]+", " ", match.group(0))
+    token = re.sub(r"\s+", " ", token).strip()
+    return token or None
+
+
 def resolve_model(raw_model: str | None, title: str | None) -> str | None:
     """Prefer commercial/family model strings; keep MPN only when nothing better."""
-    blob = _identity_blob(raw_model, title)
+    cleaned_raw = _strip_non_model_tokens(raw_model) or None
+    blob = _identity_blob(cleaned_raw, title)
     # Discrete GPUs: chip identity (rtx5070 / rtx5070ti) is the model token;
     # cooler lines (Shadow 3X) live in variant_attrs.edition, not model.
     gpu = _gpu_signature(blob)
     if gpu:
         return gpu
 
-    structured = normalize_model(raw_model)
+    structured = normalize_model(cleaned_raw)
     inferred = infer_model_from_title(title)
     if structured and _model_has_family(structured) and not looks_like_mpn(structured):
         # Generic "PlayStation 5" / "PS5" in structured fields often omits Slim /
@@ -1963,7 +2102,11 @@ def variant_comparison_uncertain(key: str, left: str, right: str) -> bool:
 
 def _color_hues_from_value(value: str) -> set[str]:
     normalized = normalize_variant_value("color", value)
-    return set(normalized.split()) & _COLOR_HUES
+    hues = set(normalized.split()) & _COLOR_HUES
+    # Multi-word commercial colors ("deep blue", "alpine green") are first-class.
+    if normalized in _COLOR_HUES:
+        hues.add(normalized)
+    return hues
 
 
 _FINISH_ONLY_COLORS = frozenset({"titanium"})
@@ -2356,6 +2499,9 @@ class ProductIdentity:
     model_numbers: frozenset[str] = field(default_factory=frozenset)
     monitor_model_code: str | None = None
     category: str | None = None
+    # Soft attributes — preserved for observability / SERP, never hard gates.
+    connectivity: str | None = None
+    market_variant: str | None = None
 
     @property
     def variant_key(self) -> str | None:
@@ -2423,6 +2569,32 @@ def identity_from_price_item(item: ProductPriceItem) -> ProductIdentity:
         network_lock = _network_lock_from_title(item.title)
         if network_lock:
             attrs["network_lock"] = network_lock
+    connectivity = extract_connectivity_from_title(item.title)
+    market_variant = extract_market_qualifier_from_title(item.title)
+    if attrs.get("color") or connectivity or market_variant:
+        color_source = None
+        if attrs.get("color"):
+            if (variant and ":" in variant and "color" in variant.casefold()) or (
+                isinstance(extra, dict) and extra.get("color")
+            ):
+                color_source = "structured"
+            else:
+                color_source = "title"
+        logger.info(
+            "identity_attribute_extraction raw_title=%r model_tokens=%r "
+            "extracted_color=%r canonical_color=%r color_source=%s "
+            "market_qualifier=%r connectivity=%r storage=%r",
+            item.title,
+            _strip_non_model_tokens(item.model) or item.model,
+            attrs.get("color"),
+            normalize_variant_value("color", attrs["color"])
+            if attrs.get("color")
+            else None,
+            color_source,
+            market_variant,
+            connectivity,
+            attrs.get("storage"),
+        )
 
     blob = _identity_blob(item.model, item.title)
     # GPU VRAM is often mis-tagged as RAM by generic parsers — promote when GPU.
@@ -2554,6 +2726,8 @@ def identity_from_price_item(item: ProductPriceItem) -> ProductIdentity:
         model_numbers=frozenset(model_number_values),
         monitor_model_code=monitor_model_code,
         category=category,
+        connectivity=connectivity,
+        market_variant=market_variant,
     )
 
 
