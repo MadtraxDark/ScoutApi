@@ -1,0 +1,392 @@
+{
+  "started_at": "2026-10-06T04:01:43.324422+00:00",
+  "queries": [
+    {
+      "query": "samsung galaxy s25 ultra 256gb",
+      "http_only": {
+        "ok": true,
+        "ms": 1532.4,
+        "fetch_metrics": {},
+        "analysis": {
+          "status": 200,
+          "url": "https://www.amazon.com.br/s?k=samsung+galaxy+s25+ultra+256gb",
+          "bytes": 1396626,
+          "title": "Amazon.com.br : samsung galaxy s25 ultra 256gb",
+          "challenge": false,
+          "robot_check": false,
+          "auth_wall": false,
+          "looks_like_search": true,
+          "data_asin_count": 48,
+          "data_asins_sample": [
+            "B0CQD99RZB",
+            "B0CQD9VK7X",
+            "B0DHWFBYVC",
+            "B0DJFTJ6LX",
+            "B0DPFWQ1R1",
+            "B0DPKMR85X",
+            "B0DPKN6RNX",
+            "B0DQPY57PW",
+            "B0DRNMN1PV",
+            "B0DSXX6XB3",
+            "B0DSY665M3",
+            "B0DSY93451",
+            "B0DSYC4V4V",
+            "B0DSYJCY45",
+            "B0DTB95DZJ"
+          ],
+          "dp_link_asins_sample": [
+            "B0CPXTC9H4",
+            "B0CPXVGM7D",
+            "B0CPXWM45T",
+            "B0CPXY4QMX",
+            "B0CQD99RZB",
+            "B0CQD9VK7X",
+            "B0CW1DFMDH",
+            "B0CW1H6D8L",
+            "B0DHWFBYVC",
+            "B0DHWFR833",
+            "B0DJFRYWK8",
+            "B0DJFSTQHX",
+            "B0DJFT8HZC",
+            "B0DJFTCKNN",
+            "B0DJFTJ6LX"
+          ],
+          "css_card_count": 52,
+          "parsed_count": 20,
+          "parsed_asins": [
+            "B0DSYJCY45",
+            "B0DSYC4V4V",
+            "B0DSY93451",
+            "B0DSY665M3",
+            "B0DSXX6XB3",
+            "B0FTMX44QP",
+            "B0FS9HYYXZ",
+            "B0FS94XK4K",
+            "B0F8PP7VMS",
+            "B0CQD9VK7X",
+            "B0GKQK9ZVT",
+            "B0HDYTBVQ5",
+            "B0F8PHM63K",
+            "B0F1HDQSQG",
+            "B0CQD99RZB",
+            "B0FTMV1K9V",
+            "B0DPFWQ1R1",
+            "B0DPKN6RNX",
+            "B0F194QSLX",
+            "B0FTMSQX5Z"
+          ],
+          "classification": "unknown",
+          "markers": {
+            "s-search-result": true,
+            "data-asin": true,
+            "robot check": false,
+            "validatecaptcha": false,
+            "nenhum resultado": false,
+            "não encontramos": false,
+            "awswaf": false,
+            "continue shopping": false
+          },
+          "html_head_snippet": "<!doctype html><html lang=\"pt-br\" class=\"a-no-js\" data-19ax5a9jf=\"dingo\"><!-- sp:feature:head-start --> <head><script>var aPageStart = (new Date()).getTime();</script><meta charset=\"utf-8\"/> <!-- sp:end-feature:head-start --> <!-- sp:feature:csm:head-open-part1 --> <script type='text/javascript'>var ue_t0=ue_t0||+new Date();</script> <!-- sp:end-feature:csm:head-open-part1 --> <!-- sp:feature:cs-optimization --> <meta http-equiv='x-dns-prefetch-control' content='on'> <link rel=\"preconnect\" href=\"https://images-na.ssl-images-amazon.com\" crossorigin> <link rel=\"preconnect\" href=\"https://m.media-",
+          "html_body_snippet": "ght-small puis-spacing-small s-height-equalized puis puis-v2gyvigo35j9bu23rocmvvslgsv\" data-cy=\"image-container\"><span data-component-type=\"s-product-image\" class=\"rush-component\" data-version-id=\"v2gyvigo35j9bu23rocmvvslgsv\" data-render-id=\"r1rmkxxs3yfe6z2jji2r9zlfcpl\"><a aria-hidden=\"true\" class=\"a-link-normal s-no-outline\" tabindex=\"-1\" href=\"/Smartphone-Samsung-Galaxy-Selfie-1-120Hz/dp/B0CQD99RZB/ref=sr_1_15?dib=eyJ2IjoiMSJ9.s07inHpXK2SbnmeXKoxpiIACyNdVOWlfFVuUTCGv9EI_bN3mIkY_5EZ3Zy86_lMS8jOH0eopAIH_tNu8q3k6ivSk6nBJdMu4f-C7ZET4lb1fo-gf7bKuQuxqUfrLeWgT6oBaSHhyf5gJl6zP5bJPLapt0BEaKC2WYUT19tW"
+        },
+        "error": null
+      },
+      "shared": {
+        "ok": true,
+        "ms": 1945.1,
+        "fetch_metrics": {
+          "proxy_used": false,
+          "proxy_policy": "fallback",
+          "fetch_strategy": "http-direct",
+          "browser_used": false
+        },
+        "analysis": {
+          "status": 200,
+          "url": "https://www.amazon.com.br/s?k=samsung+galaxy+s25+ultra+256gb",
+          "bytes": 2130348,
+          "title": "Amazon.com.br : samsung galaxy s25 ultra 256gb",
+          "challenge": false,
+          "robot_check": false,
+          "auth_wall": false,
+          "looks_like_search": true,
+          "data_asin_count": 67,
+          "data_asins_sample": [
+            "B0CQD99RZB",
+            "B0CQD9VK7X",
+            "B0DHWFBYVC",
+            "B0DJFTJ6LX",
+            "B0DLVZX23B",
+            "B0DPFWQ1R1",
+            "B0DPFWRPVD",
+            "B0DPKMR85X",
+            "B0DPKN6RNX",
+            "B0DPKP6KM4",
+            "B0DPKVP67F",
+            "B0DPMW4VZP",
+            "B0DPQH422T",
+            "B0DPQHB5QH",
+            "B0DQ8J8RB1"
+          ],
+          "dp_link_asins_sample": [
+            "B0CPXTC9H4",
+            "B0CPXVGM7D",
+            "B0CPXWM45T",
+            "B0CPXY4QMX",
+            "B0CQD99RZB",
+            "B0CQD9VK7X",
+            "B0CW1DFMDH",
+            "B0CW1H6D8L",
+            "B0DHWFBYVC",
+            "B0DHWFR833",
+            "B0DJFRYWK8",
+            "B0DJFSTQHX",
+            "B0DJFT8HZC",
+            "B0DJFTCKNN",
+            "B0DJFTJ6LX"
+          ],
+          "css_card_count": 71,
+          "parsed_count": 20,
+          "parsed_asins": [
+            "B0DSYJCY45",
+            "B0DSYC4V4V",
+            "B0DSY93451",
+            "B0DSY665M3",
+            "B0DSXX6XB3",
+            "B0FTMX44QP",
+            "B0FS9HYYXZ",
+            "B0FS94XK4K",
+            "B0F8PP7VMS",
+            "B0CQD9VK7X",
+            "B0GKQK9ZVT",
+            "B0HDYTBVQ5",
+            "B0F8PHM63K",
+            "B0F1HDQSQG",
+            "B0CQD99RZB",
+            "B0FTMV1K9V",
+            "B0DPFWQ1R1",
+            "B0DPKN6RNX",
+            "B0F194QSLX",
+            "B0FTMSQX5Z"
+          ],
+          "classification": "unknown",
+          "markers": {
+            "s-search-result": true,
+            "data-asin": true,
+            "robot check": false,
+            "validatecaptcha": false,
+            "nenhum resultado": false,
+            "não encontramos": false,
+            "awswaf": false,
+            "continue shopping": false
+          },
+          "html_head_snippet": "<!doctype html><html lang=\"pt-br\" class=\"a-no-js\" data-19ax5a9jf=\"dingo\"><!-- sp:feature:head-start --> <head><script>var aPageStart = (new Date()).getTime();</script><meta charset=\"utf-8\"/> <!-- sp:end-feature:head-start --> <!-- sp:feature:csm:head-open-part1 --> <script type='text/javascript'>var ue_t0=ue_t0||+new Date();</script> <!-- sp:end-feature:csm:head-open-part1 --> <!-- sp:feature:cs-optimization --> <meta http-equiv='x-dns-prefetch-control' content='on'> <link rel=\"preconnect\" href=\"https://images-na.ssl-images-amazon.com\" crossorigin> <link rel=\"preconnect\" href=\"https://m.media-",
+          "html_body_snippet": "QDGN6R9DMx0KhVFhc3PpvaXlpy33NkJmwd6drkx8BB_AvS_hG_gSLtRExsWcfIuTnO9858spsuOvPz_9eFQ61eVhfSI36xaEV2_NSgFdnIcsiXfYmHt6-9ZLri0-Na93k875ZLhgQ7oVesS264U99WMxVIb-SUORUFOVkIokOH0wMmbHuj3u2b4zKj0rPqZMLPM0K53c9H3b9C77ztS2yt8KxRd3ChaM8CDCGeNBuiI5w3GyihOGZ3lYekLW5DZNpCBdSzNefi5mIFgRIeIAHGzgsAwyVHmY5djwLxQxA3nE1oyCIF2tWJDHaQLey-AuDwSEUwEyEic54yBIk5wlufzS8PW-hU3PdW1z7Hj9EXb6rtO3seu8sbFlj67G3qDSLBbg2e8Pfz7--m6VT_-fPDxReSpDCFVYb6st2Gi1kHxk-G7nyByYF17plWXoZtZ1QEvfG5sD5vreGHLe2yz1-9gb83-jH0j5zJzbu8vB5sYxzSXfNTT5S6H4uRDleSY6tdp2u5XuNVWbZzWyrdGaAbuo2zbcxuR1RjGnOFtFlGt5NRIEBxzHVIPVTUw11FKRrKh12KwKriFQBwpRlKYcqiCk"
+        },
+        "sample_html": "C:\\Users\\Thyago\\Documents\\Visual Studio Code\\ScoutApiV2\\data\\live-match-reports\\amazon_br_serp_sample_20261006T040147Z.html",
+        "error": null
+      },
+      "store_search": {
+        "ok": true,
+        "ms": 2055.8,
+        "count": 8,
+        "candidates": [
+          {
+            "asin": "B0FTMX44QP",
+            "title": "Celular Samsung Galaxy S25 Ultra 5G, 256GB, 12GB RAM, Câmera Quádrupla de 200+50+10+50, Tela Grande de 6.9\", Titânio Azu",
+            "url": "https://www.amazon.com.br/Celular-Samsung-Qu%C3%A1drupla-Tit%C3%A2nio-Recondicionado/dp/B0FTMX44QP/ref=sr_1_6?dib=eyJ2IjoiMSJ9.s07inHpXK2SbnmeXKoxpiIACyNdVOWlfFVuUTCGv9EI_bN3mIkY_5EZ3Zy86_lMS8jOH0eopAIH_tNu8q3k6ivSk6nBJdMu4f-C7ZET4lb1fo-gf7bKuQuxqUfrLeWgT6oBaSHhyf5gJl6zP5bJPLapt0BEaKC2WYUT19tWArg7f7QM2AFDjCAfMzIQGfcpGqwkWyl8JlIPJGp-4ri4UMRD_8hvmS4HMBOVJh1XUzVIb8emiHG1GDbfmX3atnQXFVv2K-DleXjU4p9Ggi22P6JGZsuFGS-11uweOePjblro.uK-crNqWBc3ha5P9TlUEmNpuHPtSJ6WN94WiwisDbiM&dib_tag=se&keywords=samsung+galaxy+s25+ultra+256gb&qid=1791259308&sbo=AxqoqKuC0epEPLOC7J8vSw%3D%3D&sr=8-6"
+          },
+          {
+            "asin": "B0DSYJCY45",
+            "title": "Celular Samsung Galaxy S25 Ultra 5G, 256GB, 12GB RAM, Câmera Quádrupla de 200+50+10+50, Tela Grande de 6.9\", Titânio Pre",
+            "url": "https://www.amazon.com.br/Celular-Samsung-Galaxy-Qu%C3%A1drupla-Tit%C3%A2nio/dp/B0DSYJCY45/ref=sr_1_1?dib=eyJ2IjoiMSJ9.s07inHpXK2SbnmeXKoxpiIACyNdVOWlfFVuUTCGv9EI_bN3mIkY_5EZ3Zy86_lMS8jOH0eopAIH_tNu8q3k6ivSk6nBJdMu4f-C7ZET4lb1fo-gf7bKuQuxqUfrLeWgT6oBaSHhyf5gJl6zP5bJPLapt0BEaKC2WYUT19tWArg7f7QM2AFDjCAfMzIQGfcpGqwkWyl8JlIPJGp-4ri4UMRD_8hvmS4HMBOVJh1XUzVIb8emiHG1GDbfmX3atnQXFVv2K-DleXjU4p9Ggi22P6JGZsuFGS-11uweOePjblro.uK-crNqWBc3ha5P9TlUEmNpuHPtSJ6WN94WiwisDbiM&dib_tag=se&keywords=samsung+galaxy+s25+ultra+256gb&qid=1791259308&sr=8-1&ufe=app_do%3Aamzn1.fos.9e6a115c-05b9-4b96-8e1c-b1f9ce2ac1a6"
+          },
+          {
+            "asin": "B0DSYC4V4V",
+            "title": "Celular Samsung Galaxy S25 Ultra 5G, 256GB, 12GB RAM, Câmera Quádrupla de 200+50+10+50, Tela Grande de 6.9\", Titânio Cin",
+            "url": "https://www.amazon.com.br/Celular-Samsung-Galaxy-Qu%C3%A1drupla-Tit%C3%A2nio/dp/B0DSYC4V4V/ref=sr_1_2?dib=eyJ2IjoiMSJ9.s07inHpXK2SbnmeXKoxpiIACyNdVOWlfFVuUTCGv9EI_bN3mIkY_5EZ3Zy86_lMS8jOH0eopAIH_tNu8q3k6ivSk6nBJdMu4f-C7ZET4lb1fo-gf7bKuQuxqUfrLeWgT6oBaSHhyf5gJl6zP5bJPLapt0BEaKC2WYUT19tWArg7f7QM2AFDjCAfMzIQGfcpGqwkWyl8JlIPJGp-4ri4UMRD_8hvmS4HMBOVJh1XUzVIb8emiHG1GDbfmX3atnQXFVv2K-DleXjU4p9Ggi22P6JGZsuFGS-11uweOePjblro.uK-crNqWBc3ha5P9TlUEmNpuHPtSJ6WN94WiwisDbiM&dib_tag=se&keywords=samsung+galaxy+s25+ultra+256gb&qid=1791259308&sr=8-2&ufe=app_do%3Aamzn1.fos.9e6a115c-05b9-4b96-8e1c-b1f9ce2ac1a6"
+          },
+          {
+            "asin": "B0DSY93451",
+            "title": "Celular Samsung Galaxy S25 Ultra 5G, 256GB, 12GB RAM, Câmera Quádrupla de 200+50+10+50, Tela Grande de 6.9\", Titânio Azu",
+            "url": "https://www.amazon.com.br/Celular-Samsung-Galaxy-Qu%C3%A1drupla-Tit%C3%A2nio/dp/B0DSY93451/ref=sr_1_3?dib=eyJ2IjoiMSJ9.s07inHpXK2SbnmeXKoxpiIACyNdVOWlfFVuUTCGv9EI_bN3mIkY_5EZ3Zy86_lMS8jOH0eopAIH_tNu8q3k6ivSk6nBJdMu4f-C7ZET4lb1fo-gf7bKuQuxqUfrLeWgT6oBaSHhyf5gJl6zP5bJPLapt0BEaKC2WYUT19tWArg7f7QM2AFDjCAfMzIQGfcpGqwkWyl8JlIPJGp-4ri4UMRD_8hvmS4HMBOVJh1XUzVIb8emiHG1GDbfmX3atnQXFVv2K-DleXjU4p9Ggi22P6JGZsuFGS-11uweOePjblro.uK-crNqWBc3ha5P9TlUEmNpuHPtSJ6WN94WiwisDbiM&dib_tag=se&keywords=samsung+galaxy+s25+ultra+256gb&qid=1791259308&sr=8-3&ufe=app_do%3Aamzn1.fos.9e6a115c-05b9-4b96-8e1c-b1f9ce2ac1a6"
+          },
+          {
+            "asin": "B0CQD9VK7X",
+            "title": "Smartphone Samsung Galaxy S24 Ultra, Galaxy AI, Selfie de 12MP, Tela de 6.8\" 1-120Hz, 256GB, 12GB RAM - Titânio Preto",
+            "url": "https://www.amazon.com.br/Smartphone-Samsung-Galaxy-Selfie-1-120Hz/dp/B0CQD9VK7X/ref=sr_1_10?dib=eyJ2IjoiMSJ9.s07inHpXK2SbnmeXKoxpiIACyNdVOWlfFVuUTCGv9EI_bN3mIkY_5EZ3Zy86_lMS8jOH0eopAIH_tNu8q3k6ivSk6nBJdMu4f-C7ZET4lb1fo-gf7bKuQuxqUfrLeWgT6oBaSHhyf5gJl6zP5bJPLapt0BEaKC2WYUT19tWArg7f7QM2AFDjCAfMzIQGfcpGqwkWyl8JlIPJGp-4ri4UMRD_8hvmS4HMBOVJh1XUzVIb8emiHG1GDbfmX3atnQXFVv2K-DleXjU4p9Ggi22P6JGZsuFGS-11uweOePjblro.uK-crNqWBc3ha5P9TlUEmNpuHPtSJ6WN94WiwisDbiM&dib_tag=se&keywords=samsung+galaxy+s25+ultra+256gb&qid=1791259308&sr=8-10&ufe=app_do%3Aamzn1.fos.9e6a115c-05b9-4b96-8e1c-b1f9ce2ac1a6"
+          },
+          {
+            "asin": "B0DSY665M3",
+            "title": "Celular Samsung Galaxy S25 5G, 256GB, 12GB RAM, Câmera Tripla de 50+12+10, Tela Grande de 6.2\", Azul Marinho",
+            "url": "https://www.amazon.com.br/Celular-Samsung-Galaxy-C%C3%A2mera-Marinho/dp/B0DSY665M3/ref=sr_1_4?dib=eyJ2IjoiMSJ9.s07inHpXK2SbnmeXKoxpiIACyNdVOWlfFVuUTCGv9EI_bN3mIkY_5EZ3Zy86_lMS8jOH0eopAIH_tNu8q3k6ivSk6nBJdMu4f-C7ZET4lb1fo-gf7bKuQuxqUfrLeWgT6oBaSHhyf5gJl6zP5bJPLapt0BEaKC2WYUT19tWArg7f7QM2AFDjCAfMzIQGfcpGqwkWyl8JlIPJGp-4ri4UMRD_8hvmS4HMBOVJh1XUzVIb8emiHG1GDbfmX3atnQXFVv2K-DleXjU4p9Ggi22P6JGZsuFGS-11uweOePjblro.uK-crNqWBc3ha5P9TlUEmNpuHPtSJ6WN94WiwisDbiM&dib_tag=se&keywords=samsung+galaxy+s25+ultra+256gb&qid=1791259308&sr=8-4&ufe=app_do%3Aamzn1.fos.95de73c3-5dda-43a7-bd1f-63af03b14751"
+          },
+          {
+            "asin": "B0DSXX6XB3",
+            "title": "Celular Samsung Galaxy S25 5G, 256GB, 12GB RAM, Câmera Tripla de 50+12+10, Tela Grande de 6.2\", Prata",
+            "url": "https://www.amazon.com.br/Celular-Samsung-Galaxy-C%C3%A2mera-Tripla/dp/B0DSXX6XB3/ref=sr_1_5?dib=eyJ2IjoiMSJ9.s07inHpXK2SbnmeXKoxpiIACyNdVOWlfFVuUTCGv9EI_bN3mIkY_5EZ3Zy86_lMS8jOH0eopAIH_tNu8q3k6ivSk6nBJdMu4f-C7ZET4lb1fo-gf7bKuQuxqUfrLeWgT6oBaSHhyf5gJl6zP5bJPLapt0BEaKC2WYUT19tWArg7f7QM2AFDjCAfMzIQGfcpGqwkWyl8JlIPJGp-4ri4UMRD_8hvmS4HMBOVJh1XUzVIb8emiHG1GDbfmX3atnQXFVv2K-DleXjU4p9Ggi22P6JGZsuFGS-11uweOePjblro.uK-crNqWBc3ha5P9TlUEmNpuHPtSJ6WN94WiwisDbiM&dib_tag=se&keywords=samsung+galaxy+s25+ultra+256gb&qid=1791259308&sr=8-5&ufe=app_do%3Aamzn1.fos.9e6a115c-05b9-4b96-8e1c-b1f9ce2ac1a6"
+          },
+          {
+            "asin": "B0FS94XK4K",
+            "title": "Celular Samsung Galaxy S25 FE 5G, 256GB, 8GB, Câmera Tripla - Azul Marinho",
+            "url": "https://www.amazon.com.br/Celular-Samsung-Galaxy-C%C3%A2mera-Tripla/dp/B0FS94XK4K/ref=sr_1_8?dib=eyJ2IjoiMSJ9.s07inHpXK2SbnmeXKoxpiIACyNdVOWlfFVuUTCGv9EI_bN3mIkY_5EZ3Zy86_lMS8jOH0eopAIH_tNu8q3k6ivSk6nBJdMu4f-C7ZET4lb1fo-gf7bKuQuxqUfrLeWgT6oBaSHhyf5gJl6zP5bJPLapt0BEaKC2WYUT19tWArg7f7QM2AFDjCAfMzIQGfcpGqwkWyl8JlIPJGp-4ri4UMRD_8hvmS4HMBOVJh1XUzVIb8emiHG1GDbfmX3atnQXFVv2K-DleXjU4p9Ggi22P6JGZsuFGS-11uweOePjblro.uK-crNqWBc3ha5P9TlUEmNpuHPtSJ6WN94WiwisDbiM&dib_tag=se&keywords=samsung+galaxy+s25+ultra+256gb&qid=1791259308&sr=8-8&ufe=app_do%3Aamzn1.fos.9e6a115c-05b9-4b96-8e1c-b1f9ce2ac1a6"
+          }
+        ],
+        "error": null
+      }
+    },
+    {
+      "query": "processador ryzen 7 5700x",
+      "store_search": {
+        "ok": true,
+        "ms": 1730.0,
+        "count": 8,
+        "candidates": [
+          {
+            "asin": "B09VCHQHZ6",
+            "title": "PROCESSADOR AMD RYZEN 7 5700X 3.4GHz (Turbo 4.6GHz) 36MB Cache AM4 100-100000926WOF, Cerâmica Cinza",
+            "url": "https://www.amazon.com.br/PROCESSADOR-AMD-5700X-100-100000926WOF-Cer%C3%A2mica/dp/B09VCHQHZ6/ref=sr_1_1?dib=eyJ2IjoiMSJ9.8VTen92DYVhTlPyfp7O0-jsVEYbt3PTaJFcT0HWn_PI_wcgynOiXTiack2SJRyYMM_tn6Gwe_zi0IY8pdBCNgvlKJmJskvlVzj_H6AS_KEqBznzYzhHxKxjBwJnLP8A_O14FkOtmTAcV9UgVQLzy1MJlQKnW050CdolOClE4vAc2nKW6YyBTjgwI_JlZOZgxeX__rQZuZ3opGjE0ln1-46LqaPO00zvZb6hLTQqyxMdAcb_JvvcgmDdzNlhUytB6bXQD_moot6dSwTRZ67zjc0WXq9hIe47r2ryw1bQ3WpE.bDC6Ag7dG2ywehPsFgZzDIsBSLcgtz--V9gbPJ7K1g0&dib_tag=se&keywords=processador+ryzen+7+5700x&qid=1791259310&sr=8-1&ufe=app_do%3Aamzn1.fos.38059ce3-943c-48af-9fc9-22d85542b02c"
+          },
+          {
+            "asin": "B0C3T4MFMM",
+            "title": "Processador AMD Ryzen 7 5700X, 3,4 GHz, 8 núcleos, 16 threads, cache de 32 MB, soquete AM4, OEM",
+            "url": "https://www.amazon.com.br/Processador-AMD-n%C3%BAcleos-threads-soquete/dp/B0C3T4MFMM/ref=sr_1_2?dib=eyJ2IjoiMSJ9.8VTen92DYVhTlPyfp7O0-jsVEYbt3PTaJFcT0HWn_PI_wcgynOiXTiack2SJRyYMM_tn6Gwe_zi0IY8pdBCNgvlKJmJskvlVzj_H6AS_KEqBznzYzhHxKxjBwJnLP8A_O14FkOtmTAcV9UgVQLzy1MJlQKnW050CdolOClE4vAc2nKW6YyBTjgwI_JlZOZgxeX__rQZuZ3opGjE0ln1-46LqaPO00zvZb6hLTQqyxMdAcb_JvvcgmDdzNlhUytB6bXQD_moot6dSwTRZ67zjc0WXq9hIe47r2ryw1bQ3WpE.bDC6Ag7dG2ywehPsFgZzDIsBSLcgtz--V9gbPJ7K1g0&dib_tag=se&keywords=processador+ryzen+7+5700x&qid=1791259310&sr=8-2&ufe=app_do%3Aamzn1.fos.95de73c3-5dda-43a7-bd1f-63af03b14751"
+          },
+          {
+            "asin": "B091J3NYVF",
+            "title": "Processador AMD Ryzen 7 5700G Box (AM4 / 8 Cores/16 Threads/4.6GHz /16MB Cache/Wraith Stealth/Vega 8) - 100-100000263BOX",
+            "url": "https://www.amazon.com.br/Processador-AMD-Ryzen-5700G-Stealth/dp/B091J3NYVF/ref=sr_1_3?dib=eyJ2IjoiMSJ9.8VTen92DYVhTlPyfp7O0-jsVEYbt3PTaJFcT0HWn_PI_wcgynOiXTiack2SJRyYMM_tn6Gwe_zi0IY8pdBCNgvlKJmJskvlVzj_H6AS_KEqBznzYzhHxKxjBwJnLP8A_O14FkOtmTAcV9UgVQLzy1MJlQKnW050CdolOClE4vAc2nKW6YyBTjgwI_JlZOZgxeX__rQZuZ3opGjE0ln1-46LqaPO00zvZb6hLTQqyxMdAcb_JvvcgmDdzNlhUytB6bXQD_moot6dSwTRZ67zjc0WXq9hIe47r2ryw1bQ3WpE.bDC6Ag7dG2ywehPsFgZzDIsBSLcgtz--V9gbPJ7K1g0&dib_tag=se&keywords=processador+ryzen+7+5700x&qid=1791259310&sr=8-3&ufe=app_do%3Aamzn1.fos.38059ce3-943c-48af-9fc9-22d85542b02c"
+          },
+          {
+            "asin": "B0BBJDS62N",
+            "title": "Processador AMD Ryzen 5 7600X Box (AM5/6 Cores/12 Threads/5.3GHz/38MB Cache/Radeon Graphics) Com Vídeo/Sem Cooler",
+            "url": "https://www.amazon.com.br/Processador-AMD-7600X-Threads-Graphics/dp/B0BBJDS62N/ref=sr_1_6?dib=eyJ2IjoiMSJ9.8VTen92DYVhTlPyfp7O0-jsVEYbt3PTaJFcT0HWn_PI_wcgynOiXTiack2SJRyYMM_tn6Gwe_zi0IY8pdBCNgvlKJmJskvlVzj_H6AS_KEqBznzYzhHxKxjBwJnLP8A_O14FkOtmTAcV9UgVQLzy1MJlQKnW050CdolOClE4vAc2nKW6YyBTjgwI_JlZOZgxeX__rQZuZ3opGjE0ln1-46LqaPO00zvZb6hLTQqyxMdAcb_JvvcgmDdzNlhUytB6bXQD_moot6dSwTRZ67zjc0WXq9hIe47r2ryw1bQ3WpE.bDC6Ag7dG2ywehPsFgZzDIsBSLcgtz--V9gbPJ7K1g0&dib_tag=se&keywords=processador+ryzen+7+5700x&qid=1791259310&sr=8-6&ufe=app_do%3Aamzn1.fos.38059ce3-943c-48af-9fc9-22d85542b02c"
+          },
+          {
+            "asin": "B0CQ4JV8D5",
+            "title": "Processador AMD Ryzen 5 8500G Box (AM5/6 Cores/12 Threads/5.0GHz/22MB Cache/Wraith Stealth/AMD Radeon 740M)",
+            "url": "https://www.amazon.com.br/Processador-AMD-Ryzen5-8500G-100100000931BOX/dp/B0CQ4JV8D5/ref=sr_1_7?dib=eyJ2IjoiMSJ9.8VTen92DYVhTlPyfp7O0-jsVEYbt3PTaJFcT0HWn_PI_wcgynOiXTiack2SJRyYMM_tn6Gwe_zi0IY8pdBCNgvlKJmJskvlVzj_H6AS_KEqBznzYzhHxKxjBwJnLP8A_O14FkOtmTAcV9UgVQLzy1MJlQKnW050CdolOClE4vAc2nKW6YyBTjgwI_JlZOZgxeX__rQZuZ3opGjE0ln1-46LqaPO00zvZb6hLTQqyxMdAcb_JvvcgmDdzNlhUytB6bXQD_moot6dSwTRZ67zjc0WXq9hIe47r2ryw1bQ3WpE.bDC6Ag7dG2ywehPsFgZzDIsBSLcgtz--V9gbPJ7K1g0&dib_tag=se&keywords=processador+ryzen+7+5700x&qid=1791259310&sr=8-7&ufe=app_do%3Aamzn1.fos.38059ce3-943c-48af-9fc9-22d85542b02c"
+          },
+          {
+            "asin": "B0D6NN6TM7",
+            "title": "Processador AMD Ryzen 5 9600X Box (AM5/ 6 Cores/ 12 Threads/ 5.4GHz/ 38MB Cache/Radeon Graphics/Sem Cooler)",
+            "url": "https://www.amazon.com.br/PROCESSADOR-AM5-RYZEN-5-9600X/dp/B0D6NN6TM7/ref=sr_1_9?dib=eyJ2IjoiMSJ9.8VTen92DYVhTlPyfp7O0-jsVEYbt3PTaJFcT0HWn_PI_wcgynOiXTiack2SJRyYMM_tn6Gwe_zi0IY8pdBCNgvlKJmJskvlVzj_H6AS_KEqBznzYzhHxKxjBwJnLP8A_O14FkOtmTAcV9UgVQLzy1MJlQKnW050CdolOClE4vAc2nKW6YyBTjgwI_JlZOZgxeX__rQZuZ3opGjE0ln1-46LqaPO00zvZb6hLTQqyxMdAcb_JvvcgmDdzNlhUytB6bXQD_moot6dSwTRZ67zjc0WXq9hIe47r2ryw1bQ3WpE.bDC6Ag7dG2ywehPsFgZzDIsBSLcgtz--V9gbPJ7K1g0&dib_tag=se&keywords=processador+ryzen+7+5700x&qid=1791259310&sr=8-9&ufe=app_do%3Aamzn1.fos.95de73c3-5dda-43a7-bd1f-63af03b14751"
+          },
+          {
+            "asin": "B0H41D4KFT",
+            "title": "AMD Processador Ryzen 7 5800X3D de 8 núcleos e 16 threads para desktop com tecnologia AMD 3D V-Cache",
+            "url": "https://www.amazon.com.br/AMD-Processador-5800X3D-n%C3%BAcleos-tecnologia/dp/B0H41D4KFT/ref=sr_1_8?dib=eyJ2IjoiMSJ9.8VTen92DYVhTlPyfp7O0-jsVEYbt3PTaJFcT0HWn_PI_wcgynOiXTiack2SJRyYMM_tn6Gwe_zi0IY8pdBCNgvlKJmJskvlVzj_H6AS_KEqBznzYzhHxKxjBwJnLP8A_O14FkOtmTAcV9UgVQLzy1MJlQKnW050CdolOClE4vAc2nKW6YyBTjgwI_JlZOZgxeX__rQZuZ3opGjE0ln1-46LqaPO00zvZb6hLTQqyxMdAcb_JvvcgmDdzNlhUytB6bXQD_moot6dSwTRZ67zjc0WXq9hIe47r2ryw1bQ3WpE.bDC6Ag7dG2ywehPsFgZzDIsBSLcgtz--V9gbPJ7K1g0&dib_tag=se&keywords=processador+ryzen+7+5700x&qid=1791259310&sr=8-8&ufe=app_do%3Aamzn1.fos.95de73c3-5dda-43a7-bd1f-63af03b14751"
+          },
+          {
+            "asin": "B0CQ4HPJYV",
+            "title": "Processador AMD Ryzen 7 5700 Box (AM4/8 Cores/16 Threads/4.6GHz/20MB Cache/Wraith Spire/Sem Video)",
+            "url": "https://www.amazon.com.br/Processador-AMD-Ryzen-5700-Threads/dp/B0CQ4HPJYV/ref=sr_1_10?dib=eyJ2IjoiMSJ9.8VTen92DYVhTlPyfp7O0-jsVEYbt3PTaJFcT0HWn_PI_wcgynOiXTiack2SJRyYMM_tn6Gwe_zi0IY8pdBCNgvlKJmJskvlVzj_H6AS_KEqBznzYzhHxKxjBwJnLP8A_O14FkOtmTAcV9UgVQLzy1MJlQKnW050CdolOClE4vAc2nKW6YyBTjgwI_JlZOZgxeX__rQZuZ3opGjE0ln1-46LqaPO00zvZb6hLTQqyxMdAcb_JvvcgmDdzNlhUytB6bXQD_moot6dSwTRZ67zjc0WXq9hIe47r2ryw1bQ3WpE.bDC6Ag7dG2ywehPsFgZzDIsBSLcgtz--V9gbPJ7K1g0&dib_tag=se&keywords=processador+ryzen+7+5700x&qid=1791259310&sr=8-10"
+          }
+        ],
+        "error": null
+      }
+    },
+    {
+      "query": "ssd samsung 990 evo plus 1tb",
+      "store_search": {
+        "ok": true,
+        "ms": 1540.0,
+        "count": 8,
+        "candidates": [
+          {
+            "asin": "B0DHLFWBQ1",
+            "title": "Samsung SSD 990 EVO Plus 1TB, PCIe Gen 4x4, Gen 5x2 M.2 2280, velocidades de até 7.250 MB/s, armazenamento de atualizaçã",
+            "url": "https://www.amazon.com.br/SAMSUNG-velocidades-armazenamento-atualiza%C3%A7%C3%A3o-MZ-V9S1T0B/dp/B0DHLFWBQ1/ref=sr_1_1?dib=eyJ2IjoiMSJ9.H39GvN73WU3e9olWq8mPvfMDDHaaIOVuEF4HBp4suoav8i7mzqaHod0sDgvEbnekkTUUiKAw2_QEv79NDq0neZCFlBeSZHQ5Hsc1-hyvDbbisQSNfrsFMCjH6aqeF894jLIqRVyZWHFaGeyw8KXlbpaNAb7PanXDS52-eRYLSGJk3EhNEcv_sY3JAY-YsYPhXGDkQR0h2GdWX904fYrkBJldJsQw1qvSSQ_pbAi-H05vpDUN0m4E2TVNS8pATISZCguySJsi8i3wKOqozneW1fpTzQcahvl9MJ_yLKzXG1A.imo645EitVHrJJ-HVg6CTlcr10XUmjPexfNiWMvJxBU&dib_tag=se&keywords=ssd+samsung+990+evo+plus+1tb&qid=1791259312&sr=8-1&ufe=app_do%3Aamzn1.fos.95de73c3-5dda-43a7-bd1f-63af03b14751"
+          },
+          {
+            "asin": "B0B9C3ZVHR",
+            "title": "Samsung 990 PRO 1TB PCIe 4.0 (até 7450 MB/s) NVMe M.2 (2280) Unidade de estado sólido interna (SSD) (MZ-V9P1T0BW)",
+            "url": "https://www.amazon.com.br/Samsung-Unidade-estado-interna-MZ-V9P1T0BW/dp/B0B9C3ZVHR/ref=sr_1_7?dib=eyJ2IjoiMSJ9.H39GvN73WU3e9olWq8mPvfMDDHaaIOVuEF4HBp4suoav8i7mzqaHod0sDgvEbnekkTUUiKAw2_QEv79NDq0neZCFlBeSZHQ5Hsc1-hyvDbbisQSNfrsFMCjH6aqeF894jLIqRVyZWHFaGeyw8KXlbpaNAb7PanXDS52-eRYLSGJk3EhNEcv_sY3JAY-YsYPhXGDkQR0h2GdWX904fYrkBJldJsQw1qvSSQ_pbAi-H05vpDUN0m4E2TVNS8pATISZCguySJsi8i3wKOqozneW1fpTzQcahvl9MJ_yLKzXG1A.imo645EitVHrJJ-HVg6CTlcr10XUmjPexfNiWMvJxBU&dib_tag=se&keywords=ssd+samsung+990+evo+plus+1tb&qid=1791259312&sr=8-7&ufe=app_do%3Aamzn1.fos.95de73c3-5dda-43a7-bd1f-63af03b14751"
+          },
+          {
+            "asin": "B0BHJF2VRN",
+            "title": "SSD Samsung 990 PRO 1TB NVMe M.2 2280 (Leitura até 7450MB/s e Gravação até 6900MB/s)",
+            "url": "https://www.amazon.com.br/Samsung-Leitura-7450MB-Grava%C3%A7%C3%A3o-6900MB/dp/B0BHJF2VRN/ref=sr_1_2?dib=eyJ2IjoiMSJ9.H39GvN73WU3e9olWq8mPvfMDDHaaIOVuEF4HBp4suoav8i7mzqaHod0sDgvEbnekkTUUiKAw2_QEv79NDq0neZCFlBeSZHQ5Hsc1-hyvDbbisQSNfrsFMCjH6aqeF894jLIqRVyZWHFaGeyw8KXlbpaNAb7PanXDS52-eRYLSGJk3EhNEcv_sY3JAY-YsYPhXGDkQR0h2GdWX904fYrkBJldJsQw1qvSSQ_pbAi-H05vpDUN0m4E2TVNS8pATISZCguySJsi8i3wKOqozneW1fpTzQcahvl9MJ_yLKzXG1A.imo645EitVHrJJ-HVg6CTlcr10XUmjPexfNiWMvJxBU&dib_tag=se&keywords=ssd+samsung+990+evo+plus+1tb&qid=1791259312&sr=8-2&ufe=app_do%3Aamzn1.fos.95de73c3-5dda-43a7-bd1f-63af03b14751"
+          },
+          {
+            "asin": "B0DX2G349M",
+            "title": "Samsung SSD 9100 PRO 1TB, PCIe 5.0x4 M.2 2280, Seq. Velocidades de leitura de até 14.800 MB/s, melhor para computação AI",
+            "url": "https://www.amazon.com.br/Velocidades-computa%C3%A7%C3%A3o-esta%C3%A7%C3%B5es-resistentes-AM/dp/B0DX2G349M/ref=sr_1_4?dib=eyJ2IjoiMSJ9.H39GvN73WU3e9olWq8mPvfMDDHaaIOVuEF4HBp4suoav8i7mzqaHod0sDgvEbnekkTUUiKAw2_QEv79NDq0neZCFlBeSZHQ5Hsc1-hyvDbbisQSNfrsFMCjH6aqeF894jLIqRVyZWHFaGeyw8KXlbpaNAb7PanXDS52-eRYLSGJk3EhNEcv_sY3JAY-YsYPhXGDkQR0h2GdWX904fYrkBJldJsQw1qvSSQ_pbAi-H05vpDUN0m4E2TVNS8pATISZCguySJsi8i3wKOqozneW1fpTzQcahvl9MJ_yLKzXG1A.imo645EitVHrJJ-HVg6CTlcr10XUmjPexfNiWMvJxBU&dib_tag=se&keywords=ssd+samsung+990+evo+plus+1tb&qid=1791259312&sr=8-4&ufe=app_do%3Aamzn1.fos.95de73c3-5dda-43a7-bd1f-63af03b14751"
+          },
+          {
+            "asin": "B0DBR3DZWG",
+            "title": "SSD Kingston NV3 1TB M.2 2280 NVMe Gen4, Desempenho e Eficiência para Upgrade de PC – SNV3S/1000G",
+            "url": "https://www.amazon.com.br/Kingston-2280-NVMe-SNV3S-1000G/dp/B0DBR3DZWG/ref=sr_1_3?dib=eyJ2IjoiMSJ9.H39GvN73WU3e9olWq8mPvfMDDHaaIOVuEF4HBp4suoav8i7mzqaHod0sDgvEbnekkTUUiKAw2_QEv79NDq0neZCFlBeSZHQ5Hsc1-hyvDbbisQSNfrsFMCjH6aqeF894jLIqRVyZWHFaGeyw8KXlbpaNAb7PanXDS52-eRYLSGJk3EhNEcv_sY3JAY-YsYPhXGDkQR0h2GdWX904fYrkBJldJsQw1qvSSQ_pbAi-H05vpDUN0m4E2TVNS8pATISZCguySJsi8i3wKOqozneW1fpTzQcahvl9MJ_yLKzXG1A.imo645EitVHrJJ-HVg6CTlcr10XUmjPexfNiWMvJxBU&dib_tag=se&keywords=ssd+samsung+990+evo+plus+1tb&qid=1791259312&sr=8-3&ufe=app_do%3Aamzn1.fos.95de73c3-5dda-43a7-bd1f-63af03b14751"
+          },
+          {
+            "asin": "B0CRC7H66Z",
+            "title": "SSD Samsung 990 EVO - 2TB, NVMe, M.2 2280, Leitura até 5000MB/s, Gravação até 4200MB/s",
+            "url": "https://www.amazon.com.br/SSD-Samsung-990-EVO-Grava%C3%A7%C3%A3o/dp/B0CRC7H66Z/ref=sr_1_6?dib=eyJ2IjoiMSJ9.H39GvN73WU3e9olWq8mPvfMDDHaaIOVuEF4HBp4suoav8i7mzqaHod0sDgvEbnekkTUUiKAw2_QEv79NDq0neZCFlBeSZHQ5Hsc1-hyvDbbisQSNfrsFMCjH6aqeF894jLIqRVyZWHFaGeyw8KXlbpaNAb7PanXDS52-eRYLSGJk3EhNEcv_sY3JAY-YsYPhXGDkQR0h2GdWX904fYrkBJldJsQw1qvSSQ_pbAi-H05vpDUN0m4E2TVNS8pATISZCguySJsi8i3wKOqozneW1fpTzQcahvl9MJ_yLKzXG1A.imo645EitVHrJJ-HVg6CTlcr10XUmjPexfNiWMvJxBU&dib_tag=se&keywords=ssd+samsung+990+evo+plus+1tb&qid=1791259312&sr=8-6&ufe=app_do%3Aamzn1.fos.95de73c3-5dda-43a7-bd1f-63af03b14751"
+          },
+          {
+            "asin": "B08QB93S6R",
+            "title": "SAMSUNG SSD interno SATA III de 2 TB da Electronics 870 EVO (MZ-77E2T0B/AM)",
+            "url": "https://www.amazon.com.br/SAMSUNG-polegadas-interno-MZ-77E2T0B-AM/dp/B08QB93S6R/ref=sr_1_5?dib=eyJ2IjoiMSJ9.H39GvN73WU3e9olWq8mPvfMDDHaaIOVuEF4HBp4suoav8i7mzqaHod0sDgvEbnekkTUUiKAw2_QEv79NDq0neZCFlBeSZHQ5Hsc1-hyvDbbisQSNfrsFMCjH6aqeF894jLIqRVyZWHFaGeyw8KXlbpaNAb7PanXDS52-eRYLSGJk3EhNEcv_sY3JAY-YsYPhXGDkQR0h2GdWX904fYrkBJldJsQw1qvSSQ_pbAi-H05vpDUN0m4E2TVNS8pATISZCguySJsi8i3wKOqozneW1fpTzQcahvl9MJ_yLKzXG1A.imo645EitVHrJJ-HVg6CTlcr10XUmjPexfNiWMvJxBU&dib_tag=se&keywords=ssd+samsung+990+evo+plus+1tb&qid=1791259312&sr=8-5&ufe=app_do%3Aamzn1.fos.38059ce3-943c-48af-9fc9-22d85542b02c"
+          },
+          {
+            "asin": "B01F9G46Q8",
+            "title": "SanDisk SD Plus, 480GB, SATA, Leitura 535MB/s, Gravação 445MB/s, SDSSDA-480G-G26, Preto",
+            "url": "https://www.amazon.com.br/Sandisk-480GB-Leitura-Grava%C3%A7%C3%A3o-SDSSDA-480G-G26/dp/B01F9G46Q8/ref=sr_1_8?dib=eyJ2IjoiMSJ9.H39GvN73WU3e9olWq8mPvfMDDHaaIOVuEF4HBp4suoav8i7mzqaHod0sDgvEbnekkTUUiKAw2_QEv79NDq0neZCFlBeSZHQ5Hsc1-hyvDbbisQSNfrsFMCjH6aqeF894jLIqRVyZWHFaGeyw8KXlbpaNAb7PanXDS52-eRYLSGJk3EhNEcv_sY3JAY-YsYPhXGDkQR0h2GdWX904fYrkBJldJsQw1qvSSQ_pbAi-H05vpDUN0m4E2TVNS8pATISZCguySJsi8i3wKOqozneW1fpTzQcahvl9MJ_yLKzXG1A.imo645EitVHrJJ-HVg6CTlcr10XUmjPexfNiWMvJxBU&dib_tag=se&keywords=ssd+samsung+990+evo+plus+1tb&qid=1791259312&sr=8-8&ufe=app_do%3Aamzn1.fos.4bddec23-2dcf-4403-8597-e1a02442043d"
+          }
+        ],
+        "error": null
+      }
+    },
+    {
+      "query": "iphone 16 128gb",
+      "store_search": {
+        "ok": true,
+        "ms": 1820.7,
+        "count": 8,
+        "candidates": [
+          {
+            "asin": "B0FTMRG81W",
+            "title": "Apple iPhone 16 (128 GB) – Verde-acinzentado (Seminovo)",
+            "url": "https://www.amazon.com.br/Apple-iPhone-128-Verde-acinzentado-Recondicionado/dp/B0FTMRG81W/ref=sr_1_8?dib=eyJ2IjoiMSJ9.zAqLE3AEC0aPJZOpsKYolOwxg3-IWKgRMNoxm9fAm4giIYskmlXgtafm0yg4OoDKT5_MCbyXKdWsUOt_5Qrj02Gsdqt8GuKBNYJEqYYuLKNkRLP4L_lcNrJKAhGkj2rVGdJDgb0Mk9LgnQtY_AGyzFdKHIFvzQcJ85jzv3dTZYVooRYiiHALlFyNbWOFMrXrB31x5aoUPehAfcAu_Rop19l6477X3mlOfQp38n2MymN6ffzjsAL0aTSvjViT_crbwP8lfhTva6c0z8ZDGiT40Xj6v_9qa2AQReZ43G7jKnQ.X34-eV08XbKMKuKoqYOq2Ks32TEqbOqZjby_dnEn1gQ&dib_tag=se&keywords=iphone+16+128gb&qid=1791259313&sbo=AxqoqKuC0epEPLOC7J8vSw%3D%3D&sr=8-8"
+          },
+          {
+            "asin": "B0FTL2KCQ8",
+            "title": "Apple iPhone 16 (128 GB) – Preto (Seminovo)",
+            "url": "https://www.amazon.com.br/Apple-iPhone-16-128-Recondicionado/dp/B0FTL2KCQ8/ref=sr_1_10?dib=eyJ2IjoiMSJ9.zAqLE3AEC0aPJZOpsKYolOwxg3-IWKgRMNoxm9fAm4giIYskmlXgtafm0yg4OoDKT5_MCbyXKdWsUOt_5Qrj02Gsdqt8GuKBNYJEqYYuLKNkRLP4L_lcNrJKAhGkj2rVGdJDgb0Mk9LgnQtY_AGyzFdKHIFvzQcJ85jzv3dTZYVooRYiiHALlFyNbWOFMrXrB31x5aoUPehAfcAu_Rop19l6477X3mlOfQp38n2MymN6ffzjsAL0aTSvjViT_crbwP8lfhTva6c0z8ZDGiT40Xj6v_9qa2AQReZ43G7jKnQ.X34-eV08XbKMKuKoqYOq2Ks32TEqbOqZjby_dnEn1gQ&dib_tag=se&keywords=iphone+16+128gb&qid=1791259313&sbo=GW1QB%2BmqAsHTPf1jTZRSDA%3D%3D&sr=8-10"
+          },
+          {
+            "asin": "B0DJFRYWK8",
+            "title": "Apple iPhone 16 (128 GB) – Ultramarino",
+            "url": "https://www.amazon.com.br/Apple-iPhone-16-128-Ultramarino/dp/B0DJFRYWK8/ref=sr_1_5?dib=eyJ2IjoiMSJ9.zAqLE3AEC0aPJZOpsKYolOwxg3-IWKgRMNoxm9fAm4giIYskmlXgtafm0yg4OoDKT5_MCbyXKdWsUOt_5Qrj02Gsdqt8GuKBNYJEqYYuLKNkRLP4L_lcNrJKAhGkj2rVGdJDgb0Mk9LgnQtY_AGyzFdKHIFvzQcJ85jzv3dTZYVooRYiiHALlFyNbWOFMrXrB31x5aoUPehAfcAu_Rop19l6477X3mlOfQp38n2MymN6ffzjsAL0aTSvjViT_crbwP8lfhTva6c0z8ZDGiT40Xj6v_9qa2AQReZ43G7jKnQ.X34-eV08XbKMKuKoqYOq2Ks32TEqbOqZjby_dnEn1gQ&dib_tag=se&keywords=iphone+16+128gb&qid=1791259313&sr=8-5&ufe=app_do%3Aamzn1.fos.9e6a115c-05b9-4b96-8e1c-b1f9ce2ac1a6"
+          },
+          {
+            "asin": "B0DJFTCKNN",
+            "title": "Apple iPhone 16 (128 GB) – Branco",
+            "url": "https://www.amazon.com.br/sspa/click?ie=UTF8&spc=MTo4NjUzODg3MDU4NDE3MDYwOjE3OTEyNTkzMTM6c3BfYXRmOjMwMTQwOTU5MzU4MjMwMjo6MDo6&url=%2FApple-iPhone-16-128-GB%2Fdp%2FB0DJFTCKNN%2Fref%3Dsr_1_1_sspa%3Fdib%3DeyJ2IjoiMSJ9.zAqLE3AEC0aPJZOpsKYolOwxg3-IWKgRMNoxm9fAm4giIYskmlXgtafm0yg4OoDKT5_MCbyXKdWsUOt_5Qrj02Gsdqt8GuKBNYJEqYYuLKNkRLP4L_lcNrJKAhGkj2rVGdJDgb0Mk9LgnQtY_AGyzFdKHIFvzQcJ85jzv3dTZYVooRYiiHALlFyNbWOFMrXrB31x5aoUPehAfcAu_Rop19l6477X3mlOfQp38n2MymN6ffzjsAL0aTSvjViT_crbwP8lfhTva6c0z8ZDGiT40Xj6v_9qa2AQReZ43G7jKnQ.X34-eV08XbKMKuKoqYOq2Ks32TEqbOqZjby_dnEn1gQ%26dib_tag%3Dse%26keywords%3Diphone%2B16%2B128gb%26qid%3D1791259313%26sr%3D8-1-spons%26ufe%3Dapp_do%253Aamzn1.fos.9e6a115c-05b9-4b96-8e1c-b1f9ce2ac1a6%26sp_csd%3Dd2lkZ2V0TmFtZT1zcF9hdGY%26psc%3D1"
+          },
+          {
+            "asin": "B0DJFTJ6LX",
+            "title": "Apple iPhone 16 (128 GB) – Preto",
+            "url": "https://www.amazon.com.br/Apple-iPhone-16-128-GB/dp/B0DJFTJ6LX/ref=sr_1_4?dib=eyJ2IjoiMSJ9.zAqLE3AEC0aPJZOpsKYolOwxg3-IWKgRMNoxm9fAm4giIYskmlXgtafm0yg4OoDKT5_MCbyXKdWsUOt_5Qrj02Gsdqt8GuKBNYJEqYYuLKNkRLP4L_lcNrJKAhGkj2rVGdJDgb0Mk9LgnQtY_AGyzFdKHIFvzQcJ85jzv3dTZYVooRYiiHALlFyNbWOFMrXrB31x5aoUPehAfcAu_Rop19l6477X3mlOfQp38n2MymN6ffzjsAL0aTSvjViT_crbwP8lfhTva6c0z8ZDGiT40Xj6v_9qa2AQReZ43G7jKnQ.X34-eV08XbKMKuKoqYOq2Ks32TEqbOqZjby_dnEn1gQ&dib_tag=se&keywords=iphone+16+128gb&qid=1791259313&sr=8-4&ufe=app_do%3Aamzn1.fos.9e6a115c-05b9-4b96-8e1c-b1f9ce2ac1a6"
+          },
+          {
+            "asin": "B0DXR6MKR8",
+            "title": "iPhone 16e Apple 128GB, Câmera 48MP, Tela Super Retina XDR 6,1\", Branco",
+            "url": "https://www.amazon.com.br/sspa/click?ie=UTF8&spc=MTo4NjUzODg3MDU4NDE3MDYwOjE3OTEyNTkzMTM6c3BfYXRmOjMwMTQwNDI5Njk0MjkwMjo6MDo6&url=%2FApple-iPhone-16e-128-GB%2Fdp%2FB0DXR6MKR8%2Fref%3Dsr_1_2_sspa%3Fdib%3DeyJ2IjoiMSJ9.zAqLE3AEC0aPJZOpsKYolOwxg3-IWKgRMNoxm9fAm4giIYskmlXgtafm0yg4OoDKT5_MCbyXKdWsUOt_5Qrj02Gsdqt8GuKBNYJEqYYuLKNkRLP4L_lcNrJKAhGkj2rVGdJDgb0Mk9LgnQtY_AGyzFdKHIFvzQcJ85jzv3dTZYVooRYiiHALlFyNbWOFMrXrB31x5aoUPehAfcAu_Rop19l6477X3mlOfQp38n2MymN6ffzjsAL0aTSvjViT_crbwP8lfhTva6c0z8ZDGiT40Xj6v_9qa2AQReZ43G7jKnQ.X34-eV08XbKMKuKoqYOq2Ks32TEqbOqZjby_dnEn1gQ%26dib_tag%3Dse%26keywords%3Diphone%2B16%2B128gb%26qid%3D1791259313%26sr%3D8-2-spons%26ufe%3Dapp_do%253Aamzn1.fos.9e6a115c-05b9-4b96-8e1c-b1f9ce2ac1a6%26sp_csd%3Dd2lkZ2V0TmFtZT1zcF9hdGY%26psc%3D1"
+          },
+          {
+            "asin": "B0DXR7GNWJ",
+            "title": "Apple iPhone 16e de 128 GB — Preto",
+            "url": "https://www.amazon.com.br/Apple-iPhone-16e-128-GB/dp/B0DXR7GNWJ/ref=sr_1_6?dib=eyJ2IjoiMSJ9.zAqLE3AEC0aPJZOpsKYolOwxg3-IWKgRMNoxm9fAm4giIYskmlXgtafm0yg4OoDKT5_MCbyXKdWsUOt_5Qrj02Gsdqt8GuKBNYJEqYYuLKNkRLP4L_lcNrJKAhGkj2rVGdJDgb0Mk9LgnQtY_AGyzFdKHIFvzQcJ85jzv3dTZYVooRYiiHALlFyNbWOFMrXrB31x5aoUPehAfcAu_Rop19l6477X3mlOfQp38n2MymN6ffzjsAL0aTSvjViT_crbwP8lfhTva6c0z8ZDGiT40Xj6v_9qa2AQReZ43G7jKnQ.X34-eV08XbKMKuKoqYOq2Ks32TEqbOqZjby_dnEn1gQ&dib_tag=se&keywords=iphone+16+128gb&qid=1791259313&sr=8-6&ufe=app_do%3Aamzn1.fos.9e6a115c-05b9-4b96-8e1c-b1f9ce2ac1a6"
+          },
+          {
+            "asin": "B0CP6CVJSG",
+            "title": "Apple iPhone 15 (128 GB) — Preto",
+            "url": "https://www.amazon.com.br/Apple-iPhone-15-128-GB/dp/B0CP6CVJSG/ref=sr_1_9?dib=eyJ2IjoiMSJ9.zAqLE3AEC0aPJZOpsKYolOwxg3-IWKgRMNoxm9fAm4giIYskmlXgtafm0yg4OoDKT5_MCbyXKdWsUOt_5Qrj02Gsdqt8GuKBNYJEqYYuLKNkRLP4L_lcNrJKAhGkj2rVGdJDgb0Mk9LgnQtY_AGyzFdKHIFvzQcJ85jzv3dTZYVooRYiiHALlFyNbWOFMrXrB31x5aoUPehAfcAu_Rop19l6477X3mlOfQp38n2MymN6ffzjsAL0aTSvjViT_crbwP8lfhTva6c0z8ZDGiT40Xj6v_9qa2AQReZ43G7jKnQ.X34-eV08XbKMKuKoqYOq2Ks32TEqbOqZjby_dnEn1gQ&dib_tag=se&keywords=iphone+16+128gb&qid=1791259313&sr=8-9&ufe=app_do%3Aamzn1.fos.9e6a115c-05b9-4b96-8e1c-b1f9ce2ac1a6"
+          }
+        ],
+        "error": null
+      }
+    }
+  ],
+  "finished_at": "2026-10-06T04:01:54.415582+00:00"
+}

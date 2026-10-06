@@ -25,6 +25,7 @@ from scout_api.modules.crawler.services.amazon_http_first_fetcher import (
 from scout_api.modules.crawler.services.html_fetcher import (
     HtmlFetcher,
     is_amazon_robot_check,
+    is_amazon_soft_error_page,
     is_auth_wall_page,
     is_challenge_page,
 )
@@ -320,13 +321,25 @@ class StoreSearchService:
 
         text = response.text or ""
         page_url = str(response.url or fetch_url)
-        if is_challenge_page(text) or is_amazon_robot_check(text):
+        title_node = response.css("title::text").get()
+        title = title_node.strip() if title_node else None
+        if is_amazon_soft_error_page(text, title=title):
+            raise RequestError(
+                "Amazon retornou página de erro soft "
+                "('Algo deu errado' / Dogs of Amazon)",
+                code="UPSTREAM_BLOCKED",
+                url=page_url,
+                retryable=True,
+            )
+        if is_challenge_page(text, title=title) or is_amazon_robot_check(
+            text, title=title
+        ):
             raise RequestError(
                 "Busca bloqueada por WAF/challenge na loja",
                 code="UPSTREAM_WAF_BLOCKED",
                 url=page_url,
             )
-        if is_auth_wall_page(text, url=page_url):
+        if is_auth_wall_page(text, url=page_url, title=title):
             raise RequestError(
                 "Busca bloqueada por parede de autenticação na loja",
                 code="AUTH_REQUIRED",
@@ -359,6 +372,12 @@ class StoreSearchService:
                 raise RequestError(
                     "SERP incompleta ou bloqueada (sem resultados parseáveis)",
                     code="SEARCH_INCOMPLETE_RESPONSE",
+                    url=page_url,
+                )
+            if classification == "parse_error":
+                raise RequestError(
+                    "SERP válida mas o parser não reconheceu candidatos",
+                    code="SEARCH_PARSE_ERROR",
                     url=page_url,
                 )
 

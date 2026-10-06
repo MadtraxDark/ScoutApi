@@ -19,6 +19,7 @@ from ..core.proxy_policy import proxy_policy_for_url
 from .html_fetcher import (
     HtmlFetcher,
     is_amazon_robot_check,
+    is_amazon_soft_error_page,
     is_auth_wall_page,
     is_challenge_page,
 )
@@ -87,18 +88,42 @@ def looks_like_amazon_search(response: HtmlResponse) -> bool:
 
     Bare ``/s`` shells without ``data-asin`` cards are incomplete / soft-blocked
     responses — do **not** treat them as successful HTTP SERPs (that produced
-    silent empty candidate lists and false NO_MATCH).
+    silent empty candidate lists and false NO_MATCH). Soft-error pages
+    (``Algo deu errado`` / Dogs of Amazon) also fail this check.
+
+    Never treat a PDP (``/dp/{ASIN}``) as a SERP success: PDPs often embed
+    related-product ``data-asin`` / ``/dp/`` links that would false-positive
+    the layout-variant check and skip the Buy Box HTTP→browser escalation.
     """
-    text = response.text or ""
-    if is_challenge_page(text) or is_amazon_robot_check(text):
+    page_url = str(response.url or "")
+    path = (urlparse(page_url).path or "").casefold()
+    if "/dp/" in path or "/gp/product/" in path:
         return False
-    if is_auth_wall_page(text, url=str(response.url or "")):
+
+    text = response.text or ""
+    title = None
+    title_node = response.css("title::text").get()
+    if title_node:
+        title = title_node.strip()
+    if (
+        is_challenge_page(text, title=title)
+        or is_amazon_robot_check(text, title=title)
+        or is_amazon_soft_error_page(text, title=title)
+    ):
+        return False
+    if is_auth_wall_page(text, url=page_url, title=title):
+        return False
+    if response.css(
+        "div[data-component-type='s-search-result'][data-asin], "
+        "div.s-result-item[data-asin]"
+    ).get():
+        return True
+    # Layout-variant SERP only on /s URLs: ASIN markers without classic class.
+    if "/s" not in path:
         return False
     return bool(
-        response.css(
-            "div[data-component-type='s-search-result'][data-asin], "
-            "div.s-result-item[data-asin]"
-        ).get()
+        re.search(r"/dp/[A-Z0-9]{10}", text or "", re.I)
+        and re.search(r'data-asin=["\'][A-Z0-9]{10}["\']', text or "", re.I)
     )
 
 
@@ -177,10 +202,13 @@ class AmazonHttpFirstHtmlFetcher:
             return self._browser.fetch(url)
 
         text = response.text or ""
+        title_node = response.css("title::text").get()
+        title = title_node.strip() if title_node else None
         if (
-            is_challenge_page(text)
-            or is_amazon_robot_check(text)
-            or is_auth_wall_page(text, url=str(response.url or url))
+            is_challenge_page(text, title=title)
+            or is_amazon_robot_check(text, title=title)
+            or is_amazon_soft_error_page(text, title=title)
+            or is_auth_wall_page(text, url=str(response.url or url), title=title)
         ):
             logger.info(
                 "amazon_http_challenge_fallback_browser",
@@ -211,11 +239,16 @@ class AmazonHttpFirstHtmlFetcher:
             except RequestError:
                 return self._browser.fetch(url)
             retry_text = retry.text or ""
+            retry_title_node = retry.css("title::text").get()
+            retry_title = retry_title_node.strip() if retry_title_node else None
             if (
                 not (
-                    is_challenge_page(retry_text)
-                    or is_amazon_robot_check(retry_text)
-                    or is_auth_wall_page(retry_text, url=str(retry.url or url))
+                    is_challenge_page(retry_text, title=retry_title)
+                    or is_amazon_robot_check(retry_text, title=retry_title)
+                    or is_amazon_soft_error_page(retry_text, title=retry_title)
+                    or is_auth_wall_page(
+                        retry_text, url=str(retry.url or url), title=retry_title
+                    )
                 )
                 and looks_like_amazon_pdp(retry)
                 and (has_buybox_price_signal(retry) or looks_like_clear_oos(retry))

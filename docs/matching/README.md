@@ -35,6 +35,22 @@ Fonte de Search: `matching/search_adapters/registry.py` — **não** `supports_s
 - `StoreSearchAdapter` — `build_search_request` / `parse_candidates` / `classify_empty_result`
 - `SearchCandidate` — `matching/search_candidate.py`
 
+### Empty SERP ≠ NO_MATCH
+
+`0 candidates` sozinho **não** prova zero resultados. O adapter deve
+classificar a página antes:
+
+| Classificação | Código / efeito |
+|---|---|
+| SERP válida com produtos | candidates |
+| Zero results real | lista vazia → possível NO_MATCH |
+| CAPTCHA / robot check | `UPSTREAM_WAF_BLOCKED` (ERROR) |
+| Soft-error Amazon (`Algo deu errado`) | `UPSTREAM_BLOCKED` → proxy FALLBACK |
+| HTML incompleto / shell | `SEARCH_INCOMPLETE_RESPONSE` (ERROR) |
+| Markers presentes sem parse | `SEARCH_PARSE_ERROR` (ERROR) |
+
+Amazon BR: ver `docs/crawler/stores/amazon.md` (multi-fonte ASIN/`/dp/`).
+
 ## Geração de queries
 
 `ProductIdentity` começa pela normalização conservadora do título original:

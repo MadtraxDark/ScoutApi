@@ -274,3 +274,34 @@ def test_http_search_accepted_without_browser() -> None:
     response = AmazonHttpFirstHtmlFetcher(http=http, browser=browser).fetch(url)
     assert browser.calls == []
     assert response.meta["fetch_metrics"]["browser_used"] is False
+
+
+def test_pdp_with_related_asins_is_not_treated_as_search() -> None:
+    """PDP related-product data-asin must not short-circuit Buy Box checks."""
+    from scout_api.modules.crawler.services.amazon_http_first_fetcher import (
+        looks_like_amazon_search,
+    )
+
+    url = "https://www.amazon.com.br/dp/B0HJBCQ9B7"
+    pdp_no_buybox = _html_response(
+        url,
+        '<span id="productTitle">Apple iPhone 18 Pro Max</span>'
+        '<input id="ASIN" value="B0HJBCQ9B7"/>'
+        '<div data-asin="B0RELATED01"><a href="/dp/B0RELATED01">related</a></div>',
+    )
+    assert looks_like_amazon_pdp(pdp_no_buybox)
+    assert not looks_like_amazon_search(pdp_no_buybox)
+    assert not has_buybox_price_signal(pdp_no_buybox)
+
+    browser_body = (
+        '<span id="productTitle">Apple iPhone 18 Pro Max</span>'
+        '<div id="ppd"><span class="priceToPay">'
+        '<span class="a-offscreen">R$21.999,00</span></span></div>'
+    )
+    http = _RecordingFetcher(pdp_no_buybox)
+    browser = _RecordingFetcher(_html_response(url, browser_body))
+    response = AmazonHttpFirstHtmlFetcher(
+        http=http, browser=browser, empty_buybox_retry_seconds=0
+    ).fetch(url)
+    assert browser.calls == [url]
+    assert has_buybox_price_signal(response)

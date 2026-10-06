@@ -304,6 +304,44 @@ def is_amazon_robot_check(html: str, *, title: str | None = None) -> bool:
     return False
 
 
+def is_amazon_soft_error_page(html: str, *, title: str | None = None) -> bool:
+    """Amazon 5xx / \"Algo deu errado\" / Dogs-of-Amazon soft-error shells.
+
+    These return HTTP 200 with a tiny HTML body (often <5KB) after HTTP 503 or
+    transient upstream faults. They are **not** CAPTCHA and must not be parsed
+    as SERP/PDP — raise ``UPSTREAM_BLOCKED`` so Proxy Cost Mode FALLBACK can run.
+    """
+    text = html or ""
+    if len(text) >= 80_000:
+        return False
+    title_text = (title or "").strip().casefold()
+    if not title_text:
+        match = re.search(r"<title[^>]*>(.*?)</title>", text, re.I | re.S)
+        if match:
+            title_text = re.sub(r"\s+", " ", match.group(1)).strip().casefold()
+    lower = text[:20_000].casefold()
+    haystack = f"{title_text}\n{lower}"
+    markers = (
+        "algo deu errado",
+        "something went wrong on our end",
+        "desculpe! algo deu errado",
+        "dogs of amazon",
+        "cachorros da amazon",
+        "/error/500-title",
+        "/images/g/32/error/",
+        "/images/g/01/error/",
+        "error/logo._ttd_.png",
+    )
+    if any(marker in haystack for marker in markers):
+        # Guard: real SERPs never embed the static /error/ asset path.
+        if "data-asin=" in lower and "s-search-result" in lower:
+            return False
+        if 'id="producttitle"' in lower:
+            return False
+        return True
+    return False
+
+
 def is_auth_wall_page(
     html: str,
     *,
@@ -830,8 +868,10 @@ class UrllibHtmlFetcher:
                         retryable=status == 429,
                     )
                 text = body.decode(charset, errors="replace")
-                if is_challenge_page(text) or is_auth_wall_page(
-                    text, url=final_url or url
+                if (
+                    is_challenge_page(text)
+                    or is_amazon_soft_error_page(text)
+                    or is_auth_wall_page(text, url=final_url or url)
                 ):
                     raise RequestError(
                         "A loja bloqueou a requisição (desafio anti-bot / auth wall)",
@@ -1713,6 +1753,19 @@ class CamoufoxHtmlFetcher:
                         url=final_url or url,
                         upstream_status=403,
                         retryable=False,
+                    )
+                if is_amazon_soft_error_page(html, title=title):
+                    # Soft 5xx shell ("Algo deu errado" / Dogs of Amazon) — not
+                    # CAPTCHA. Escalate via UPSTREAM_BLOCKED for proxy FALLBACK.
+                    metrics.result = "blocked"
+                    self._log_metrics(metrics, request_types, byte_holder["n"], t0)
+                    raise RequestError(
+                        "Amazon retornou página de erro soft "
+                        "('Algo deu errado' / Dogs of Amazon)",
+                        code="UPSTREAM_BLOCKED",
+                        url=final_url or url,
+                        upstream_status=503,
+                        retryable=True,
                     )
                 if needs_interstitial_resolution(
                     html, url=final_url or url, title=title

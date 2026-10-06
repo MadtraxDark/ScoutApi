@@ -1,0 +1,29 @@
+{
+  "generated_at": "2026-10-06T04:30:00Z",
+  "root_cause": "Docker/datacenter IP recebe HTTP 503 na SERP Amazon BR; Camoufox às vezes devolve soft-error 'Algo deu errado' (~1.7KB) aceito como HTML de sucesso; StoreSearchService classificava incomplete → SEARCH_INCOMPLETE_RESPONSE. Parser clássico funcionava quando a SERP real chegava.",
+  "evidence": {
+    "http_urllib": "UPSTREAM_HTTP_ERROR status=503",
+    "browser_soft_error_title": "Amazon.com.br Algo deu errado",
+    "browser_soft_error_bytes": 1722,
+    "browser_success_bytes": 2064677,
+    "browser_success_cards": 67
+  },
+  "live_categories": [
+    {"category": "smartphone", "query": "samsung galaxy s25 ultra 256gb", "ok": true, "ms": 2026.7, "count": 8, "asins_sample": ["B0FTMX44QP", "B0DSYJCY45", "B0DSYC4V4V"]},
+    {"category": "cpu", "query": "processador ryzen 7 5700x", "ok": true, "ms": 34967.5, "count": 8, "asins_sample": ["B09VCHQHZ6", "B0C3T4MFMM", "B091J3NYVF"]},
+    {"category": "ssd", "query": "ssd samsung 990 evo plus 1tb", "ok": true, "ms": 34147.2, "count": 8, "asins_sample": ["B0DHLFWBQ1", "B0BHJF2VRN", "B08QBJ2YMG"]},
+    {"category": "eletrônico", "query": "iphone 16 128gb", "ok": true, "ms": 5121.8, "count": 8, "asins_sample": ["B0FTMRG81W", "B0FTL2KCQ8", "B0DJFRYWK8"]}
+  ],
+  "match_live": {
+    "product": "Celular Samsung Galaxy S25 Ultra 5G 256GB Galaxy AI Titânio Preto",
+    "store": "amazon_br",
+    "result": "MATCH",
+    "elapsed_ms_approx": 39000,
+    "notes": "SERP OK em múltiplas queries; PDP scrape → matched. Primeira tentativa falhou só por DUPLICATE_REQUEST cooldown (Redis), não por SERP."
+  },
+  "timings": {
+    "before_soft_error_path_ms": "~2770 browser then SEARCH_INCOMPLETE",
+    "after_http_ok_host_ms": "~1500-2000 http-direct",
+    "after_browser_docker_ms": "~2000-35000 (proxy FALLBACK quando soft-error/503)"
+  }
+}

@@ -707,7 +707,12 @@ class ProductMatchService:
                     if (
                         exc.code == "SEARCH_UNSUPPORTED"
                         or exc.code
-                        in {"UPSTREAM_WAF_BLOCKED", "SEARCH_INCOMPLETE_RESPONSE"}
+                        in {
+                            "UPSTREAM_WAF_BLOCKED",
+                            "UPSTREAM_BLOCKED",
+                            "SEARCH_INCOMPLETE_RESPONSE",
+                            "SEARCH_PARSE_ERROR",
+                        }
                         or is_browser_infrastructure_error(exc.code)
                     ):
                         break

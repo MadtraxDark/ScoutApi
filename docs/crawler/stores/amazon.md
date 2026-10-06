@@ -23,8 +23,19 @@ No FX conversion in spiders.
 - Amazon BR and US: Search via `matching.search_adapters` (PDP spiders sem Search)
 - SERP BR: `https://www.amazon.com.br/s?k={query}`
 - SERP US: `https://www.amazon.com/s?k={query}`
-- Parser: shared `parse_amazon_search_results` over `s-search-result` cards
-  (`data-asin`)
+- Parser: shared `parse_amazon_search_results` — multi-fonte estável:
+  cards `s-search-result` / `data-asin`, depois anchors `/dp/{ASIN}`
+  (dedup por ASIN + URL canônica). Não depende de uma única classe CSS.
+- Classificação explícita (`classify_amazon_serp_response`):
+  - SERP válida com produtos → candidates
+  - zero results real (`nenhum resultado` / `no results for`) → lista vazia
+    (`genuine_empty` → possível NO_MATCH só depois)
+  - Robot Check / CAPTCHA → `UPSTREAM_WAF_BLOCKED`
+  - Soft-error Amazon (`Algo deu errado` / Dogs of Amazon / `/error/500-title`)
+    → `UPSTREAM_BLOCKED` (proxy FALLBACK), **nunca** NO_MATCH
+  - shell incompleto sem ASIN → `SEARCH_INCOMPLETE_RESPONSE`
+  - markers presentes sem parse → `SEARCH_PARSE_ERROR`
+- `0 candidates` sozinho **não** prova zero resultados: primeiro validar a SERP
 - Used by `POST /match` and durable Match Runs (ADR 0019 / ADR 0024 / ADR 0036)
 - **Color finish vs hue:** bare SERP/PDP labels like ``Titânio`` / ``Titanium``
   are treated as *missing hue specificity*, not as a conflict against
@@ -151,6 +162,11 @@ proxy only after classified `UPSTREAM_BLOCKED`.
 - Robot check / `validateCaptcha` / “not a robot” → **must be resolved** in
   the fetch layer (ADR 0017) via `ChallengeResolver` + offline
   `amazoncaptcha` for classic Amazon image captchas (no API key)
+- Soft-error page (`Algo deu errado` / Dogs of Amazon / `/error/500-title`):
+  often follows HTTP **503** from datacenter IPs. Detected by
+  `is_amazon_soft_error_page` → `UPSTREAM_BLOCKED` so Proxy Cost Mode
+  FALLBACK may retry. **Not** CAPTCHA; never parse as SERP/PDP; never
+  map to NO_MATCH / `available=false`
 - Login / `ap/signin` → **must be resolved** in the fetch layer (ADR 0018):
   seeded Camoufox profile and/or `AMAZON_AUTH_EMAIL` /
   `AMAZON_AUTH_PASSWORD` (operator env only); then resume PDP URL
@@ -190,7 +206,11 @@ proxy only after classified `UPSTREAM_BLOCKED`.
 
 ## Tests / fixtures
 
-- `tests/fixtures/amazon/` (incl. `br_live_buybox_1.html`, `br_live_buybox_2.html`,
-  `br_qualified_buybox_avista_pix.html`)
+- `tests/fixtures/amazon/` (incl. `br_live_buybox_*.html`,
+  `br_serp_valid.html`, `br_serp_zero_results.html`,
+  `br_serp_robot_check.html`, `br_serp_soft_error.html`,
+  `br_serp_incomplete_shell.html`, `br_serp_layout_variant_dp_asin.html`)
 - `tests/unit/test_amazon_common.py`, `test_amazon_br.py`, `test_amazon_us.py`
 - `tests/unit/test_amazon_http_first.py` (progressive fetch / fallbacks)
+- `tests/unit/test_amazon_br_serp.py` (SERP classification / ASIN parse /
+  soft-error ≠ NO_RESULTS)

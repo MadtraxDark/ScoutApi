@@ -9,7 +9,9 @@ from scrapy.http import Response
 
 from scout_api.modules.matching.search_candidate import SearchCandidate
 
-EmptySearchClassification = Literal["genuine_empty", "incomplete", "unknown"]
+EmptySearchClassification = Literal[
+    "genuine_empty", "incomplete", "parse_error", "unknown"
+]
 
 
 @dataclass(frozen=True, slots=True)
