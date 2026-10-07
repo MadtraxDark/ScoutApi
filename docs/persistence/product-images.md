@@ -69,8 +69,7 @@ Se imagens e logos retornarem `502` e o refresh OAuth responder `invalid_grant`
 (token expirado ou revogado), renove o consentimento da **conta dedicada**:
 
 ```powershell
-python scripts/google_drive_oauth_bootstrap.py --write-env
-docker compose up -d --no-deps --force-recreate api image-optimizer
+make renew-drive-token
 ```
 
 O modo `--write-env` grava o novo token diretamente no `.env`, sem exibir

@@ -1,0 +1,60 @@
+---
+description: Diagnóstico e recuperação de falhas do sandbox de execução no Windows
+alwaysApply: true
+---
+
+# Execução local no Windows — falha de inicialização do sandbox
+
+Quando `exec_command` falhar antes de iniciar o processo com
+`helper_unknown_error: setup refresh had errors`, trate como falha de
+inicialização do sandbox do Codex, não como erro do comando ou do projeto.
+
+## Diagnóstico
+
+1. Não repita o mesmo comando em shells ou diretórios diferentes. A falha
+   ocorre antes de PowerShell, Python, Git ou Make serem iniciados.
+2. Leia o log mais recente em
+   `%USERPROFILE%\.codex\.sandbox\sandbox.YYYY-MM-DD.log` e procure a primeira
+   linha `errors=[...]` ou `setup error` que antecede a falha.
+3. Se o log indicar `runtime read/execute validation failed` no runtime
+   `cua_node\...\node_repl.exe` e `os error 32` / “arquivo está sendo usado
+   por outro processo”, registre que a preparação de ACL do runtime falhou
+   porque o executável está aberto. Isso é diferente de uma falha no workspace.
+
+Exemplo de diagnóstico somente leitura em PowerShell:
+
+```powershell
+$sandboxLog = Get-ChildItem "$env:USERPROFILE\.codex\.sandbox\sandbox*.log" |
+  Sort-Object LastWriteTime -Descending |
+  Select-Object -First 1
+Get-Content $sandboxLog.FullName -Tail 80
+```
+
+## Como continuar com segurança
+
+- Se a execução normal continuar indisponível, solicite execução elevada pelo
+  mecanismo de aprovação disponível, apenas para comandos necessários ao
+  trabalho autorizado. Prefira leitura e validação direcionada; mantenha o
+  diretório de trabalho no workspace permitido.
+- A execução elevada é uma alternativa operacional, não uma correção da ACL
+  nem prova de que o sandbox normal foi reparado. Continue relatando a falha
+  padrão se ela persistir.
+- Se não houver alternativa aprovada, pare as operações dependentes do shell e
+  informe o erro exato, o trecho diagnóstico relevante (sem dados pessoais) e
+  o que ainda não pôde ser feito.
+- Não exponha caminhos pessoais completos, tokens ou conteúdo de arquivos
+  secretos ao registrar diagnósticos.
+
+## Ações proibidas
+
+- Não encerre `node_repl.exe`, `node.exe`, Codex ou processos do editor para
+  liberar o arquivo sem autorização explícita do usuário; isso pode derrubar
+  uma sessão ativa.
+- Não altere ACLs/ownership com `takeown`, `icacls` ou `Set-Acl`, não apague ou
+  substitua executáveis do runtime e não desative o sandbox para contornar a
+  falha.
+- Não declare o problema resolvido apenas porque uma chamada elevada funcionou.
+
+Se a causa no log for diferente, investigue essa causa específica antes de
+aplicar este procedimento. Para bloqueios técnicos, siga também
+[`research-and-problem-solving.mdc`](research-and-problem-solving.mdc).

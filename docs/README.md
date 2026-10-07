@@ -28,6 +28,7 @@ Governança de documentação: [`.cursor/rules/documentation-governance.mdc`](..
 | Challenge/CAPTCHA (obrigatório resolver) | [`.cursor/rules/captcha-challenge-resolution.mdc`](../.cursor/rules/captcha-challenge-resolution.mdc) + [ADR 0017](adr/0017-captcha-challenge-resolution.md) |
 | Auth bypass / login wall (obrigatório) | [`.cursor/rules/auth-wall-resolution.mdc`](../.cursor/rules/auth-wall-resolution.mdc) + [ADR 0018](adr/0018-auth-wall-bypass.md) |
 | Pesquisa antes de bloquear / paid | [`.cursor/rules/research-and-problem-solving.mdc`](../.cursor/rules/research-and-problem-solving.mdc) |
+| Falha do sandbox de execução no Windows | [`.cursor/rules/windows-sandbox-exec.mdc`](../.cursor/rules/windows-sandbox-exec.mdc) |
 | Fetch / Camoufox imutáveis | [`.cursor/rules/scraper-camoufox-immutable.mdc`](../.cursor/rules/scraper-camoufox-immutable.mdc) |
 | Segurança da API (auth/CORS/rate limit) | [`security/api-auth.md`](security/api-auth.md) + [ADR 0023](adr/0023-api-auth-supabase-deny-by-default.md) + [`.cursor/rules/security.mdc`](../.cursor/rules/security.mdc) |
 | Integração PriceScout | [`integration/pricescout.md`](integration/pricescout.md) |

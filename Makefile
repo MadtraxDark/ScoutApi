@@ -2,7 +2,7 @@
 
 SHOPEE_SEED_URL ?= https://shopee.com.br/Kingston-HyperX-Fury-DDR4-PC-RAM-4-Gb-8-16-DDR4-2133-2400-2666-3200-Mhz-Mem%C3%B3ria-De-Mesa-i.341936748.29277977480
 
-.PHONY: help spiders spiders-logs spiders-down seed-shopee seed-shopee-login seed-mercadolivre up test test-unit test-integration test-live test-full test-performance lint format typecheck migrate
+.PHONY: help spiders spiders-logs spiders-down seed-shopee seed-shopee-login seed-mercadolivre renew-drive-token up test test-unit test-integration test-live test-full test-performance lint format typecheck migrate
 
 help:
 	@echo "Comandos disponíveis:"
@@ -23,6 +23,7 @@ help:
 	@echo "  make lint               Executa o Ruff"
 	@echo "  make format             Valida a formatação"
 	@echo "  make typecheck          Executa o mypy"
+	@echo "  make renew-drive-token  Renova OAuth do Drive e recria api/image-optimizer"
 
 
 spiders:
@@ -42,6 +43,10 @@ seed-shopee-login:
 
 seed-mercadolivre:
 	powershell -NoProfile -ExecutionPolicy Bypass -File scripts/seed-camoufox-profile.ps1 -MercadoLivre
+
+renew-drive-token:
+	python scripts/google_drive_oauth_bootstrap.py --write-env
+	docker compose up -d --no-deps --force-recreate api image-optimizer
 
 up:
 	docker compose up --build
