@@ -80,9 +80,12 @@ Itens resolvidos **não** ficam no índice ativo.
 
 ## Índice ativo
 
-**Pendências ativas: 1.**
+Nenhuma pendência acionável aberta. **Pendências ativas: 0.**
 
-- [PENDING-032 — Remediar cookies rastreados no histórico Git](PENDING-032-remediate-tracked-cookies.md) — `IN_PROGRESS`, `P0`.
+Resolvida em 2026-10-07:
+
+- [`resolved/PENDING-032-remediate-tracked-cookies.md`](resolved/PENDING-032-remediate-tracked-cookies.md)
+  — cookie PKCE local expirado; cópia removida e prevenção adicionada.
 
 Encerramento e reconciliação em 2026-10-05:
 
