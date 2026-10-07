@@ -1,8 +1,0 @@
-- generic [active] [ref=e1]:
-  - main [ref=e2]:
-    - generic [ref=e4]:
-      - paragraph [ref=e5]: Autenticacao
-      - heading "Verificando sessao..." [level=2] [ref=e6]
-      - paragraph [ref=e7]: Estamos confirmando se voce ja esta autenticado.
-  - button "Open Next.js Dev Tools" [ref=e13] [cursor=pointer]
-  - alert [ref=e17]
