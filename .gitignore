@@ -15,6 +15,7 @@ venv/
 .env
 .env.*
 !.env.example
+/cookies.txt
 dist/
 build/
 .scrapy/
@@ -35,6 +36,8 @@ Thumbs.db
 .pytest_tmp_codex_*/
 .codex-uv-cache/
 .playwright-mcp/
+/.uv-cache/
+/.uv-cache-test/
 
 # Agent terminal captures (keep intentional working notes/scripts)
 memory/working/*.out.txt

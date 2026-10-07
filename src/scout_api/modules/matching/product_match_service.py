@@ -62,6 +62,7 @@ from scout_api.modules.matching.identity import (
     looks_like_bundle,
     normalize_brand,
     normalize_gtin,
+    prefer_identity_aligned_candidates,
     processor_socket,
     serp_candidate_text,
 )
@@ -740,6 +741,9 @@ class ProductMatchService:
                     continue
 
                 empty_searches = 0
+                candidates = prefer_identity_aligned_candidates(
+                    local_identity, candidates
+                )
                 mark(MatchProgressPhase.EVALUATING, store=store_key)
                 emit(
                     type="candidates_found",

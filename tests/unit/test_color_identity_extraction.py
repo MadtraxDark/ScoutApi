@@ -238,3 +238,111 @@ def test_motorola_multiword_color() -> None:
     title = "Motorola Edge 50 Ultra 512GB - Midnight Black"
     assert _color_label_from_title(title) == "midnight black"
     assert normalize_variant_value("color", "Midnight Black") == "midnight black"
+
+
+def test_prefer_identity_aligned_candidates_boosts_matching_color() -> None:
+    from scout_api.modules.matching.identity import (
+        ProductIdentity,
+        prefer_identity_aligned_candidates,
+    )
+    from scout_api.modules.matching.search_candidate import SearchCandidate
+
+    identity = ProductIdentity(
+        gtin=None,
+        brand="apple",
+        model="iphone18promax",
+        title="iPhone 18 Pro Max Preto",
+        title_normalized="iphone 18 pro max preto",
+        variant_attrs={"color": "preto", "storage": "2tb"},
+    )
+    glacial = SearchCandidate(
+        url="https://www.amazon.com.br/dp/B0HJB92JX5",
+        title="Apple iPhone 18 Pro Max 2 TB — Glacial",
+        product_id="B0HJB92JX5",
+    )
+    preto = SearchCandidate(
+        url="https://www.amazon.com.br/dp/B0HJBCQ9B7",
+        title="Apple iPhone 18 Pro Max 2 TB — Preto",
+        product_id="B0HJBCQ9B7",
+    )
+    ranked = prefer_identity_aligned_candidates(identity, [glacial, preto])
+    assert ranked[0].product_id == "B0HJBCQ9B7"
+
+
+def test_glacial_aliases_to_glacier() -> None:
+    assert normalize_variant_value("color", "Glacial") == "glacier"
+    assert normalize_variant_value("color", "glaciar") == "glacier"
+    assert COLOR_CANONICAL["glacial"] == "glacier"
+    assert COLOR_FAMILY["glacier"] == "blue"
+    assert not variants_equal("color", "preto", "glacial")
+
+
+def test_preto_vs_glacial_is_hard_reject_not_review() -> None:
+    """Amazon BR sibling Glacial must not land as 'Requer revisão' vs Preto."""
+    ref_item = identity_reference_item(
+        'iPhone 18 Pro Max Apple 2TB, Câmera de 48MP, A20 Pro, '
+        'Tela 6.9" Super Retina XDR, Preto',
+        brand="Apple",
+        model="iPhone 18 Pro Max",
+        category="smartphone",
+    ).model_copy(
+        update={
+            "price": Decimal("21000.00"),
+            "currency": "BRL",
+            "variant": "color: Preto; storage: 2 TB",
+            "metadata": {
+                "variant": {"color": "Preto", "storage": "2 TB"},
+                "category": "smartphone",
+            },
+        }
+    )
+    ref = identity_from_price_item(ref_item)
+    glacial = identity_from_price_item(
+        ProductPriceItem(
+            store="amazon",
+            country="BR",
+            product_id="B0HJB92JX5",
+            title="Apple iPhone 18 Pro Max 2 TB — Glacial",
+            brand="Apple",
+            model="iPhone 18 Pro Max",
+            url="https://www.amazon.com.br/dp/B0HJB92JX5",
+            canonical_url="https://www.amazon.com.br/dp/B0HJB92JX5",
+            currency="BRL",
+            price=Decimal("19799.10"),
+            available=True,
+            availability="available",
+            metadata={
+                "variant": {"color": "Glacial", "storage": "2 TB"},
+                "category": "smartphone",
+            },
+        )
+    )
+    preto = identity_from_price_item(
+        ProductPriceItem(
+            store="amazon",
+            country="BR",
+            product_id="B0HJBCQ9B7",
+            title="Apple iPhone 18 Pro Max 2 TB — Preto",
+            brand="Apple",
+            model="iPhone 18 Pro Max",
+            url="https://www.amazon.com.br/dp/B0HJBCQ9B7",
+            canonical_url="https://www.amazon.com.br/dp/B0HJBCQ9B7",
+            currency="BRL",
+            price=Decimal("21999.00"),
+            available=True,
+            availability="available",
+            metadata={
+                "variant": {"color": "Preto", "storage": "2 TB"},
+                "category": "smartphone",
+            },
+        )
+    )
+    engine = MatchingEngine()
+    glacial_score = engine.score(ref, glacial)
+    assert glacial_score.decision == "reject"
+    assert any(
+        "color" in (r.detail or "") and r.code == "variant_mismatch"
+        for r in glacial_score.reasons
+    )
+    preto_score = engine.score(ref, preto)
+    assert preto_score.decision == "auto_match"

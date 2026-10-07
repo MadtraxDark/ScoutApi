@@ -107,6 +107,8 @@ COLOR_CANONICAL: dict[str, str] = {
     "bordo": "burgundy",
     "bordeaux": "burgundy",
     "glacier": "glacier",
+    "glacial": "glacier",
+    "glaciar": "glacier",
     "midnight": "midnight",
     "starlight": "starlight",
     "graphite": "graphite",
@@ -1007,6 +1009,46 @@ def rank_candidates_for_query(
         token_hits = len(q_tokens & (title_tokens_set | path_tokens_set))
         variant_hits = len(variantish & (title_tokens_set | path_tokens_set))
         return (exact, variant_hits, token_hits, min(len(title), 200))
+
+    return sorted(candidates, key=sort_key, reverse=True)
+
+
+def prefer_identity_aligned_candidates(
+    identity: ProductIdentity,
+    candidates: list[Any],
+) -> list[Any]:
+    """Reorder SERP hits so reference color/storage siblings are scraped first.
+
+    Prevents wrong-color Amazon siblings (ex.: Glacial vs Preto) from consuming
+    the scrape budget and landing as ambiguous ``review`` outcomes when the
+    matching color SKU is further down the SERP.
+    """
+    boost_tokens: set[str] = set()
+    color = (identity.variant_attrs or {}).get("color")
+    if color:
+        folded = fold_text(color)
+        boost_tokens.add(folded)
+        canon = normalize_variant_value("color", color)
+        if canon:
+            boost_tokens.update(canon.split())
+            for label, mapped in COLOR_CANONICAL.items():
+                if mapped == canon or mapped in canon.split():
+                    boost_tokens.add(fold_text(label))
+    storage = (identity.variant_attrs or {}).get("storage")
+    if storage:
+        boost_tokens.add(fold_text(storage))
+        boost_tokens.add(re.sub(r"\s+", "", fold_text(storage)))
+    boost_tokens = {tok for tok in boost_tokens if tok and len(tok) >= 2}
+    if not boost_tokens:
+        return list(candidates)
+
+    def sort_key(candidate: Any) -> tuple[int, int]:
+        title = fold_text(serp_candidate_text(candidate))
+        title_tokens = set(re.findall(r"[a-z0-9]+", title))
+        title_compact = re.sub(r"[^a-z0-9]+", "", title)
+        hits = len(boost_tokens & title_tokens)
+        compact_hits = sum(1 for tok in boost_tokens if tok in title_compact)
+        return (hits + compact_hits, min(len(title), 200))
 
     return sorted(candidates, key=sort_key, reverse=True)
 
