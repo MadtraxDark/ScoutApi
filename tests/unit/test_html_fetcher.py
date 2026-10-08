@@ -60,6 +60,13 @@ def test_is_challenge_page_detects_cloudflare_and_akamai() -> None:
     assert not is_akamai_sec_cpt_page(
         "<html><body>" + ("produto " * 20_000) + "sec-if-cpt-container</body></html>"
     )
+    grown = (
+        "<html><body>"
+        + ("sensor " * 20_000)
+        + '<div id="sec-if-cpt-container" class="behavioral-content"></div>'
+        + "</body></html>"
+    )
+    assert is_akamai_sec_cpt_page(grown)
 
 
 def test_is_hard_block_page_detects_cloudflare_ip_ban() -> None:

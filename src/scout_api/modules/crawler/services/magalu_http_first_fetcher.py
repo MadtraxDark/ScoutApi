@@ -1,8 +1,9 @@
 """Magazine Luiza: curl_cffi first when the document is already a SERP or PDP.
 
-Akamai sec-cpt stubs are not accepted. Those fall through to Camoufox and the
-existing proxy fallback. A real ``__NEXT_DATA__`` / product-card document skips
-the browser entirely.
+Akamai sec-cpt stubs are not accepted as documents. A crypto/adaptive payload
+is solved on a fresh same-session HTTP impersonation when the server wait fits
+the budget. Behavioral challenges, and any body that is still an interstitial,
+fall through to Camoufox (same resolver) and then proxy fallback.
 """
 
 from __future__ import annotations
@@ -15,6 +16,7 @@ from scrapy.http import HtmlResponse
 
 from ..core.exceptions import RequestError
 from ..core.proxy_policy import proxy_policy_for_url
+from .akamai_sec_cpt import fetch_after_http_crypto_sec_cpt, parse_sec_cpt
 from .html_fetcher import HtmlFetcher, is_auth_wall_page, is_challenge_page
 from .magalu_readiness import magalu_document_ready
 
@@ -91,6 +93,13 @@ class MagaluHttpFirstHtmlFetcher:
             )
             return self._annotate_http(response, url=url)
 
+        solved = self._maybe_solve_http_sec_cpt(url, response.text or "")
+        if solved is not None and (
+            looks_like_magalu_search(solved) or looks_like_magalu_pdp(solved)
+        ):
+            logger.info("magalu_http_sec_cpt_cleared", extra={"url": url})
+            return self._annotate_http(solved, url=url)
+
         logger.info(
             "magalu_http_insufficient_fallback_browser",
             extra={"url": url},
@@ -98,11 +107,22 @@ class MagaluHttpFirstHtmlFetcher:
         return self._browser.fetch(url)
 
     @staticmethod
+    def _maybe_solve_http_sec_cpt(url: str, html: str) -> HtmlResponse | None:
+        parsed = parse_sec_cpt(html)
+        if parsed is None or not parsed.needs_proof_of_work:
+            return None
+        logger.info(
+            "magalu_http_sec_cpt_crypto",
+            extra={"url": url, "provider": parsed.provider},
+        )
+        return fetch_after_http_crypto_sec_cpt(url)
+
+    @staticmethod
     def _annotate_http(response: HtmlResponse, *, url: str) -> HtmlResponse:
         metrics: dict[str, Any] = dict(response.meta.get("fetch_metrics") or {})
         metrics["proxy_used"] = False
         metrics["proxy_policy"] = proxy_policy_for_url(url).value
-        metrics["fetch_strategy"] = "http-direct"
+        metrics.setdefault("fetch_strategy", "http-direct")
         metrics["browser_used"] = False
         response.meta["fetch_metrics"] = metrics
         return response

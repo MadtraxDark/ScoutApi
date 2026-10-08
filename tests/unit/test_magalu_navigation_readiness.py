@@ -4,7 +4,10 @@ from unittest.mock import MagicMock
 import pytest
 
 from scout_api.modules.crawler.services.html_fetcher import CamoufoxHtmlFetcher
-from scout_api.modules.crawler.services.magalu_readiness import magalu_document_ready
+from scout_api.modules.crawler.services.magalu_readiness import (
+    magalu_document_ready,
+    magalu_search_ready,
+)
 
 
 def test_magalu_ready_pdp_does_not_wait_for_analytics_network_idle() -> None:
@@ -48,6 +51,72 @@ def test_magalu_sec_cpt_does_not_wait_for_network_idle() -> None:
         page.wait_for_load_state.assert_not_called()
     finally:
         fetcher.close()
+
+
+def _search_grid(count: int) -> str:
+    links = "".join(
+        f"<a data-testid='product-card-link' href='/item/p/id{i}/'>Item</a>"
+        for i in range(count)
+    )
+    return f"<html><body>{links}</body></html>"
+
+
+def test_magalu_search_with_product_links_skips_network_idle() -> None:
+    page = MagicMock()
+    page.content.return_value = _search_grid(8)
+    fetcher = CamoufoxHtmlFetcher()
+    try:
+        fetcher._goto(page, "https://www.magazineluiza.com.br/busca/cooler/")
+        page.wait_for_load_state.assert_not_called()
+        page.wait_for_timeout.assert_not_called()
+    finally:
+        fetcher.close()
+
+
+def test_magalu_search_stops_when_cards_appear_during_hydration() -> None:
+    page = MagicMock()
+    page.content.side_effect = ["<html>loading</html>", _search_grid(8)]
+    fetcher = CamoufoxHtmlFetcher()
+    try:
+        fetcher._goto(page, "https://www.magazineluiza.com.br/busca/cooler/")
+        page.wait_for_load_state.assert_not_called()
+        assert page.wait_for_timeout.call_count == 1
+    finally:
+        fetcher.close()
+
+
+def test_magalu_search_one_card_waits_for_the_rest_of_the_grid() -> None:
+    page = MagicMock()
+    page.content.return_value = _search_grid(1)
+    fetcher = CamoufoxHtmlFetcher()
+    try:
+        fetcher._goto(page, "https://www.magazineluiza.com.br/busca/cooler/")
+        page.wait_for_load_state.assert_not_called()
+        assert page.wait_for_timeout.call_count == 10
+    finally:
+        fetcher.close()
+
+
+def test_magalu_incomplete_search_still_waits_for_network_idle() -> None:
+    page = MagicMock()
+    page.content.return_value = "<html>loading</html>"
+    fetcher = CamoufoxHtmlFetcher()
+    try:
+        fetcher._goto(page, "https://www.magazineluiza.com.br/busca/cooler/")
+        page.wait_for_load_state.assert_called_once()
+        assert page.wait_for_timeout.call_count == 40
+    finally:
+        fetcher.close()
+
+
+def test_magalu_search_ready_requires_busca_and_product_link() -> None:
+    card = "<a data-testid='product-card-link' href='/item/p/abc/'>Item</a>"
+    assert magalu_search_ready(card, "https://www.magazineluiza.com.br/busca/cooler/")
+    assert not magalu_search_ready(card, "https://www.magazineluiza.com.br/p/abc/")
+    assert not magalu_search_ready(
+        "<a href='/busca/other/'>other</a>",
+        "https://www.magazineluiza.com.br/busca/cooler/",
+    )
 
 
 def test_magalu_incomplete_document_keeps_existing_wait() -> None:

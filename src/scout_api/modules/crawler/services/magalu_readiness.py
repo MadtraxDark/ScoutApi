@@ -6,6 +6,33 @@ from urllib.parse import urlparse
 from parsel import Selector
 
 
+def magalu_search_link_count(html: str, url: str) -> int:
+    """How many distinct product links a SERP already exposes.
+
+    Analytics keep the network busy after those links exist. One early card is
+    not enough: the rest of the grid often hydrates in the next few seconds.
+    """
+    parsed = urlparse(url)
+    if (parsed.hostname or "").removeprefix("www.") != "magazineluiza.com.br":
+        return 0
+    if "/busca/" not in (parsed.path or "").casefold():
+        return 0
+    selector = Selector(text=html or "")
+    seen: set[str] = set()
+    for href in selector.css(
+        "a[data-testid='product-card-link']::attr(href), a[href*='/p/']::attr(href)"
+    ).getall():
+        path = (href or "").split("?", 1)[0].casefold()
+        if "/p/" in path and "/busca/" not in path:
+            seen.add(path)
+    return len(seen)
+
+
+def magalu_search_ready(html: str, url: str) -> bool:
+    """True when a SERP already exposes at least one product link."""
+    return magalu_search_link_count(html, url) > 0
+
+
 def magalu_document_ready(html: str, url: str) -> bool:
     parsed = urlparse(url)
     if (parsed.hostname or "").removeprefix("www.") != "magazineluiza.com.br":

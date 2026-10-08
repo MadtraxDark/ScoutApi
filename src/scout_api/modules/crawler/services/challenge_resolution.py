@@ -8,7 +8,9 @@ bypass (Mercado Livre Snoopy + origin warm + resume). Never commit secrets.
 from __future__ import annotations
 
 import logging
+import random
 import re
+import time
 from dataclasses import dataclass
 from enum import StrEnum
 from io import BytesIO
@@ -253,7 +255,14 @@ class ChallengeResolver:
             return False
 
         target_resume = extract_auth_resume_url(page_url, fallback=resume_url)
-        for attempt in range(1, max(1, self.max_attempts) + 1):
+        # The Akamai behavioral loop already retries pointer/hold steps.
+        # A second identical pass on the same stub only delays proxy fallback.
+        outer_attempts = (
+            1
+            if assessment.kind is ChallengeKind.AKAMAI_SEC_CPT
+            else max(1, self.max_attempts)
+        )
+        for attempt in range(1, outer_attempts + 1):
             logger.info(
                 "challenge_resolve_attempt",
                 extra={
@@ -296,26 +305,44 @@ class ChallengeResolver:
                 )
                 ok = False
 
+            previous_html = html
             html = _safe_content(page)
             title = _safe_title(page)
             page_url = _safe_url(page) or page_url
-            if classify_challenge(html, title=title, url=page_url) is None:
+            # An empty read is not a cleared document. Akamai must leave the
+            # interstitial behind before Match is allowed to parse.
+            challenge_gone = classify_challenge(html, title=title, url=page_url) is None
+            if challenge_gone and (
+                assessment.kind is not ChallengeKind.AKAMAI_SEC_CPT
+                or bool(html.strip())
+            ):
                 logger.info(
                     "challenge_resolved",
                     extra={"kind": assessment.kind.value, "attempt": attempt},
                 )
                 return True
+            if assessment.kind is ChallengeKind.GENERIC and html == previous_html:
+                logger.info(
+                    "challenge_unchanged_stop",
+                    extra={"kind": assessment.kind.value, "attempt": attempt},
+                )
+                return False
             if not ok:
                 continue
             assessment = (
                 classify_challenge(html, title=title, url=page_url) or assessment
             )
+        final_html = _safe_content(page)
         cleared = classify_challenge(
-            _safe_content(page),
+            final_html,
             title=_safe_title(page),
             url=_safe_url(page) or page_url,
         )
-        return cleared is None
+        if cleared is not None:
+            return False
+        if assessment.kind is ChallengeKind.AKAMAI_SEC_CPT and not final_html.strip():
+            return False
+        return True
 
     def _resolve_auth_wall(
         self,
@@ -741,35 +768,94 @@ class ChallengeResolver:
     def _resolve_akamai_sec_cpt(
         self, page: Any, *, resume_url: str | None = None
     ) -> bool:
-        """Behavioral / sec-cpt: sensor JS + pointer telemetry + optional hold.
+        """Clear sec-cpt inside one budget, then require a non-challenge document.
 
-        Inspired by open-source Akamai waiters (e.g. germondai/trawl akamaiWait):
-        wander the mouse, press-and-hold the progress button when present, wait
-        for the interstitial to clear, and re-navigate once if reload stalls.
+        Order, after HTTP impersonation has already run outside this browser:
+
+        1. Read the live provider (crypto / adaptive / behavioral). No saved token.
+        2. Pointer telemetry, then one press-and-hold when a control is visible
+           in any frame. The hold is the gesture, bounded near 3 s.
+        3. Crypto/adaptive proof-of-work posted from this page (same cookies,
+           TLS and IP) only when ``chlg_duration`` fits the remaining budget.
+        4. Poll until the interstitial is gone or the budget ends.
+        5. One resume navigation, and only after ``sec_cpt`` contains ``~3~``.
+
+        Reloading earlier resets the challenge. A still-present interstitial
+        returns False so the fetcher can raise ``UPSTREAM_BLOCKED`` and the
+        proxy fallback can repeat this same resolver on a new egress.
         """
+        from .akamai_sec_cpt import (  # noqa: PLC0415
+            parse_sec_cpt,
+            sec_cpt_prefix,
+            sec_cpt_satisfied,
+        )
         from .html_fetcher import is_akamai_sec_cpt_page  # noqa: PLC0415
 
-        deadline_ms = max(12_000, self.soft_wait_ms * 3)
-        steps = max(4, deadline_ms // 1_500)
-        navigated_once = False
-        for step in range(steps):
+        budget_s = min(22.0, max(8.0, (self.soft_wait_ms * 3) / 1000))
+        deadline = time.perf_counter() + budget_s
+        hold_attempts = 0
+        pow_attempted = False
+        resumed = False
+        provider = "dom"
+        polls = 0
+        html = ""
+
+        while time.perf_counter() < deadline and polls < 40:
+            polls += 1
             html = _safe_content(page)
             if html and not is_akamai_sec_cpt_page(html):
+                logger.info(
+                    "akamai_sec_cpt_cleared",
+                    extra={"provider": provider, "poll": polls},
+                )
                 return True
-            self._akamai_wander_mouse(page)
-            self._akamai_press_and_hold(page)
-            try:
-                page.wait_for_timeout(1_500)
-            except Exception:
-                pass
-            # If sensor scored but reload stalled, reopen the product URL once.
+            parsed = parse_sec_cpt(html) if html else None
+            if parsed is not None:
+                provider = parsed.provider
+            elif is_akamai_sec_cpt_page(html):
+                provider = "behavioral"
+
+            if hold_attempts < 2:
+                self._akamai_wander_mouse(page)
+                if self._akamai_press_and_hold(page):
+                    hold_attempts = 2
+                else:
+                    hold_attempts += 1
+
+            cookie = _cookie_value(page, "sec_cpt")
+            if not pow_attempted and parsed is not None and parsed.needs_proof_of_work:
+                remaining_s = deadline - time.perf_counter()
+                prefix = sec_cpt_prefix(cookie)
+                if prefix and parsed.duration_s <= remaining_s:
+                    pow_attempted = True
+                    self._submit_akamai_proof(
+                        page,
+                        parsed,
+                        prefix=prefix,
+                    )
+                else:
+                    pow_attempted = True
+                    logger.info(
+                        "akamai_sec_cpt_pow_skipped",
+                        extra={
+                            "provider": provider,
+                            "duration_s": parsed.duration_s,
+                            "cookie_present": prefix is not None,
+                            "remaining_s": round(remaining_s, 1),
+                        },
+                    )
+
             if (
-                not navigated_once
+                not resumed
                 and resume_url
-                and step >= max(2, steps // 3)
+                and sec_cpt_satisfied(cookie)
                 and is_akamai_sec_cpt_page(_safe_content(page))
             ):
-                navigated_once = True
+                resumed = True
+                logger.info(
+                    "akamai_sec_cpt_resume",
+                    extra={"provider": provider},
+                )
                 try:
                     page.goto(
                         resume_url,
@@ -778,7 +864,72 @@ class ChallengeResolver:
                     )
                 except Exception:
                     logger.debug("akamai_sec_cpt_renavigate_failed", exc_info=True)
-        return not is_akamai_sec_cpt_page(_safe_content(page))
+                continue
+
+            remaining_ms = int((deadline - time.perf_counter()) * 1000)
+            if remaining_ms <= 0:
+                break
+            try:
+                page.wait_for_timeout(min(400, remaining_ms))
+            except Exception:
+                break
+
+        cleared = bool(html := _safe_content(page)) and not is_akamai_sec_cpt_page(html)
+        logger.info(
+            "akamai_sec_cpt_finished",
+            extra={"provider": provider, "cleared": cleared, "polls": polls},
+        )
+        return cleared
+
+    def _submit_akamai_proof(self, page: Any, parsed: Any, *, prefix: str) -> bool:
+        from .akamai_sec_cpt import (  # noqa: PLC0415
+            build_sec_cpt_payload,
+            generate_sec_cpt_answers,
+        )
+
+        if parsed.duration_s > 0:
+            try:
+                page.wait_for_timeout(int(parsed.duration_s * 1000))
+            except Exception:
+                logger.debug("akamai_sec_cpt_pow_wait_failed", exc_info=True)
+                return False
+        answers = generate_sec_cpt_answers(
+            sec=prefix,
+            timestamp=parsed.timestamp,
+            nonce=parsed.nonce,
+            difficulty=parsed.difficulty,
+            count=parsed.count,
+        )
+        if not answers:
+            return False
+        payload = build_sec_cpt_payload(parsed.token, answers)
+        evaluate = getattr(page, "evaluate", None)
+        if not callable(evaluate):
+            return False
+        try:
+            result = evaluate(
+                """async ({payload, provider}) => {
+                    const post = await fetch('/_sec/verify?provider=' + provider, {
+                        method: 'POST',
+                        credentials: 'include',
+                        headers: {'content-type': 'text/plain;charset=UTF-8'},
+                        body: payload,
+                    });
+                    const verify = await fetch('/_sec/cp_challenge/verify', {
+                        credentials: 'include',
+                    });
+                    return {post: post.status, verify: verify.status};
+                }""",
+                {"payload": payload, "provider": parsed.provider},
+            )
+        except Exception:
+            logger.info("akamai_sec_cpt_pow_submit_failed", exc_info=True)
+            return False
+        logger.info(
+            "akamai_sec_cpt_pow_submitted",
+            extra={"provider": parsed.provider, "result": result},
+        )
+        return True
 
     @staticmethod
     def _akamai_wander_mouse(page: Any) -> None:
@@ -797,31 +948,40 @@ class ChallengeResolver:
 
     @staticmethod
     def _akamai_press_and_hold(page: Any) -> bool:
+        """Press-and-hold a visible control in the challenge page or any frame.
+
+        Selectors are Akamai's stable interstitial structure, then any visible
+        button in that document. The box comes from the live layout. The hold
+        carries small pointer moves because the score uses the gesture, not a
+        fixed pause.
+        """
         selectors = (
             "#progress-button",
             ".behavioral-button",
             "#sec-if-cpt-container [role='button']",
-            "#sec-bc-tile-parent button",
             "#sec-if-cpt-container button",
+            "#sec-bc-tile-parent button",
+            "#sec-bc-tile-parent [role='button']",
+            "button",
+            "[role='button']",
         )
-        for selector in selectors:
-            try:
-                loc = page.locator(selector).first
-                if loc.count() == 0:
-                    continue
-                box = loc.bounding_box()
-                if not box or box.get("width", 0) < 4 or box.get("height", 0) < 4:
-                    continue
-                cx = float(box["x"]) + float(box["width"]) / 2
-                cy = float(box["y"]) + float(box["height"]) / 2
-                page.mouse.move(cx - 12, cy - 8)
-                page.mouse.move(cx, cy)
-                page.mouse.down()
-                page.wait_for_timeout(2_500)
-                page.mouse.up()
-                return True
-            except Exception:
+        hold_ms = random.randint(2_800, 3_600)
+        for target in _interaction_targets(page):
+            locator = getattr(target, "locator", None)
+            if not callable(locator):
                 continue
+            for selector in selectors:
+                try:
+                    loc = target.locator(selector).first
+                    if loc.count() == 0:
+                        continue
+                    box = loc.bounding_box()
+                    if not box or box.get("width", 0) < 8 or box.get("height", 0) < 8:
+                        continue
+                    _hold_pointer(page, box, hold_ms=hold_ms)
+                    return True
+                except Exception:
+                    continue
         return False
 
     def _resolve_mercadolivre_snoopy(self, page: Any) -> bool:
@@ -886,6 +1046,48 @@ class ChallengeResolver:
         except Exception:
             pass
         return True
+
+
+def _cookie_value(page: Any, name: str) -> str:
+    context = getattr(page, "context", None)
+    if context is None:
+        return ""
+    try:
+        cookies = context.cookies()
+    except Exception:
+        return ""
+    for cookie in cookies or []:
+        if str(cookie.get("name") or "") == name:
+            return str(cookie.get("value") or "")
+    return ""
+
+
+def _interaction_targets(page: Any) -> list[Any]:
+    frames = getattr(page, "frames", None)
+    if frames:
+        try:
+            found = [frame for frame in list(frames) if frame is not None]
+        except Exception:
+            found = []
+        if found:
+            return found
+    return [page]
+
+
+def _hold_pointer(page: Any, box: dict[str, Any], *, hold_ms: int) -> None:
+    cx = float(box["x"]) + float(box["width"]) / 2
+    cy = float(box["y"]) + float(box["height"]) / 2
+    mouse = page.mouse
+    mouse.move(cx - 24, cy - 10)
+    mouse.move(cx - 8, cy - 2)
+    mouse.move(cx, cy)
+    mouse.down()
+    slices = 8
+    step = max(80, hold_ms // slices)
+    for index in range(slices):
+        mouse.move(cx + ((index % 3) - 1), cy + (index % 2))
+        page.wait_for_timeout(step)
+    mouse.up()
 
 
 def _fill_first(page: Any, selectors: tuple[str, ...], value: str) -> bool:

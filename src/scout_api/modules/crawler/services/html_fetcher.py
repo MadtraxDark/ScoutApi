@@ -205,13 +205,27 @@ def is_hard_block_page(html: str, *, title: str | None = None) -> bool:
 def is_akamai_sec_cpt_page(html: str) -> bool:
     """Akamai Bot Manager behavioral / sec-cpt interstitial (Magalu and peers).
 
-    Markers are interstitial-specific (not ordinary Akamai-fronted PDPs). Size
-    gate avoids false positives on large pages that happen to mention Akamai.
+    Structural ``id`` / ``class`` markers stay valid on a grown interstitial.
+    Loose text mentions stay size-gated so a large PDP that only names Akamai
+    is not treated as sec-cpt.
     """
     text = html or ""
+    lower = text.casefold()
+    # Structural markers stay valid after Akamai injects sensor scripts and the
+    # document grows past the loose-text size gate. A bare mention inside a
+    # large PDP must not match.
+    structural = (
+        'id="sec-if-cpt-container"',
+        "id='sec-if-cpt-container'",
+        'class="behavioral-content"',
+        "class='behavioral-content'",
+        'id="sec-bc-tile-parent"',
+        "id='sec-bc-tile-parent'",
+    )
+    if any(marker in lower for marker in structural):
+        return True
     if len(text) >= 40_000:
         return False
-    lower = text.casefold()
     markers = (
         "sec-if-cpt-container",
         "behavioral-content",
@@ -1961,8 +1975,11 @@ class CamoufoxHtmlFetcher:
             logger.debug("camoufox_route_unavailable")
             return
 
-        def _route(route: Any, request: Any) -> None:
-            if getattr(request, "resource_type", None) in blocked:
+        def _route(route: Any, request: Any | None = None) -> None:
+            # Playwright Python calls ``handler(route)``; ``request`` is
+            # ``route.request``. A two-arg handler throws and the asset loads.
+            req = request if request is not None else getattr(route, "request", None)
+            if getattr(req, "resource_type", None) in blocked:
                 route.abort()
             else:
                 route.continue_()
@@ -2184,24 +2201,64 @@ class CamoufoxHtmlFetcher:
             logger.debug("bestbuy_akamai_sensor_nudge_failed", exc_info=True)
 
     def _goto(self, page: Any, url: str) -> None:
-        page.goto(url, wait_until="domcontentloaded", timeout=self._timeout_ms)
-        host = (urlparse(url).hostname or "").removeprefix("www.")
+        parsed = urlparse(url)
+        host = (parsed.hostname or "").removeprefix("www.")
+        path = parsed.path or ""
+        goto_timeout = self._timeout_ms
+        if host == "magazineluiza.com.br" and path in {"", "/"}:
+            # Homepage warmup is only a cookie/challenge pause. A stuck
+            # DOMContentLoaded must not consume the 90s navigation budget.
+            goto_timeout = min(goto_timeout, 20_000)
+        page.goto(url, wait_until="domcontentloaded", timeout=goto_timeout)
         if host == "magazineluiza.com.br":
-            if urlparse(url).path in {"", "/"}:
+            if path in {"", "/"}:
                 # Origin warmup retains its explicit settle below; waiting for
                 # analytics networkidle does not validate or resolve a PDP.
                 return
-            from .magalu_readiness import magalu_document_ready
+            from .magalu_readiness import (
+                magalu_document_ready,
+                magalu_search_link_count,
+            )
 
             html = page.content()
             if is_akamai_sec_cpt_page(html):
                 # The stub is already the challenge. networkidle does not
                 # clear sec-cpt and can spend the store wall before resolve.
                 return
-            if not needs_interstitial_resolution(
-                html, url=url
-            ) and magalu_document_ready(html, url):
+            search_links = magalu_search_link_count(html, url)
+            if not needs_interstitial_resolution(html, url=url) and (
+                magalu_document_ready(html, url) or search_links >= 8
+            ):
                 return
+            if "/busca/" in path.casefold() and not needs_interstitial_resolution(
+                html, url=url
+            ):
+                # Collect a grid, not the first hydrated card. Stop within ~8s
+                # instead of idling on images and beacons for up to 20s.
+                # A count that stays put for ~2s will not gain cards from idle.
+                last_links = search_links
+                stable_polls = 0
+                for _ in range(40):
+                    if search_links >= 8:
+                        return
+                    page.wait_for_timeout(200)
+                    html = page.content()
+                    if is_akamai_sec_cpt_page(html) or needs_interstitial_resolution(
+                        html, url=url
+                    ):
+                        return
+                    search_links = magalu_search_link_count(html, url)
+                    if search_links >= 8:
+                        return
+                    if search_links > 0 and search_links == last_links:
+                        stable_polls += 1
+                        if stable_polls >= 10:
+                            return
+                    else:
+                        stable_polls = 0
+                    last_links = search_links
+                if search_links >= 1:
+                    return
         wait_for_load_state = getattr(page, "wait_for_load_state", None)
         if callable(wait_for_load_state):
             try:
@@ -2282,7 +2339,12 @@ class CamoufoxHtmlFetcher:
                 extra={"url": final_url, "attempt": attempt + 1},
             )
             # Mid-settle resolution (CAPTCHA / CF / auth wall).
-            if self._challenge_resolver is not None and attempt >= 1:
+            page_host = (urlparse(final_url).hostname or "").removeprefix("www.")
+            if self._challenge_resolver is not None and (
+                attempt >= 1
+                or is_akamai_sec_cpt_page(html)
+                or page_host == "magazineluiza.com.br"
+            ):
                 self._interstitial_resolution_attempted = True
                 resolved = self._challenge_resolver.try_resolve(
                     page,
@@ -2814,5 +2876,7 @@ def build_html_fetcher(
     # Magalu: accept HTTP only when the document is already a SERP/PDP.
     from .magalu_http_first_fetcher import MagaluHttpFirstHtmlFetcher
 
-    magalu_http = CurlCffiHtmlFetcher(timeout=float(urllib_timeout))
+    # One HTTP attempt: a 403/reset does not clear Akamai, and the wrapper
+    # already escalates to Camoufox. Three curl retries only delay that path.
+    magalu_http = CurlCffiHtmlFetcher(timeout=float(urllib_timeout), max_retries=0)
     return MagaluHttpFirstHtmlFetcher(http=magalu_http, browser=ae_first)

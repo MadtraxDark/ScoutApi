@@ -58,13 +58,28 @@
 
 ## Fetch strategy
 
-- HTTP-first (`curl_cffi`) when the body is already a SERP (`/busca/` product
-  cards) or a ready PDP (`__NEXT_DATA__` item + offers). Akamai sec-cpt is not
-  treated as a document: it escalates to Camoufox.
+- HTTP-first (`curl_cffi`, one attempt) when the body is already a SERP
+  (`/busca/` product cards) or a ready PDP (`__NEXT_DATA__` item + offers).
+  A 403/reset does not retry on that same call. Akamai sec-cpt is not a
+  document. When the body carries a crypto/adaptive payload, one same-session
+  impersonation solves the proof-of-work if `chlg_duration` fits a 12 s cap,
+  then refetches. A body that is still an interstitial continues to Camoufox.
+  Behavioral sec-cpt has no HTTP sensor forge.
 - Camoufox + Proxy Cost Mode after that miss. A sec-cpt stub skips
-  `networkidle` (it does not clear the interstitial). The settle loop resolves
-  the challenge once; the fetch does not run a second full pass on the same
-  page.
+  `networkidle` and starts resolution on the first observation. The browser
+  resolver, inside one ~8–22 s budget: pointer telemetry, one press-and-hold
+  on a visible control in any frame, crypto/adaptive proof posted from that
+  same page when the cookie and the duration fit, then a poll until the
+  interstitial is gone. One resume navigation happens only after `sec_cpt`
+  contains `~3~`. Structural markers (`id="sec-if-cpt-container"`,
+  `class="behavioral-content"`) still count after the document grows past
+  40 KB. The settle loop resolves once. `UPSTREAM_BLOCKED` is emitted only
+  when that budget ends on a challenge, which is what starts proxy fallback.
+  The proxy egress runs the same resolver. A `/busca/` document skips
+  `networkidle` once about eight product links are present, or when the link
+  count stays unchanged for ~2 s (poll capped at ~8 s). Stopping on the first
+  card drops the rest of the grid. An empty SERP still waits for `networkidle`.
+  Homepage warmup caps `DOMContentLoaded` at 20 s.
 - After a classified direct block whose proxy fallback succeeds, the same host
   skips another doomed direct navigation for a few minutes (`proxy_sticky`).
   The first request of a process is still direct. Proxy is not started when
@@ -78,10 +93,15 @@
 
 ## Known blocking
 
-- Akamai Bot Manager **sec-cpt / behavioral** interstitial
-  (`sec-if-cpt-container`, ~2–3 KB stub) — detected as challenge (ADR 0017)
-- Resolver: origin warmup + Camoufox pointer wander / press-and-hold; on failure
-  → `UPSTREAM_BLOCKED` → proxy fallback (Proxy Cost Mode)
+- Akamai Bot Manager **sec-cpt** interstitial
+  (`sec-if-cpt-container`, ~2–3 KB stub) — challenge, never a product
+  (ADR 0017)
+- Resolution order: HTTP impersonation (crypto/adaptive proof on the same
+  session, only when the server wait fits the budget) → persistent Camoufox
+  profile and origin warmup → in-page proof and/or press-and-hold with
+  pointer telemetry → one resume after `sec_cpt` `~3~` → `UPSTREAM_BLOCKED`
+  → sticky proxy fallback, which repeats the browser resolver. Success is a
+  SERP/PDP document, not HTTP 200 with the interstitial still present.
 - Fetcher challenge / hard-block classification must precede spider parse
   (never map interstitial HTML to missing price)
 
@@ -123,4 +143,6 @@
   coverage in `tests/unit/test_spider_parsing.py` e
   `tests/unit/test_magalu_images.py`
 - Akamai sec-cpt detection/resolution: `tests/unit/test_html_fetcher.py`,
-  `tests/unit/test_challenge_resolution.py`
+  `tests/unit/test_challenge_resolution.py`,
+  `tests/unit/test_akamai_sec_cpt.py`,
+  `tests/unit/test_magalu_navigation_readiness.py`

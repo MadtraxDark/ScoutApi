@@ -615,3 +615,38 @@ def test_proxy_cost_mode_skips_images_even_when_include_images_true(
     images_mock.assert_not_called()
     assert item.images == []
     assert item.metadata.get("images_omitted") == "proxy-cost-mode"
+
+
+def test_proxy_route_aborts_image_using_route_request() -> None:
+    captured: dict[str, Any] = {}
+
+    class Page:
+        def route(self, pattern: str, handler: Any) -> None:
+            del pattern
+            captured["handler"] = handler
+
+    class Route:
+        def __init__(self, resource_type: str) -> None:
+            self.request = type("Req", (), {"resource_type": resource_type})()
+            self.aborted = False
+            self.continued = False
+
+        def abort(self) -> None:
+            self.aborted = True
+
+        def continue_(self) -> None:
+            self.continued = True
+
+    fetcher = CamoufoxHtmlFetcher(block_resource_types=SHOPEE_BLOCKED_RESOURCE_TYPES)
+    try:
+        fetcher._maybe_attach_resource_blocking(
+            Page(), "https://www.magazineluiza.com.br/busca/cooler/"
+        )
+        image = Route("image")
+        document = Route("document")
+        captured["handler"](image)
+        captured["handler"](document)
+        assert image.aborted and not image.continued
+        assert document.continued and not document.aborted
+    finally:
+        fetcher.close()
