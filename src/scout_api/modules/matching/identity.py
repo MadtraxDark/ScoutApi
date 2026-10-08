@@ -2393,7 +2393,11 @@ def parse_offer_condition(
     from persisted listing data.
     """
     meta = metadata if isinstance(metadata, dict) else {}
-    raw = meta.get("condition") or meta.get("item_condition") or meta.get("offer_condition")
+    raw = (
+        meta.get("condition")
+        or meta.get("item_condition")
+        or meta.get("offer_condition")
+    )
     if raw is not None and str(raw).strip():
         folded = fold_text(str(raw))
         grade = None
@@ -2433,7 +2437,12 @@ def parse_offer_condition(
         folded,
     ):
         return OfferCondition(code="refurbished")
-    if "open box" in folded or "open-box" in folded or "caixa aberta" in folded or "caja abierta" in folded:
+    if (
+        "open box" in folded
+        or "open-box" in folded
+        or "caixa aberta" in folded
+        or "caja abierta" in folded
+    ):
         return OfferCondition(code="open_box")
     if re.search(r"\b(?:used|usad[oa]s?|seminov[oa]|cpo)\b", folded):
         return OfferCondition(code="used")

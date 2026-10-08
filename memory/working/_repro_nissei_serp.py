@@ -40,7 +40,10 @@ def probe_http_raw(url: str) -> None:
             body = resp.read(8000).decode("utf-8", errors="replace")
             print("status", resp.status, "len", len(body))
             print("challenge?", is_challenge_page(body))
-            print("title snippet", body[body.find("<title>") : body.find("</title>") + 8][:120])
+            print(
+                "title snippet",
+                body[body.find("<title>") : body.find("</title>") + 8][:120],
+            )
             print("has product-item?", "product-item" in body)
             print("cf markers", "cloudflare" in body.lower(), "Just a moment" in body)
     except Exception as exc:  # noqa: BLE001
@@ -104,10 +107,7 @@ def probe_store_search(query: str) -> None:
 
 
 def main() -> None:
-    url = (
-        "https://nissei.com/br/catalogsearch/result/?"
-        "q=apple+iphone+17+256gb+black"
-    )
+    url = "https://nissei.com/br/catalogsearch/result/?q=apple+iphone+17+256gb+black"
     probe_http_raw(url)
     probe_fetcher(url)
     probe_store_search("apple iphone 17 256gb black")

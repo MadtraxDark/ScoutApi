@@ -31,6 +31,7 @@ def _utcnow() -> datetime:
 
 class CanonicalProduct(Base):
     __tablename__ = "canonical_products"
+    __table_args__ = (Index("ix_canonical_products_activity", "created_at", "id"),)
 
     id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4
@@ -305,6 +306,7 @@ class OfferEvent(Base):
     __tablename__ = "offer_events"
     __table_args__ = (
         Index("ix_offer_events_listing_detected", "listing_id", "detected_at"),
+        Index("ix_offer_events_activity", "detected_at", "id"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(

@@ -19,7 +19,7 @@ from scout_api.modules.matching.product_match_service import _serp_title_reject_
 from scout_api.modules.matching.store_search_service import StoreSearchService
 
 TITLE = (
-    'iPhone 18 Pro Max Apple 2TB, Câmera de 48MP, A20 Pro, '
+    "iPhone 18 Pro Max Apple 2TB, Câmera de 48MP, A20 Pro, "
     'Tela 6.9" Super Retina XDR, Preto'
 )
 TARGET = "B0HJBCQ9B7"
@@ -31,7 +31,12 @@ def main() -> None:
     ).model_copy(update={"price": Decimal("21000"), "currency": "BRL"})
     ref = identity_from_price_item(ref_item)
     print("queries:", build_search_queries(ref)[:8])
-    print("ref color", ref.variant_attrs.get("color"), "storage", ref.variant_attrs.get("storage"))
+    print(
+        "ref color",
+        ref.variant_attrs.get("color"),
+        "storage",
+        ref.variant_attrs.get("storage"),
+    )
 
     search = StoreSearchService(fetcher=get_shared_html_fetcher())
     scrape = ProductScrapeService(fetcher=get_shared_html_fetcher())
@@ -50,7 +55,10 @@ def main() -> None:
             text = serp_candidate_text(c)
             reject = _serp_title_reject_reason(ref, title=text)
             marker = " <<<< TARGET" if asin == TARGET else ""
-            print(f"  SERP {asin} prefilter={reject or 'pass'} title={(text or '')[:90]}{marker}")
+            print(
+                f"  SERP {asin} prefilter={reject or 'pass'} "
+                f"title={(text or '')[:90]}{marker}"
+            )
             if not asin or asin in seen:
                 continue
             if reject:

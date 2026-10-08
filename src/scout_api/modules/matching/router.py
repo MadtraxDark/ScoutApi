@@ -41,6 +41,8 @@ from scout_api.modules.images.drive_client import (
     DriveNotConfiguredError,
     get_drive_storage,
 )
+from scout_api.modules.matching.activity_schemas import ActivityListResponse
+from scout_api.modules.matching.activity_service import ActivityService
 from scout_api.modules.matching.match_run_serializers import (
     match_run_to_detail,
     match_run_to_status,
@@ -603,6 +605,59 @@ def get_store_logo(
             "X-Content-Type-Options": "nosniff",
         },
     )
+
+
+def get_activity_service(
+    session: Annotated[Session | None, Depends(_optional_db_session)],
+) -> ActivityService:
+    if session is None:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "code": "DATABASE_UNAVAILABLE",
+                "message": "Banco de dados indisponível",
+                "retryable": False,
+            },
+        )
+    return ActivityService(session)
+
+
+@router.get(
+    "/products/activity",
+    response_model=ActivityListResponse,
+    tags=["Produtos"],
+    dependencies=[Depends(require_permission("products:read")), _RL_DEFAULT],
+    summary="Consultar atividade recente do catálogo",
+)
+def list_product_activity(
+    service: Annotated[ActivityService, Depends(get_activity_service)],
+    principal: Annotated[
+        AuthenticatedPrincipal, Depends(require_permission("products:read"))
+    ],
+    limit: Annotated[int, Query(ge=1, le=50)] = 15,
+    cursor: Annotated[str | None, Query(max_length=512)] = None,
+) -> ActivityListResponse:
+    try:
+        return service.list_recent(viewer=principal, limit=limit, cursor=cursor)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "INVALID_ACTIVITY_CURSOR",
+                "message": "Cursor de atividade inválido",
+                "retryable": False,
+            },
+        ) from exc
+    except SQLAlchemyError as exc:
+        error = classify_database_error(exc)
+        raise HTTPException(
+            status_code=503 if error.code == "DATABASE_UNAVAILABLE" else 500,
+            detail={
+                "code": error.code,
+                "message": error.message,
+                "retryable": error.retryable,
+            },
+        ) from exc
 
 
 @router.get(

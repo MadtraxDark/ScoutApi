@@ -280,7 +280,7 @@ def test_glacial_aliases_to_glacier() -> None:
 def test_preto_vs_glacial_is_hard_reject_not_review() -> None:
     """Amazon BR sibling Glacial must not land as 'Requer revisão' vs Preto."""
     ref_item = identity_reference_item(
-        'iPhone 18 Pro Max Apple 2TB, Câmera de 48MP, A20 Pro, '
+        "iPhone 18 Pro Max Apple 2TB, Câmera de 48MP, A20 Pro, "
         'Tela 6.9" Super Retina XDR, Preto',
         brand="Apple",
         model="iPhone 18 Pro Max",

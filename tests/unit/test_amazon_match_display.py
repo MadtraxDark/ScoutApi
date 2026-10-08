@@ -275,9 +275,7 @@ def test_multi_category_search_locale_localizes_only_translatable_attrs() -> Non
         sc = build_search_queries(
             identity, locale=STORE_CONFIGS["shoppingchina"].query_locale
         )
-        br = build_search_queries(
-            identity, locale=STORE_CONFIGS["kabum"].query_locale
-        )
+        br = build_search_queries(identity, locale=STORE_CONFIGS["kabum"].query_locale)
         joined_sc = " ".join(sc).lower()
         joined_br = " ".join(br).lower()
         # Identifiers / model codes never localized.

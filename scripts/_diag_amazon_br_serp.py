@@ -108,7 +108,9 @@ def _analyze_html(html: str, url: str, status: int | None = None) -> dict:
             "continue shopping": "continue shopping" in folded,
         },
         "html_head_snippet": _snippet(html, 600),
-        "html_body_snippet": _snippet(html[max(0, len(html) // 3) : len(html) // 3 + 600], 600)
+        "html_body_snippet": _snippet(
+            html[max(0, len(html) // 3) : len(html) // 3 + 600], 600
+        )
         if html
         else "",
     }
@@ -154,7 +156,9 @@ def fetch_shared(query: str) -> dict:
         analysis = _analyze_html(resp.text or "", str(resp.url), int(resp.status))
         metrics = dict(resp.meta.get("fetch_metrics") or {})
         # Persist a sample HTML for offline inspection
-        sample_path = OUT / f"amazon_br_serp_sample_{datetime.now(UTC).strftime('%Y%m%dT%H%M%SZ')}.html"
+        sample_path = OUT / (
+            f"amazon_br_serp_sample_{datetime.now(UTC).strftime('%Y%m%dT%H%M%SZ')}.html"
+        )
         sample_path.write_text(resp.text or "", encoding="utf-8", errors="replace")
         return {
             "ok": True,
@@ -218,7 +222,10 @@ def main() -> None:
     q0 = QUERIES[0]
     print(f"=== Deep diag query={q0!r} ===", flush=True)
     http = fetch_http_only(q0)
-    print(f"HTTP-only: ok={http['ok']} ms={http['ms']} err={http.get('error')}", flush=True)
+    print(
+        f"HTTP-only: ok={http['ok']} ms={http['ms']} err={http.get('error')}",
+        flush=True,
+    )
     if http.get("analysis"):
         a = http["analysis"]
         print(
@@ -265,7 +272,9 @@ def main() -> None:
         report["queries"].append({"query": q, "store_search": svc})
 
     report["finished_at"] = datetime.now(UTC).isoformat()
-    out = OUT / f"amazon_br_serp_diag_{datetime.now(UTC).strftime('%Y%m%dT%H%M%SZ')}.json"
+    out = (
+        OUT / f"amazon_br_serp_diag_{datetime.now(UTC).strftime('%Y%m%dT%H%M%SZ')}.json"
+    )
     # Strip huge snippets duplication for JSON size if needed — keep analysis
     out.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"Wrote {out}", flush=True)

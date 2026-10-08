@@ -28,7 +28,9 @@ from scout_api.modules.matching.store_search_service import StoreSearchService
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "amazon"
 
 
-def _load(name: str, *, url: str = "https://www.amazon.com.br/s?k=teste") -> HtmlResponse:
+def _load(
+    name: str, *, url: str = "https://www.amazon.com.br/s?k=teste"
+) -> HtmlResponse:
     body = (FIXTURES / name).read_text(encoding="utf-8")
     return HtmlResponse(
         url=url,

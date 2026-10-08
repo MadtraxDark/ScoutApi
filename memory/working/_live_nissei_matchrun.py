@@ -7,7 +7,9 @@ import logging
 import time
 from pathlib import Path
 
-from scout_api.modules.crawler.core.browser_health import reset_browser_circuit_for_tests
+from scout_api.modules.crawler.core.browser_health import (
+    reset_browser_circuit_for_tests,
+)
 from scout_api.modules.crawler.core.scrape_guard import ScrapeGuard
 from scout_api.modules.crawler.core.store_capability_health import (
     reset_store_capability_circuits_for_tests,

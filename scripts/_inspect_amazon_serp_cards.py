@@ -30,8 +30,6 @@ for i, card in enumerate(cards):
     print("texts", texts[:5])
     print("h2", (card.css("h2").get() or "")[:400])
 
-parsed = parse_amazon_search_results(
-    resp, host="amazon.com.br", source="diag", limit=5
-)
+parsed = parse_amazon_search_results(resp, host="amazon.com.br", source="diag", limit=5)
 for c in parsed:
     print("parsed", c.product_id, (c.title or "")[:80], c.metadata.get("source"))

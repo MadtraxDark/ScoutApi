@@ -238,6 +238,7 @@ class OfferRefreshService:
                 event_type,
                 before=previous_payload,
                 after=current_payload,
+                detected_at=now,
             )
             event_views.append(
                 OfferEventView(
@@ -248,6 +249,13 @@ class OfferRefreshService:
                 )
             )
 
+        previous_promotion = {
+            **(previous_payload or {}),
+            "promotion_payload": dict(listing.promotion_payload or {}),
+            "promotion_price": str(listing.promotion_price)
+            if listing.promotion_price is not None
+            else None,
+        }
         promo_events = mark_check_success(
             listing,
             offer=offer,
@@ -258,14 +266,16 @@ class OfferRefreshService:
             repo.append_event(
                 listing,
                 promo_event,
-                before=previous_payload,
+                before=previous_promotion,
                 after={
+                    **current_payload,
                     "promotion_status": listing.promotion_status,
                     "promotion_expires_at": listing.promotion_expires_at.isoformat()
                     if listing.promotion_expires_at
                     else None,
                     "promotion_payload": listing.promotion_payload,
                 },
+                detected_at=now,
             )
             event_views.append(
                 OfferEventView(

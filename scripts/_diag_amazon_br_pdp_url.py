@@ -5,11 +5,9 @@ from __future__ import annotations
 import re
 import sys
 import time
-from urllib.parse import urlparse, urlunparse
 
 from scout_api.core.config import get_settings
 from scout_api.modules.crawler.core.fingerprints import canonicalize_url
-from scout_api.modules.crawler.core.exceptions import RequestError
 from scout_api.modules.crawler.services.amazon_http_first_fetcher import (
     has_buybox_price_signal,
     looks_like_amazon_pdp,
@@ -27,10 +25,14 @@ from scout_api.modules.crawler.services.product_scrape_service import (
     get_shared_html_fetcher,
 )
 
-RAW = sys.argv[1] if len(sys.argv) > 1 else (
-    "https://www.amazon.com.br/Apple-iPhone-18-Pro-Max/dp/B0HJBCQ9B7/"
-    "ref=asc_df_B0HJBCQ9B7?mcid=9672f715a4123477ac242fea66626748"
-    "&tag=googleshopp00-20&linkCode=df0&language=pt_BR&psc=1"
+RAW = (
+    sys.argv[1]
+    if len(sys.argv) > 1
+    else (
+        "https://www.amazon.com.br/Apple-iPhone-18-Pro-Max/dp/B0HJBCQ9B7/"
+        "ref=asc_df_B0HJBCQ9B7?mcid=9672f715a4123477ac242fea66626748"
+        "&tag=googleshopp00-20&linkCode=df0&language=pt_BR&psc=1"
+    )
 )
 
 
@@ -41,7 +43,9 @@ def _title(html: str) -> str | None:
     return re.sub(r"\s+", " ", m.group(1)).strip()[:200]
 
 
-def _analyze(label: str, resp=None, err: Exception | None = None, ms: float = 0) -> None:
+def _analyze(
+    label: str, resp=None, err: Exception | None = None, ms: float = 0
+) -> None:
     print(f"\n=== {label} ({ms:.0f} ms) ===")
     if err is not None:
         print(f"ERROR {type(err).__name__}: {err}")

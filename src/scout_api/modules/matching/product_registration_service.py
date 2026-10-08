@@ -560,11 +560,12 @@ class ProductRegistrationService:
             scraped_at=datetime.now(UTC),
             metadata={"source": "product_register_preview"},
         )
-        repo.append_snapshot_from_offer(listing, offer)
+        snapshot = repo.append_snapshot_from_offer(listing, offer)
         repo.append_event(
             listing,
             "offer_created",
-            after={"url": listing.url, "source": "product_register_preview"},
+            after={**snapshot.payload, "source": "product_register_preview"},
+            detected_at=offer.scraped_at,
         )
         initialize_listing_schedule(listing, checked_at=offer.scraped_at)
 
@@ -677,10 +678,13 @@ def _to_listing_view(
         parse_offer_condition,
     )
 
+    metadata = payload.get("metadata")
+    if not isinstance(metadata, dict):
+        metadata = {}
     commercial = enrich_commercial_metadata(
         listing.title,
         {
-            **(payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}),
+            **metadata,
             **{
                 k: payload[k]
                 for k in ("condition", "condition_grade", "carrier")
@@ -699,9 +703,7 @@ def _to_listing_view(
         if commercial.get("condition_grade")
         else None
     )
-    carrier = (
-        str(commercial["carrier"]) if commercial.get("carrier") else None
-    )
+    carrier = str(commercial["carrier"]) if commercial.get("carrier") else None
     price = latest.price if latest is not None else None
     currency = latest.currency if latest is not None else None
     fx: dict[str, object] = {

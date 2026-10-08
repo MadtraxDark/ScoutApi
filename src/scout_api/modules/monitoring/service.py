@@ -66,9 +66,16 @@ class OfferMonitorService:
         self, listing: StoreListing, *, now: datetime | None = None
     ) -> bool:
         moment = ensure_aware(now or utcnow())
+        previous_promotion = {
+            "promotion_price": str(listing.promotion_price)
+            if listing.promotion_price is not None
+            else None,
+            "promotion_payload": dict(listing.promotion_payload or {}),
+        }
         expired = expire_due_promotions(listing, now=moment)
         if expired:
             repo = MatchingRepository(self._session)
+            snapshot = repo.latest_snapshot(listing.id)
             expires_iso = (
                 listing.promotion_expires_at.isoformat()
                 if listing.promotion_expires_at
@@ -77,8 +84,13 @@ class OfferMonitorService:
             repo.append_event(
                 listing,
                 "promotion_expired",
-                before={"expires_at": expires_iso},
+                before={
+                    **(snapshot.payload if snapshot else {}),
+                    **previous_promotion,
+                    "expires_at": expires_iso,
+                },
                 after={"status": "expired", "source": "wall_clock"},
+                detected_at=moment,
             )
             listing.next_check_at = moment
         return expired

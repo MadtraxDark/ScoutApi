@@ -33,7 +33,9 @@ def main() -> None:
     resp = fetcher.fetch(prepared)
     ms = (time.perf_counter() - t0) * 1000
     text = resp.text or ""
-    print("fetch_ms", round(ms, 1), "bytes", len(text.encode("utf-8", errors="replace")))
+    print(
+        "fetch_ms", round(ms, 1), "bytes", len(text.encode("utf-8", errors="replace"))
+    )
     print("final_url", resp.url)
     print("metrics", dict(resp.meta.get("fetch_metrics") or {}))
     print(

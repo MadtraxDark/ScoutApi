@@ -25,6 +25,7 @@ PriceScout (localhost:3000)
 | auth refresh | `POST /api/v1/auth/refresh` | `POST /auth/refresh` | FRONTEND_ADAPTER | cookie + Bearer |
 | auth logout | `POST /api/v1/auth/logout` | `POST /auth/logout` | DIRECT_MAPPING | limpar access em memória |
 | email/password/magic | `/api/v1/auth/login|signup|…` | — | OBSOLETE_FRONTEND_BEHAVIOR | remover |
+| catalog activity | placeholder local | `GET /products/activity` | DIRECT_MAPPING | [read-model persistente com cursor](../matching/catalog-activity.md) |
 | catalog overview | `GET /api/v1/catalog/overview` | — | FRONTEND_ADAPTER | derivar de `GET /products` |
 | list products | `GET /api/v1/catalog/products` | `GET /products` | BACKEND_ENDPOINT_REQUIRED | listagem paginada |
 | product search | filtros FE | `GET /products/search` | DIRECT_MAPPING | integrar filtros reais |

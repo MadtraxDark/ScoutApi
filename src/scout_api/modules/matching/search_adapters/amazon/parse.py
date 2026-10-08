@@ -6,6 +6,7 @@ import re
 from typing import Literal
 from urllib.parse import urljoin
 
+from parsel import Selector
 from scrapy.http import Response
 
 from scout_api.modules.crawler.core.fingerprints import canonicalize_url
@@ -46,9 +47,7 @@ _CARD_SELECTORS = (
 )
 
 # Broader fallback only when classic cards yield nothing.
-_FALLBACK_ASIN_SELECTORS = (
-    "[data-asin]",
-)
+_FALLBACK_ASIN_SELECTORS = ("[data-asin]",)
 
 _TITLE_SELECTORS = (
     "h2 a span::text",
@@ -98,7 +97,7 @@ def _clean_title(raw: str | None) -> str | None:
     return text or None
 
 
-def _card_title(card) -> str | None:
+def _card_title(card: Selector) -> str | None:
     parts = [
         part.strip()
         for part in card.css(", ".join(_TITLE_SELECTORS)).getall()
@@ -111,7 +110,9 @@ def _card_title(card) -> str | None:
     return _clean_title(parts[0])
 
 
-def _canonical_dp_url(*, host: str, asin: str, href: str | None, response_url: str) -> str:
+def _canonical_dp_url(
+    *, host: str, asin: str, href: str | None, response_url: str
+) -> str:
     """Prefer stable /dp/{ASIN}; unwrap sspa click URLs when present."""
     origin = f"https://www.{host}"
     if href:
@@ -120,13 +121,13 @@ def _canonical_dp_url(*, host: str, asin: str, href: str | None, response_url: s
         if match and _asin_ok(match.group(1)) == asin:
             # Keep path slug when the href already contains /dp/{asin}.
             if f"/dp/{asin}" in joined or f"/dp/{asin.lower()}" in joined.casefold():
-                return joined.split("?", 1)[0] if "/sspa/click" not in joined else (
-                    f"{origin}/dp/{asin}"
+                return (
+                    joined.split("?", 1)[0]
+                    if "/sspa/click" not in joined
+                    else (f"{origin}/dp/{asin}")
                 )
         # Encoded sspa target: ...url=%2F...%2Fdp%2FASIN...
-        encoded = re.search(
-            rf"%2Fdp%2F{re.escape(asin)}(?:%2F|$)", href, flags=re.I
-        )
+        encoded = re.search(rf"%2Fdp%2F{re.escape(asin)}(?:%2F|$)", href, flags=re.I)
         if encoded or "/sspa/click" in joined:
             return f"{origin}/dp/{asin}"
         if match:
@@ -211,7 +212,9 @@ def parse_amazon_search_results(
 
     # --- Strategy 2: broader data-asin (layout variants / no classic class) ---
     if not candidates:
-        if _ingest_cards(", ".join(_FALLBACK_ASIN_SELECTORS), source_tag=f"{source}-asin"):
+        if _ingest_cards(
+            ", ".join(_FALLBACK_ASIN_SELECTORS), source_tag=f"{source}-asin"
+        ):
             return candidates
 
     # --- Strategy 3: /dp/ anchors ---
@@ -272,9 +275,7 @@ def classify_amazon_serp_response(response: Response) -> AmazonSerpClassificatio
 
     if is_amazon_soft_error_page(text, title=title):
         return "soft_error"
-    if is_challenge_page(text, title=title) or is_amazon_robot_check(
-        text, title=title
-    ):
+    if is_challenge_page(text, title=title) or is_amazon_robot_check(text, title=title):
         return "challenge"
     if is_auth_wall_page(text, url=page_url, title=title):
         return "challenge"

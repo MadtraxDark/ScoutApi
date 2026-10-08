@@ -9,12 +9,11 @@ import time
 from pathlib import Path
 from urllib.parse import quote_plus
 
-from scrapy.http import HtmlResponse, Request
+from scrapy.http import HtmlResponse
 
 from scout_api.core.config import get_settings
 from scout_api.modules.crawler.core.exceptions import RequestError
 from scout_api.modules.crawler.services.amazon_http_first_fetcher import (
-    AmazonHttpFirstHtmlFetcher,
     looks_like_amazon_search,
 )
 from scout_api.modules.crawler.services.html_fetcher import (
@@ -40,7 +39,9 @@ QUERY = sys.argv[1] if len(sys.argv) > 1 else "samsung galaxy s25 ultra 256gb"
 URL = f"https://www.amazon.com.br/s?k={quote_plus(QUERY)}"
 
 
-def analyze(label: str, resp: HtmlResponse | None, err: Exception | None = None) -> dict:
+def analyze(
+    label: str, resp: HtmlResponse | None, err: Exception | None = None
+) -> dict:
     row: dict = {"label": label, "ok": err is None}
     if err is not None:
         row["error"] = f"{type(err).__name__}: {err}"
@@ -92,7 +93,10 @@ def main() -> None:
     try:
         resp = http.fetch(URL)
         report["layers"].append(
-            {**analyze("http_urllib", resp), "ms": round((time.perf_counter() - t0) * 1000, 1)}
+            {
+                **analyze("http_urllib", resp),
+                "ms": round((time.perf_counter() - t0) * 1000, 1),
+            }
         )
     except Exception as exc:  # noqa: BLE001
         report["layers"].append(

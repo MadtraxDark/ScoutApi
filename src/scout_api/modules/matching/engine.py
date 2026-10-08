@@ -271,7 +271,7 @@ class MatchingEngine:
 
         cand_condition = parse_offer_condition(candidate.title)
         if cand_condition.is_renewed_family:
-            detail = cand_condition.code
+            detail: str = cand_condition.code
             if cand_condition.grade:
                 detail = f"{detail}:{cand_condition.grade}"
             reasons.append(

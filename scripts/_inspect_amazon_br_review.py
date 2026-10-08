@@ -10,9 +10,10 @@ from scout_api.core.config import get_settings
 def main() -> None:
     engine = create_engine(get_settings().database_url)
     with engine.connect() as conn:
-        rows = conn.execute(
-            text(
-                """
+        rows = (
+            conn.execute(
+                text(
+                    """
                 SELECT
                   msr.id,
                   msr.store,
@@ -34,26 +35,33 @@ def main() -> None:
                 ORDER BY msr.finished_at DESC NULLS LAST
                 LIMIT 8
                 """
+                )
             )
-        ).mappings().all()
+            .mappings()
+            .all()
+        )
         for row in rows:
             print("--- store_run ---")
             for key, value in dict(row).items():
                 if value is not None:
                     text_val = str(value)
                     print(f"{key}: {text_val[:180]}")
-            logs = conn.execute(
-                text(
-                    """
+            logs = (
+                conn.execute(
+                    text(
+                        """
                     SELECT decision, confidence, title, url, reasons_json
                     FROM match_candidate_logs
                     WHERE store_run_id = :sid
                     ORDER BY created_at DESC
                     LIMIT 5
                     """
-                ),
-                {"sid": row["id"]},
-            ).mappings().all()
+                    ),
+                    {"sid": row["id"]},
+                )
+                .mappings()
+                .all()
+            )
             for log in logs:
                 print("  candidate:", dict(log))
 

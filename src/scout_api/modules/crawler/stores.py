@@ -42,7 +42,7 @@ class StoreConfig:
 
     @property
     def query_locale(self) -> str:
-        """Search-attribute locale: explicit ``search_locale``, else country fallback."""
+        """Search locale: explicit ``search_locale``, else country fallback."""
         if self.search_locale:
             return self.search_locale
         # Last-resort only for stores without integration evidence yet.

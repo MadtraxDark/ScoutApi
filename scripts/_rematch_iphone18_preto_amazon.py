@@ -11,7 +11,7 @@ from scout_api.modules.matching.product_match_service import ProductMatchService
 from scout_api.modules.matching.store_search_service import StoreSearchService
 
 TITLE = (
-    'iPhone 18 Pro Max Apple 2TB, Câmera de 48MP, A20 Pro, '
+    "iPhone 18 Pro Max Apple 2TB, Câmera de 48MP, A20 Pro, "
     'Tela 6.9" Super Retina XDR, Preto'
 )
 

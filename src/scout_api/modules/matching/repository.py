@@ -562,9 +562,7 @@ class MatchingRepository:
             availability=offer.availability,
             available=offer.available,
             fingerprint=fingerprint_from_offer(offer),
-            payload=snapshot_dict_from_offer(
-                offer, title=title or listing.title
-            ),
+            payload=snapshot_dict_from_offer(offer, title=title or listing.title),
             scraped_at=offer.scraped_at,
         )
         self._session.add(snapshot)
@@ -578,13 +576,14 @@ class MatchingRepository:
         *,
         before: dict[str, Any] | None = None,
         after: dict[str, Any] | None = None,
+        detected_at: datetime | None = None,
     ) -> OfferEvent:
         event = OfferEvent(
             listing_id=listing.id,
             event_type=event_type,
             before=before,
             after=after,
-            detected_at=_utcnow(),
+            detected_at=detected_at or _utcnow(),
         )
         self._session.add(event)
         self._session.flush()
