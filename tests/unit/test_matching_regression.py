@@ -3042,3 +3042,26 @@ def test_motherboard_parse_model_excludes_socket_marketing_tail() -> None:
     assert "chipset" not in model
     assert "ddr5" not in model
     assert "m-atx" not in model and "matx" not in model.replace(" ", "")
+
+
+def test_cooler_queries_keep_model_and_radiator_within_existing_budget() -> None:
+    identity = identity_from_price_item(
+        _item(
+            title=(
+                "Water Cooler MSI MAG Coreliquid A12, ARGB, 360mm, Intel e AMD, "
+                "Preto - CLA12360"
+            ),
+            brand="MSI",
+            model="MAG Coreliquid A12",
+            sku="716000",
+            metadata={"category": "cooler"},
+        )
+    )
+
+    queries = build_search_queries(identity, locale="pt-BR")[:5]
+
+    assert identity.mpn == "cla12360"
+    assert identity.category_attrs["radiator_size"] == "360 mm"
+    assert "msi mag coreliquid a12 360mm" in {query.casefold() for query in queries}
+    assert "CLA12360" in queries
+    assert len(queries) <= 5

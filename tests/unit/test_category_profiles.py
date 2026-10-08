@@ -84,6 +84,42 @@ def test_all_listed_category_profiles_are_registered() -> None:
 
 
 @pytest.mark.parametrize(
+    "title",
+    [
+        (
+            "Water Cooler MSI MAG Coreliquid A12, ARGB, 360mm, Intel e AMD, "
+            "Preto - CLA12360"
+        ),
+        "MSI MAG CoreLiquid A12 360 Liquid CPU Cooler, ARGB",
+        "Cooler Liquido MSI MAG CoreLiquid A12 360 mm ARGB",
+        "Water cooler msi 360mm amd/intel mag coreliquid a12 360 argb preto",
+    ],
+)
+def test_cooler_identity_skips_category_prefix_and_keeps_family(title: str) -> None:
+    bundle = resolve_product_identity(
+        title=title,
+        category="cooler",
+        attributes=("brand", "model", "cooler_type", "radiator_size"),
+    )
+
+    assert (bundle.value("brand") or "").casefold() == "msi"
+    assert "MAG CoreLiquid A12".casefold() == (bundle.value("model") or "").casefold()
+    assert bundle.value("cooler_type") == "liquid"
+    assert bundle.value("radiator_size") == "360 mm"
+
+
+def test_cooler_family_without_manufacturer_does_not_invent_mag_brand() -> None:
+    bundle = resolve_product_identity(
+        title="MAG Coreliquid A12 360 - AIO ARGB CPU Liquid Cooler",
+        category="cooler",
+        attributes=("brand", "model"),
+    )
+
+    assert bundle.value("brand") is None
+    assert "MAG Coreliquid A12".casefold() == (bundle.value("model") or "").casefold()
+
+
+@pytest.mark.parametrize(
     ("title", "expected"),
     [
         ("ASUS GeForce RTX 5070 Dual OC 12GB", "gpu"),

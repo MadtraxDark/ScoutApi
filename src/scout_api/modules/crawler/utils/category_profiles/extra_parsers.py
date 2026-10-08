@@ -32,6 +32,51 @@ _PSU_WATT = re.compile(r"\b(?P<w>\d{3,4})\s*w\b", re.I)
 _MONITOR_MODEL = re.compile(r"\b(?P<code>[A-Z0-9]+(?:-[A-Z0-9]+)*)\b", re.I)
 _MONITOR_MODEL_NOISE = frozenset({"displayport", "hdmi", "usb"})
 _RADIATOR = re.compile(r"\b(?P<mm>120|240|280|360|420)\s*mm\b", re.I)
+_RADIATOR_SIZE = re.compile(r"\b(?:120|240|280|360|420)\s*(?:mm)?\b", re.I)
+
+_COOLER_CATEGORY_PREFIXES = (
+    ("liquid", "cpu", "cooler"),
+    ("cpu", "liquid", "cooler"),
+    ("water", "cooler"),
+    ("air", "cooler"),
+    ("liquid", "cooler"),
+    ("cooler", "liquid"),
+    ("cooler", "liquido"),
+    ("cpu", "cooler"),
+    ("cooler", "de", "agua"),
+    ("refrigeracion", "liquida"),
+    ("aio",),
+    ("watercooler",),
+    ("water", "cooling"),
+    ("liquid", "cooling"),
+)
+
+_COOLER_NOISE = frozenset(
+    {
+        "water",
+        "cooler",
+        "aio",
+        "liquid",
+        "liquido",
+        "air",
+        "cpu",
+        "cooling",
+        "refrigeracion",
+        "liquida",
+        "de",
+        "agua",
+        "rgb",
+        "argb",
+        "black",
+        "white",
+        "preto",
+        "branco",
+        "negro",
+        "blanco",
+        "intel",
+        "amd",
+    }
+)
 
 
 def parse_motherboard(title: str, category: str) -> ParsedIdentity:
@@ -354,14 +399,55 @@ def parse_cooler(title: str, category: str) -> ParsedIdentity:
     tokens = _title_tokens(title)
     if not tokens:
         return ParsedIdentity(category, None, None, None, None, None, "ambiguous")
-    brand = _display_token(tokens[0])
+
+    normalized = [fold_identity(token) for token in tokens]
+    brand_size = 1
+    if normalized[:2] == ["cooler", "master"]:
+        brand_size = 2
+    else:
+        for prefix in sorted(_COOLER_CATEGORY_PREFIXES, key=len, reverse=True):
+            if tuple(normalized[: len(prefix)]) == prefix:
+                tokens = tokens[len(prefix) :]
+                normalized = normalized[len(prefix) :]
+                break
+    if not tokens:
+        return ParsedIdentity(category, None, None, None, None, None, "ambiguous")
+
+    first = tokens[0]
+    brand: str | None = " ".join(_display_token(token) for token in tokens[:brand_size])
+    # A short uppercase word before a title-case family can be a product line
+    # (for example, a series name) rather than a manufacturer. Keep it in the
+    # model and leave brand unknown; an explicit manufacturer remains usable
+    # when the title has a second uppercase token or an alphanumeric model.
+    if (
+        len(first) <= 3
+        and first.isupper()
+        and len(tokens) > 1
+        and not tokens[1].isupper()
+        and not any(char.isdigit() for char in tokens[1])
+        and brand_size == 1
+    ):
+        brand = None
+
+    model_start = brand_size if brand is not None else 0
     parts: list[str] = []
-    for token in tokens[1:]:
-        lower = token.casefold()
-        if lower in {"water", "cooler", "aio", "liquid", "air", "cpu"}:
+    for token, lower in zip(
+        tokens[model_start:], normalized[model_start:], strict=True
+    ):
+        if lower in _COOLER_NOISE:
             continue
-        if _RADIATOR.fullmatch(token) or re.fullmatch(r"\d{3}mm", lower):
-            break
+        if _RADIATOR_SIZE.fullmatch(token):
+            if parts:
+                break
+            continue
+        if _RADIATOR.fullmatch(token):
+            if parts:
+                break
+            continue
+        if re.fullmatch(r"\d{3}mm", lower):
+            if parts:
+                break
+            continue
         parts.append(_display_token(token))
         if len(parts) >= 5:
             break

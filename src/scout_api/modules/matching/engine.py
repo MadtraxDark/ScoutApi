@@ -9,6 +9,7 @@ from typing import Literal
 
 from scout_api.modules.matching.identity import (
     ProductIdentity,
+    _cooler_model_signature,
     condition_conflict,
     console_soft_model_title_exempt,
     critical_identity_conflict,
@@ -571,6 +572,11 @@ class MatchingEngine:
                 monitor_spec_support = len(shared_specs) >= 3
 
         title_sim = token_set_ratio(reference.title, candidate.title)
+        cooler_model_exact = bool(
+            reference.category == candidate.category == "cooler"
+            and _cooler_model_signature(reference)
+            and _cooler_model_signature(reference) == _cooler_model_signature(candidate)
+        )
         model_soft_ok = bool(
             reference.model
             and candidate.model
@@ -584,6 +590,8 @@ class MatchingEngine:
             and candidate.brand
             and _brand_compatible(reference, candidate)
         )
+        if cooler_model_exact and reference.brand and candidate.brand:
+            model_soft_ok = _brand_compatible(reference, candidate)
         if model_soft_ok and reference.model != candidate.model:
             # Consoles / GPUs: sparse vs marketing titles must not veto family
             # identity when critical edition/VRAM/storage gates already agree.
@@ -592,6 +600,7 @@ class MatchingEngine:
                 or gpu_soft_model_title_exempt(reference, candidate)
                 or motherboard_soft_model_title_exempt(reference, candidate)
                 or cpu_model_exact
+                or cooler_model_exact
             ):
                 model_soft_ok = False
 

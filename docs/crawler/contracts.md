@@ -271,6 +271,16 @@ implementation of that base model.
 **Product Match:** missing `variant`/`edition` is unknown, not a conflict.
 Explicit Dual ≠ Gaming Trio still rejects (ADR 0024).
 
+For liquid coolers, `model` retains the manufacturer family/model (for example,
+`MAG CoreLiquid A12`) while radiator size, cooler type, fan count and RGB are
+category attributes. Category prefixes such as “Water Cooler” do not identify
+the manufacturer. Explicitly different models, cooler types or radiator sizes
+reject a candidate; an attribute missing on either side remains unknown.
+Manufacturer codes are additional evidence and may vary by market/catalog for
+the same cooler, so a code difference alone does not reject when model and
+dimensions agree. Compact codes come from product text/specifications, not
+opaque retailer SKUs.
+
 ## Source tracking
 
 Prefer `metadata["source"]` maps (field → provenance tag) so regressions show

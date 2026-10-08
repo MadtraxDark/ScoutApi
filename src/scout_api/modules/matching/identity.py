@@ -419,6 +419,10 @@ _MPN_PATTERNS: tuple[re.Pattern[str], ...] = (
     # are not treated as identifiers.
     re.compile(r"\b(?=[a-z0-9-]*\d)[a-z]{2,}(?:-[a-z0-9]{1,16}){2,}\b"),
     re.compile(r"\b90mb[a-z0-9]+-[a-z0-9]+\b"),
+    # Compact manufacturer numbers commonly printed after the full model in
+    # retail titles. Four trailing digits keeps short model tokens (A12/A13)
+    # out of identifier matching.
+    re.compile(r"\b[a-z]{2,5}\d{4,}\b"),
 )
 
 # Bare commercial connectivity labels — never map onto the color variant gate.
@@ -784,7 +788,10 @@ def extract_mpn_forms(*texts: str | None) -> tuple[str | None, str | None]:
     return forms[0]
 
 
-def extract_all_mpn_forms(*texts: str | None) -> list[tuple[str, str]]:
+def extract_all_mpn_forms(
+    *texts: str | None,
+    include_compact_codes: bool = True,
+) -> list[tuple[str, str]]:
     """Return every distinct ``(normalized, display)`` MPN found in texts.
 
     Board numbers and marketing model codes often co-occur for the same SKU
@@ -809,7 +816,10 @@ def extract_all_mpn_forms(*texts: str | None) -> list[tuple[str, str]]:
         re.compile(r"\bG\d{4}-\d{1,2}[A-Za-z0-9]{2,4}\b", re.IGNORECASE),
         re.compile(r"\b[A-Za-z]{2,5}-[A-Za-z0-9-]{4,}\b"),
     )
+    compact_code_pattern = _MPN_PATTERNS[-1]
     for pattern in _MPN_PATTERNS:
+        if not include_compact_codes and pattern is compact_code_pattern:
+            continue
         for match in pattern.finditer(folded):
             normalized = normalize_mpn(match.group(0))
             if not normalized or len(normalized) < 8 or normalized in seen:
@@ -1458,6 +1468,13 @@ def _identity_blob(model: str | None, title: str | None) -> str:
     return f"{model or ''} {title or ''}".strip()
 
 
+def _cooler_model_signature(identity: ProductIdentity) -> str | None:
+    parsed = parse_title_identity(identity.title, category="cooler")
+    if not parsed.model:
+        return None
+    return normalize_model(parsed.model)
+
+
 def critical_identity_conflict(
     reference: ProductIdentity,
     candidate: ProductIdentity,
@@ -1518,6 +1535,33 @@ def critical_identity_conflict(
     for name, left, right in checks:
         if left and right and left != right:
             return f"{name}_mismatch:{left}!={right}"
+
+    if reference.category == "cooler" or candidate.category == "cooler":
+        left_model = _cooler_model_signature(reference)
+        right_model = _cooler_model_signature(candidate)
+        if left_model and right_model and left_model != right_model:
+            return f"cooler_model_mismatch:{left_model}!={right_model}"
+
+        for attribute in ("cooler_type", "radiator_size"):
+            left_value = reference.category_attrs.get(attribute)
+            right_value = candidate.category_attrs.get(attribute)
+            if not left_value or not right_value:
+                continue
+            if attribute == "radiator_size":
+                from scout_api.modules.crawler.utils.category_profiles.common import (
+                    normalize_attribute_value,
+                )
+
+                left_value = normalize_attribute_value(attribute, left_value)
+                right_value = normalize_attribute_value(attribute, right_value)
+            else:
+                left_value = fold_text(left_value)
+                right_value = fold_text(right_value)
+            if left_value and right_value and left_value != right_value:
+                return f"{attribute}_mismatch:{left_value}!={right_value}"
+
+        # Cooler manufacturer codes may vary by market or listing catalog;
+        # model/type/radiator dimensions are the discriminative identity gates.
 
     if reference.category == "psu" or candidate.category == "psu":
         left_text = _identity_blob(reference.model, reference.title)
@@ -2755,7 +2799,37 @@ def identity_from_price_item(item: ProductPriceItem) -> ProductIdentity:
         category = detect_product_category(item.title)
     category = str(category).casefold() if category else None
     category_attrs: dict[str, str] = {}
-    if category == "psu":
+    if category == "cooler":
+        from scout_api.modules.crawler.utils.product_attributes import (
+            resolve_product_identity,
+        )
+
+        resolved = resolve_product_identity(
+            specifications=specs,
+            title=item.title,
+            attributes=("cooler_type", "radiator_size", "fan_count", "rgb"),
+            category="cooler",
+        )
+        for key in ("cooler_type", "radiator_size", "fan_count", "rgb"):
+            value = resolved.value(key)
+            if not value:
+                continue
+            if key == "radiator_size":
+                from scout_api.modules.crawler.utils.category_profiles.common import (
+                    normalize_attribute_value,
+                )
+
+                normalized = normalize_attribute_value(key, str(value))
+            else:
+                normalized = fold_text(str(value))
+            if normalized:
+                category_attrs[key] = normalized
+        logger.info(
+            "identity_category_attributes category=cooler model=%r attrs=%r",
+            _strip_non_model_tokens(item.model) or item.model,
+            category_attrs,
+        )
+    elif category == "psu":
         from scout_api.modules.crawler.utils.product_attributes import (
             resolve_product_identity,
         )
@@ -2859,7 +2933,17 @@ def identity_from_price_item(item: ProductPriceItem) -> ProductIdentity:
             )
             if labeled:
                 spec_mpn_bits.append(labeled.group(1))
-    mpn_forms = extract_all_mpn_forms(item.model, item.sku, item.title, *spec_mpn_bits)
+    mpn_forms = extract_all_mpn_forms(item.model, item.title, *spec_mpn_bits)
+    known_sku_forms = extract_all_mpn_forms(
+        item.sku,
+        include_compact_codes=False,
+    )
+    seen_mpn_forms = {normalized for normalized, _display in mpn_forms}
+    mpn_forms.extend(
+        (normalized, display)
+        for normalized, display in known_sku_forms
+        if normalized not in seen_mpn_forms
+    )
     mpn = mpn_forms[0][0] if mpn_forms else None
     mpn_display = mpn_forms[0][1] if mpn_forms else None
     mpn_aliases = frozenset(norm for norm, _disp in mpn_forms)
@@ -2879,32 +2963,57 @@ def identity_from_price_item(item: ProductPriceItem) -> ProductIdentity:
         )
     model_number_values.discard("")
     brand = normalize_brand(item.brand)
+    if category == "cooler":
+        parsed_cooler = parse_title_identity(item.title, category="cooler")
+        category_label = brand in {
+            "water",
+            "cooler",
+            "liquid",
+            "liquido",
+            "air",
+            "cpu",
+            "aio",
+            "refrigeracion",
+        }
+        if category_label:
+            brand = normalize_brand(parsed_cooler.brand)
+        elif (
+            parsed_cooler.brand is None
+            and parsed_cooler.model
+            and brand == normalize_brand(parsed_cooler.model.split()[0])
+        ):
+            brand = None
     if category == "psu" and brand in {"fonte", "psu", "power supply"}:
         # Some PDP/SPAs expose the product type in the brand field.
         brand = None
     if brand is None:
         # Title often starts with the real brand when PDP brand is a placeholder.
         title_for_brand = fold_text(item.title or "")
-        if category == "psu":
+        if category == "cooler":
+            parsed_cooler = parse_title_identity(item.title, category="cooler")
+            brand = normalize_brand(parsed_cooler.brand)
+        elif category == "psu":
             title_for_brand = re.sub(
                 r"^(?:fonte(?:\s+de\s+alimentacao)?|psu|power\s+supply)\b[\s:,-]*",
                 "",
                 title_for_brand,
             )
             title_for_brand = re.sub(r"^(?:atx|sfx)\b[\s:,-]*", "", title_for_brand)
-        title_brand = next(
-            (
-                token
-                for token in title_for_brand.split()
-                if not re.fullmatch(r"\d{3,4}w?", token)
-                and token not in {"80", "plus", "bronze", "gold", "silver", "platinum"}
-            ),
-            "",
-        )
-        if title_brand and title_brand not in {"iphone", "galaxy", "smartphone"}:
-            brand = normalize_brand(title_brand)
-        if brand is None and "iphone" in fold_text(item.title or ""):
-            brand = "apple"
+        if category != "cooler":
+            title_brand = next(
+                (
+                    token
+                    for token in title_for_brand.split()
+                    if not re.fullmatch(r"\d{3,4}w?", token)
+                    and token
+                    not in {"80", "plus", "bronze", "gold", "silver", "platinum"}
+                ),
+                "",
+            )
+            if title_brand and title_brand not in {"iphone", "galaxy", "smartphone"}:
+                brand = normalize_brand(title_brand)
+            if brand is None and "iphone" in fold_text(item.title or ""):
+                brand = "apple"
     return ProductIdentity(
         gtin=normalize_gtin(item.gtin),
         brand=brand,
@@ -3103,6 +3212,37 @@ def build_search_queries(
             if identity.brand:
                 add(f"{identity.brand} {monitor_family}")
             add(" ".join(family_parts))
+
+    if identity.category == "cooler":
+        parsed_cooler = parse_title_identity(identity.title, category="cooler")
+        model_phrase = parsed_cooler.model or model_search_phrase(
+            model=identity.model,
+            title=identity.title,
+        )
+        model_phrase = re.sub(r"\s+", " ", model_phrase or "").strip()
+        radiator_size = identity.category_attrs.get("radiator_size")
+        if not radiator_size:
+            from scout_api.modules.crawler.utils.product_attributes import (
+                resolve_product_identity,
+            )
+
+            resolved = resolve_product_identity(
+                title=identity.title,
+                attributes=("radiator_size",),
+                category="cooler",
+            )
+            radiator_size = resolved.value("radiator_size")
+        size_phrase = re.sub(r"\s+", "", radiator_size or "").strip()
+        core = " ".join(part for part in (identity.brand, model_phrase) if part)
+        if core and size_phrase:
+            add(f"{core} {size_phrase}")
+        if core:
+            add(core)
+        if model_phrase and size_phrase:
+            add(f"{model_phrase} {size_phrase}")
+        for display in alias_displays:
+            add(display)
+        return queries[:5]
 
     series = model_search_phrase(model=identity.model, title=identity.title)
     storage = identity.variant_attrs.get("storage") or identity.variant_attrs.get(

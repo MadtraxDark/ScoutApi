@@ -179,6 +179,79 @@ def test_luna_grey_synonym_and_ideapad_model_compat() -> None:
     assert weak.decision != "auto_match"
 
 
+def test_cooler_radiator_size_and_manufacturer_code_are_discriminative() -> None:
+    engine = MatchingEngine()
+    source = _identity(
+        brand="MSI",
+        model="magcoreliquida12",
+        title="Water Cooler MSI MAG CoreLiquid A12 360mm ARGB - CLA12360",
+        category="cooler",
+        category_attrs={"cooler_type": "liquid", "radiator_size": "360 mm"},
+        mpn="cla12360",
+    )
+    wrong_size = _identity(
+        brand="MSI",
+        model="magcoreliquida12",
+        title="Water Cooler MSI MAG CoreLiquid A12 240mm ARGB - CLA12240",
+        category="cooler",
+        category_attrs={"cooler_type": "liquid", "radiator_size": "240 mm"},
+        mpn="cla12240",
+    )
+
+    score = engine.score(source, wrong_size)
+
+    assert score.decision == "reject"
+    assert any(
+        reason.code == "critical_conflict"
+        and "radiator_size_mismatch" in (reason.detail or "")
+        for reason in score.reasons
+    )
+
+
+def test_cooler_missing_radiator_size_and_argb_do_not_conflict() -> None:
+    score = MatchingEngine().score(
+        _identity(
+            brand="MSI",
+            model="magcoreliquida12",
+            title="Water Cooler MSI MAG CoreLiquid A12 360mm ARGB",
+            category="cooler",
+            category_attrs={"cooler_type": "liquid", "radiator_size": "360 mm"},
+        ),
+        _identity(
+            brand="MSI",
+            model="magcoreliquida12",
+            title="MSI MAG CoreLiquid A12 Liquid CPU Cooler",
+            category="cooler",
+            category_attrs={"cooler_type": "liquid"},
+        ),
+    )
+
+    assert score.decision != "reject"
+
+
+def test_cooler_market_codes_can_differ_when_model_and_size_agree() -> None:
+    score = MatchingEngine().score(
+        _identity(
+            brand="MSI",
+            model="MSI MAG Coreliquid A12 Argb",
+            title="MSI MAG CoreLiquid A12 360 ARGB CLA12360",
+            category="cooler",
+            category_attrs={"cooler_type": "liquid", "radiator_size": "360 mm"},
+            mpn="cla12360",
+        ),
+        _identity(
+            brand="MSI",
+            model="magcoreliquida12",
+            title="MSI MAG CoreLiquid A12 360 ARGB 306-7ZWEM21-813",
+            category="cooler",
+            category_attrs={"cooler_type": "liquid", "radiator_size": "360 mm"},
+            mpn="3067zwem21813",
+        ),
+    )
+
+    assert score.decision == "auto_match"
+
+
 def test_identity_refines_ram_as_storage_and_sku_model() -> None:
     from datetime import UTC, datetime
 

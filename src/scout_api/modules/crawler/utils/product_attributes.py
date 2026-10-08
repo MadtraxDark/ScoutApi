@@ -532,9 +532,18 @@ _PANEL = re.compile(
     r"\b(?P<panel>OLED|QLED|IPS|VA|TN|Mini-?LED|Micro-?LED)\b", re.IGNORECASE
 )
 _RADIATOR = re.compile(r"\b(?P<mm>120|240|280|360|420)\s*mm\b", re.IGNORECASE)
+_COOLER_RADIATOR = re.compile(
+    r"\b(?P<mm>120|240|280|360|420)\s*(?:mm)?\b", re.IGNORECASE
+)
 _RPM = re.compile(r"\b(?P<rpm>5400|7200)\s*RPM\b", re.IGNORECASE)
 _OC = re.compile(r"\b(?:\bOC\b|Overclock(?:ed)?)\b", re.IGNORECASE)
-_LIQUID = re.compile(r"\b(?:Water\s*Cooler|AIO|Liquid\s*Cooler)\b", re.IGNORECASE)
+_LIQUID = re.compile(
+    r"\b(?:water\s*cooler|aio|liquid\s+(?:cpu\s+)?cooler|"
+    r"cpu\s+liquid\s+cooler|liquid\s+cooling|"
+    r"cooler\s+(?:l[ií]quido|de\s+agua)|"
+    r"refrigeraci[oó]n\s+l[ií]quida)\b",
+    re.IGNORECASE,
+)
 _AIR_COOLER = re.compile(r"\b(?:Air\s*Cooler|Cooler\s*a[eé]reo)\b", re.IGNORECASE)
 
 
@@ -792,7 +801,12 @@ def _apply_category_identity(
         )
     ):
         values["brand"] = ResolvedAttribute(parsed.brand, SOURCE_TITLE)
-    elif title_brand_is_noise and not parsed.brand:
+    elif (
+        not parsed.brand
+        and current_brand is not None
+        and current_brand.source == SOURCE_TITLE
+        and (title_brand_is_noise or category == "cooler")
+    ):
         values.pop("brand", None)
 
     current_model = values.get("model")
@@ -1027,6 +1041,8 @@ def _title_fallback_map(title: str, category: str | None) -> dict[str, str]:
         result["cooler_type"] = "air"
 
     radiator = _RADIATOR.search(text)
+    if radiator is None and category == "cooler":
+        radiator = _COOLER_RADIATOR.search(text)
     if radiator and (
         category in {None, "cooler"} or result.get("cooler_type") == "liquid"
     ):

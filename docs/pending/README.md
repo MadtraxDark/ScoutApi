@@ -80,7 +80,9 @@ Itens resolvidos **não** ficam no índice ativo.
 
 ## Índice ativo
 
-Nenhuma pendência acionável aberta. **Pendências ativas: 0.**
+**Pendências ativas: 1.**
+
+- [PENDING-033 — Fechar Product Match em Magalu e AliExpress](PENDING-033-magalu-aliexpress-match-timeouts.md) — `OPEN`, `INCOMPLETE`, P2; Magalu e AliExpress excederam o wall timeout na Run real pós-correções.
 
 Resolvida em 2026-10-07:
 
