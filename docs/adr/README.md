@@ -73,6 +73,7 @@ Política de quando criar/atualizar docs:
 | [0049](0049-progressive-match-live-observations.md) | Ofertas progressivas com observações duráveis de Match Runs | Accepted |
 | [0050](0050-search-locale-and-offer-condition.md) | Search locale por integração + condição comercial ≠ identidade | Accepted |
 | [0051](0051-persistent-catalog-activity-read-model.md) | Atividade do catálogo como read-model do histórico persistido | Accepted |
+| [0052](0052-catalog-change-explorer.md) | Consulta administrativa do histórico do catálogo | Accepted |
 
 
 ## Quando criar ADR

@@ -22,6 +22,12 @@ from sqlalchemy.orm import Session, aliased
 from sqlalchemy.types import Uuid
 
 from scout_api.modules.crawler.stores import STORE_CONFIGS
+from scout_api.modules.matching.activity_search import (
+    ACCENTED,
+    PLAIN,
+    ActivityFilters,
+    search_terms,
+)
 from scout_api.modules.matching.models import (
     CanonicalProduct,
     OfferEvent,
@@ -66,6 +72,8 @@ class ActivityRepository:
         is_admin: bool,
         limit: int,
         boundary: tuple[datetime, str] | None,
+        history: bool = False,
+        filters: ActivityFilters | None = None,
     ) -> list[ActivityRow]:
         product_key = literal("product:") + cast(CanonicalProduct.id, String)
         event_key = literal("offer:") + cast(OfferEvent.id, String)
@@ -87,8 +95,9 @@ class ActivityRepository:
                 CanonicalProduct,
                 CanonicalProduct.id == StoreListing.canonical_product_id,
             )
-            .where(OfferEvent.event_type.in_(FEED_EVENT_TYPES))
         )
+        if not history:
+            events = events.where(OfferEvent.event_type.in_(FEED_EVENT_TYPES))
 
         # Historical fingerprints compared strings, so "171" -> "171.00"
         # could persist price_changed. Normalize validated amounts before paging.
@@ -126,7 +135,7 @@ class ActivityRepository:
             old_currency == new_currency,
             old_regular.is_not_distinct_from(new_regular),
         )
-        events = events.where(
+        summarized_events = events.where(
             or_(
                 OfferEvent.event_type != "price_changed",
                 ~unchanged_commercial_price,
@@ -170,11 +179,129 @@ class ActivityRepository:
                 peer.id > OfferEvent.id,
             ),
         )
-        events = events.where(
+        summarized_events = summarized_events.where(
             ~select(peer.id)
             .where(peer.listing_id == OfferEvent.listing_id, same_observation, priority)
             .exists()
         )
+        if not history:
+            events = summarized_events
+        store_key = case(
+            *[
+                (
+                    and_(
+                        StoreListing.store == config.key,
+                        StoreListing.country == config.country,
+                    ),
+                    key,
+                )
+                for key, config in STORE_CONFIGS.items()
+                if key != config.key
+            ],
+            else_=StoreListing.store,
+        )
+        if filters is not None:
+            events = events.outerjoin(
+                StoreMetadata, StoreMetadata.store_key == store_key
+            )
+            store_label = func.coalesce(
+                StoreMetadata.display_name,
+                case(
+                    *[
+                        (store_key == key, config.label)
+                        for key, config in STORE_CONFIGS.items()
+                    ],
+                    else_="Loja",
+                ),
+            )
+
+            def normalized(value: Any) -> Any:
+                value = func.coalesce(value, "")
+                if self._session.get_bind().dialect.name == "postgresql":
+                    return func.lower(
+                        func.translate(
+                            value, ACCENTED + ACCENTED.upper(), PLAIN + PLAIN
+                        )
+                    )
+                # SQLite has no translate and lower only folds ASCII by default.
+                for accented, plain in zip(
+                    ACCENTED + ACCENTED.upper(), PLAIN * 2, strict=True
+                ):
+                    value = func.replace(value, accented, plain)
+                return func.lower(value)
+
+            product_fields = [
+                normalized(field)
+                for field in (
+                    CanonicalProduct.title,
+                    CanonicalProduct.brand,
+                    CanonicalProduct.model,
+                )
+            ]
+            offer_fields = [
+                normalized(field)
+                for field in (
+                    store_label,
+                    OfferEvent.before["seller"].as_string(),
+                    OfferEvent.after["seller"].as_string(),
+                )
+            ]
+            for term in search_terms(filters.q):
+                products = products.where(
+                    or_(
+                        *[
+                            field.contains(term, autoescape=True)
+                            for field in product_fields
+                        ]
+                    )
+                )
+                events = events.where(
+                    or_(
+                        *[
+                            field.contains(term, autoescape=True)
+                            for field in product_fields + offer_fields
+                        ]
+                    )
+                )
+            if filters.event_type:
+                if filters.event_type != "product_added":
+                    products = products.where(literal(False))
+                if filters.event_type == "product_added":
+                    events = events.where(literal(False))
+                elif filters.event_type == "new_offer":
+                    events = events.where(
+                        OfferEvent.event_type.in_(("new_offer", "offer_created"))
+                    )
+                elif filters.event_type == "other":
+                    events = events.where(
+                        ~OfferEvent.event_type.in_(
+                            (
+                                *FEED_EVENT_TYPES,
+                                "seller_changed",
+                                "gtin_learned",
+                                "scrape_failed",
+                                "unchanged",
+                            )
+                        )
+                    )
+                else:
+                    events = events.where(OfferEvent.event_type == filters.event_type)
+            if filters.store:
+                products = products.where(literal(False))
+                events = events.where(store_key == filters.store)
+            if filters.product_id:
+                products = products.where(CanonicalProduct.id == filters.product_id)
+                events = events.where(CanonicalProduct.id == filters.product_id)
+            if filters.started_at:
+                products = products.where(
+                    CanonicalProduct.created_at >= filters.started_at
+                )
+                events = events.where(OfferEvent.detected_at >= filters.started_at)
+            if filters.ended_at:
+                products = products.where(
+                    CanonicalProduct.created_at < filters.ended_at
+                )
+                events = events.where(OfferEvent.detected_at < filters.ended_at)
         if not is_admin:
             scope = or_(
                 CanonicalProduct.owner_user_id.is_(None),
@@ -225,20 +352,6 @@ class ActivityRepository:
             .limit(1)
             .correlate(OfferEvent)
             .scalar_subquery()
-        )
-        store_key = case(
-            *[
-                (
-                    and_(
-                        StoreListing.store == config.key,
-                        StoreListing.country == config.country,
-                    ),
-                    key,
-                )
-                for key, config in STORE_CONFIGS.items()
-                if key != config.key
-            ],
-            else_=StoreListing.store,
         )
         stmt = (
             select(

@@ -32,6 +32,7 @@ Governança de documentação: [`.cursor/rules/documentation-governance.mdc`](..
 | Fetch / Camoufox imutáveis | [`.cursor/rules/scraper-camoufox-immutable.mdc`](../.cursor/rules/scraper-camoufox-immutable.mdc) |
 | Segurança da API (auth/CORS/rate limit) | [`security/api-auth.md`](security/api-auth.md) + [ADR 0023](adr/0023-api-auth-supabase-deny-by-default.md) + [`.cursor/rules/security.mdc`](../.cursor/rules/security.mdc) |
 | Atividade do catálogo | [`matching/catalog-activity.md`](matching/catalog-activity.md) + [ADR 0051](adr/0051-persistent-catalog-activity-read-model.md) |
+| Pesquisa de alterações do catálogo | [`matching/catalog-changes.md`](matching/catalog-changes.md) + [ADR 0052](adr/0052-catalog-change-explorer.md) |
 | Integração PriceScout | [`integration/pricescout.md`](integration/pricescout.md) |
 | Persistência PostgreSQL / Supabase | [`persistence/supabase-postgres.md`](persistence/supabase-postgres.md) + [ADR 0021](adr/0021-supabase-postgres-sqlalchemy.md) |
 | Imagens de produto (Drive + AVIF) | [`persistence/product-images.md`](persistence/product-images.md) + [ADR 0029](adr/0029-google-drive-product-images.md) + [ADR 0031](adr/0031-durable-image-optimization-queue.md) + [ADR 0035](adr/0035-media-access-cookie.md) |

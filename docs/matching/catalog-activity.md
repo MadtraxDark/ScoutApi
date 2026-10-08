@@ -3,6 +3,10 @@
 Decisão: [ADR 0051](../adr/0051-persistent-catalog-activity-read-model.md).
 Integração: [PriceScout](../integration/pricescout.md).
 
+Para investigação com filtros e eventos originais, usar a consulta dedicada de
+[pesquisa de alterações](catalog-changes.md). O resumo desta página mantém suas
+regras de omissão e dedupe.
+
 ## Endpoint
 
 `GET /products/activity?limit=15&cursor=...`

@@ -28,6 +28,7 @@ from scout_api.modules.matching.activity_schemas import (
     ActivityStore,
     ActivityType,
 )
+from scout_api.modules.matching.activity_search import ActivityFilters, search_terms
 
 PriceKind = Literal["pix", "regular", "promotion"]
 
@@ -181,6 +182,10 @@ def _offer(row: ActivityRow) -> ActivityOffer:
         availability=after.get("availability"),
         available=after.get("available"),
         promotion_expires_at=expires_at,
+        old_seller=before.get("seller")
+        if isinstance(before.get("seller"), str)
+        else None,
+        seller=after.get("seller") if isinstance(after.get("seller"), str) else None,
     )
 
 
@@ -189,12 +194,37 @@ class ActivityService:
         self._repository = ActivityRepository(session)
         self._images = ProductImageRepository(session)
 
+    def list_changes(
+        self,
+        *,
+        viewer: AuthenticatedPrincipal,
+        limit: int = 25,
+        cursor: str | None = None,
+        filters: ActivityFilters | None = None,
+    ) -> ActivityListResponse:
+        filters = filters or ActivityFilters()
+        search_terms(filters.q)
+        if any(
+            value and value.tzinfo is None
+            for value in (filters.started_at, filters.ended_at)
+        ) or (
+            filters.started_at
+            and filters.ended_at
+            and filters.started_at >= filters.ended_at
+        ):
+            raise ValueError("INVALID_CHANGE_FILTERS")
+        return self.list_recent(
+            viewer=viewer, limit=limit, cursor=cursor, history=True, filters=filters
+        )
+
     def list_recent(
         self,
         *,
         viewer: AuthenticatedPrincipal,
         limit: int = 15,
         cursor: str | None = None,
+        history: bool = False,
+        filters: ActivityFilters | None = None,
     ) -> ActivityListResponse:
         if not 1 <= limit <= 50:
             raise ValueError("INVALID_ACTIVITY_LIMIT")
@@ -205,6 +235,8 @@ class ActivityService:
             is_admin=viewer.role == UserRole.ADMIN,
             limit=limit,
             boundary=boundary,
+            history=history,
+            filters=filters,
         )
         queried = time.perf_counter()
         page = rows[:limit]
@@ -217,6 +249,22 @@ class ActivityService:
         for row in page:
             event_type = row.event.event_type if row.event else "product_added"
             event_type = "new_offer" if event_type == "offer_created" else event_type
+            if event_type not in {
+                "product_added",
+                "new_offer",
+                "price_changed",
+                "availability_changed",
+                "offer_removed",
+                "out_of_stock",
+                "promotion_activated",
+                "promotion_expired",
+                "promotion_updated",
+                "seller_changed",
+                "gtin_learned",
+                "scrape_failed",
+                "unchanged",
+            }:
+                event_type = "other"
             config = STORE_CONFIGS.get(row.store or "")
             items.append(
                 ActivityItem(
@@ -227,6 +275,7 @@ class ActivityService:
                         id=row.product.id,
                         title=row.product.title,
                         brand=row.product.brand,
+                        model=row.product.model,
                         primary_image_url=image_urls.get(row.product.id),
                     ),
                     store=ActivityStore(

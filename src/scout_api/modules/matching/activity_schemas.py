@@ -17,6 +17,11 @@ ActivityType = Literal[
     "promotion_activated",
     "promotion_expired",
     "promotion_updated",
+    "seller_changed",
+    "gtin_learned",
+    "scrape_failed",
+    "unchanged",
+    "other",
 ]
 
 
@@ -24,6 +29,7 @@ class ActivityProduct(BaseModel):
     id: UUID
     title: str
     brand: str | None = None
+    model: str | None = None
     primary_image_url: str | None = None
 
 
@@ -45,6 +51,8 @@ class ActivityOffer(BaseModel):
     availability: str | None = None
     available: bool | None = None
     promotion_expires_at: datetime | None = None
+    old_seller: str | None = None
+    seller: str | None = None
 
 
 class ActivityItem(BaseModel):

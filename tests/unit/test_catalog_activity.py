@@ -15,6 +15,7 @@ from scout_api.main import app
 from scout_api.modules.auth.deps import require_authenticated_user
 from scout_api.modules.auth.schemas import AuthenticatedPrincipal, UserRole
 from scout_api.modules.images.repository import ProductImageRepository
+from scout_api.modules.matching.activity_search import ActivityFilters
 from scout_api.modules.matching.activity_service import ActivityService
 from scout_api.modules.matching.db import create_all
 from scout_api.modules.matching.models import OfferEvent
@@ -490,3 +491,144 @@ def test_malformed_price_does_not_break_activity_query(session):
     item = feed(session).items[0]
     assert item.type == "price_changed"
     assert item.offer.old_price is None
+
+
+def changes(session, **kwargs):
+    return ActivityService(session).list_changes(
+        viewer=kwargs.pop("viewer", OWNER), **kwargs
+    )
+
+
+def test_changes_keep_original_events_and_project_only_safe_evidence(session):
+    product, listing = product_listing(session)
+    for kind in (
+        "price_changed",
+        "promotion_activated",
+        "seller_changed",
+        "scrape_failed",
+        "unchanged",
+        "future_event",
+    ):
+        add_event(
+            session,
+            listing,
+            kind,
+            before={"seller": "Antigo"},
+            after={"seller": "Novo", "error": "SECRET", "token": "SECRET"},
+        )
+    page = changes(session)
+    assert len(page.items) == 7
+    assert {item.type for item in page.items} >= {
+        "seller_changed",
+        "other",
+        "scrape_failed",
+        "unchanged",
+    }
+    assert "SECRET" not in page.model_dump_json()
+    seller = changes(
+        session, filters=ActivityFilters(event_type="seller_changed")
+    ).items[0]
+    assert seller.offer.old_seller == "Antigo" and seller.offer.seller == "Novo"
+    assert seller.product.id == product.id
+    assert (
+        changes(session, filters=ActivityFilters(event_type="other")).items[0].type
+        == "other"
+    )
+
+
+def test_changes_accent_case_and_terms_across_fields_before_paging(session):
+    product, listing = product_listing(session)
+    product.title = "Câmera ÇÃO"
+    product.brand = "Élite"
+    product.model = "Móvel"
+    add_event(session, listing, "seller_changed", after={"seller": "São José"})
+    for _ in range(3):
+        _, other = product_listing(session)
+        add_event(session, other, "new_offer", at=NOW + timedelta(seconds=1))
+    page = changes(
+        session, limit=1, filters=ActivityFilters(q="CAMERA elite movel jose kabum")
+    )
+    assert len(page.items) == 1 and page.items[0].product.id == product.id
+    assert page.next_cursor is None
+    assert changes(session, filters=ActivityFilters(q="camera ausente")).items == []
+
+
+def test_changes_search_treats_sql_wildcards_as_literal(session):
+    product, listing = product_listing(session)
+    product.title = "Produto 100%_literal"
+    add_event(session, listing, "new_offer")
+    other, _ = product_listing(session)
+    other.title = "Produto 100XYZliteral"
+    page = changes(session, filters=ActivityFilters(q="100%_literal"))
+    assert len(page.items) == 2
+    assert all(item.product.id == product.id for item in page.items)
+
+
+def test_changes_store_alias_dates_product_and_original_cursor(session):
+    product, listing = product_listing(session, store="amazon")
+    listing.country = "BR"
+    for index, kind in enumerate(("new_offer", "seller_changed", "price_changed")):
+        add_event(session, listing, kind, at=NOW + timedelta(seconds=index))
+    filters = ActivityFilters(
+        store="amazon_br",
+        product_id=product.id,
+        started_at=NOW,
+        ended_at=NOW + timedelta(seconds=2),
+    )
+    first = changes(session, filters=filters, limit=1)
+    second = changes(session, filters=filters, limit=1, cursor=first.next_cursor)
+    assert [first.items[0].type, second.items[0].type] == [
+        "seller_changed",
+        "new_offer",
+    ]
+    assert first.next_cursor and second.next_cursor is None
+    assert changes(session, filters=ActivityFilters(store="amazon_us")).items == []
+    assert all(item.store.key == "amazon_br" for item in first.items + second.items)
+
+
+def test_changes_owner_scope_applies_to_search(session):
+    _, private = product_listing(session, owner=uuid4())
+    add_event(session, private, "seller_changed", after={"seller": "Privado"})
+    filters = ActivityFilters(q="privado")
+    assert changes(session, filters=filters).items == []
+    assert len(changes(session, viewer=ADMIN, filters=filters).items) == 1
+
+
+@pytest.mark.parametrize(
+    "filters",
+    [
+        ActivityFilters(q="a b c d e f g h i"),
+        ActivityFilters(q="x" * 201),
+        ActivityFilters(started_at=NOW.replace(tzinfo=None)),
+        ActivityFilters(started_at=NOW, ended_at=NOW),
+    ],
+)
+def test_changes_invalid_filters(session, filters):
+    with pytest.raises(ValueError, match="INVALID_CHANGE_FILTERS"):
+        changes(session, filters=filters)
+
+
+def test_changes_endpoint_auth_validation_and_safe_errors(session, monkeypatch):
+    monkeypatch.setenv("AUTH_REQUIRED", "true")
+    get_settings.cache_clear()
+    app.dependency_overrides[get_activity_service] = lambda: ActivityService(session)
+    try:
+        with TestClient(app) as client:
+            assert client.get("/products/changes").status_code == 401
+            app.dependency_overrides[require_authenticated_user] = lambda: OWNER
+            response = client.get("/products/changes")
+            assert response.status_code == 200
+            assert response.headers["cache-control"] == "private, no-store"
+            for params in (
+                {"event_type": "bad"},
+                {"limit": 51},
+                {"product_id": "bad"},
+                {"started_at": "2026-10-07T00:00:00"},
+                {"q": "a b c d e f g h i"},
+            ):
+                assert client.get("/products/changes", params=params).status_code == 422
+            response = client.get("/products/changes?cursor=bad")
+            assert response.json()["detail"]["code"] == "INVALID_ACTIVITY_CURSOR"
+    finally:
+        app.dependency_overrides.clear()
+        get_settings.cache_clear()

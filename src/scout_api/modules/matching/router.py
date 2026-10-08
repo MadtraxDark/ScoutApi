@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import uuid as uuid_module
 from collections.abc import Generator
+from datetime import datetime
 from typing import Annotated
 from uuid import UUID
 
@@ -41,7 +42,11 @@ from scout_api.modules.images.drive_client import (
     DriveNotConfiguredError,
     get_drive_storage,
 )
-from scout_api.modules.matching.activity_schemas import ActivityListResponse
+from scout_api.modules.matching.activity_schemas import (
+    ActivityListResponse,
+    ActivityType,
+)
+from scout_api.modules.matching.activity_search import ActivityFilters
 from scout_api.modules.matching.activity_service import ActivityService
 from scout_api.modules.matching.match_run_serializers import (
     match_run_to_detail,
@@ -645,6 +650,64 @@ def list_product_activity(
             detail={
                 "code": "INVALID_ACTIVITY_CURSOR",
                 "message": "Cursor de atividade inválido",
+                "retryable": False,
+            },
+        ) from exc
+    except SQLAlchemyError as exc:
+        error = classify_database_error(exc)
+        raise HTTPException(
+            status_code=503 if error.code == "DATABASE_UNAVAILABLE" else 500,
+            detail={
+                "code": error.code,
+                "message": error.message,
+                "retryable": error.retryable,
+            },
+        ) from exc
+
+
+@router.get(
+    "/products/changes",
+    response_model=ActivityListResponse,
+    tags=["Produtos"],
+    dependencies=[Depends(require_permission("products:read")), _RL_DEFAULT],
+    summary="Pesquisar histórico persistente do catálogo",
+)
+def search_product_changes(
+    service: Annotated[ActivityService, Depends(get_activity_service)],
+    response: Response,
+    principal: Annotated[
+        AuthenticatedPrincipal, Depends(require_permission("products:read"))
+    ],
+    limit: Annotated[int, Query(ge=1, le=50)] = 25,
+    cursor: Annotated[str | None, Query(max_length=512)] = None,
+    q: Annotated[str, Query(max_length=200)] = "",
+    event_type: ActivityType | None = None,
+    store: Annotated[str | None, Query(max_length=64)] = None,
+    product_id: UUID | None = None,
+    started_at: datetime | None = None,
+    ended_at: datetime | None = None,
+) -> ActivityListResponse:
+    response.headers["Cache-Control"] = "private, no-store"
+    try:
+        return service.list_changes(
+            viewer=principal,
+            limit=limit,
+            cursor=cursor,
+            filters=ActivityFilters(
+                q, event_type, store, product_id, started_at, ended_at
+            ),
+        )
+    except ValueError as exc:
+        invalid_cursor = str(exc) == "INVALID_ACTIVITY_CURSOR"
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "INVALID_ACTIVITY_CURSOR"
+                if invalid_cursor
+                else "INVALID_CHANGE_FILTERS",
+                "message": "Cursor de atividade inválido"
+                if invalid_cursor
+                else "Filtros de histórico inválidos",
                 "retryable": False,
             },
         ) from exc
