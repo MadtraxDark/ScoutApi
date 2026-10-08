@@ -505,7 +505,7 @@ _GPU = re.compile(
 )
 _WATTAGE = re.compile(r"\b(?P<watts>\d{3,4})\s*W(?:att)?s?\b", re.IGNORECASE)
 _EFFICIENCY = re.compile(
-    r"\b80\s*Plus\s+(?P<tier>Titanium|Platinum|Gold|Silver|Bronze)\b",
+    r"\b80\s*(?:Plus|\+)\s+(?P<tier>Titanium|Platinum|Gold|Silver|Bronze)\b",
     re.IGNORECASE,
 )
 _MODULAR = re.compile(

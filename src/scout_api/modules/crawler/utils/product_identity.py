@@ -290,6 +290,8 @@ def looks_like_base_model(category: str | None, value: str | None) -> bool:
                 "cfi",
             )
         ) or (not looks_like_opaque_code(text) and len(text) >= 3)
+    if cat == "psu":
+        return bool(re.search(r"\b[a-z]{1,5}\d{3,5}[a-z0-9]*\b", fold_identity(text)))
     if looks_like_opaque_code(text):
         return False
     if cat == "gpu" or extract_gpu_chip(text) is not None:

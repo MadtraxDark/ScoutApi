@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 import logging
 import re
 import unicodedata
@@ -287,6 +288,7 @@ _CATEGORY_SEARCH_LABELS: dict[str, dict[str, str]] = {
     "monitor": {"pt": "monitor", "en": "monitor", "es": "monitor"},
     "smartphone": {"pt": "celular", "en": "smartphone", "es": "telefono"},
     "ssd": {"pt": "ssd", "en": "ssd", "es": "ssd"},
+    "psu": {"pt": "fonte", "en": "power supply", "es": "fuente de alimentacion"},
 }
 _CATEGORY_SEARCH_ALIASES = {
     "graphics_card": "gpu",
@@ -303,6 +305,10 @@ _CATEGORY_SEARCH_ALIASES = {
     "mobile_phone": "smartphone",
     "phone": "smartphone",
     "solid_state_drive": "ssd",
+    "power_supply": "psu",
+    "power supply": "psu",
+    "power_supply_unit": "psu",
+    "fonte_de_alimentacao": "psu",
 }
 
 _CONDITION_TOKENS = frozenset(
@@ -383,6 +389,8 @@ _MODEL_FAMILY_MARKERS: tuple[str, ...] = (
 
 # Manufacturer part-number shapes frequently published in titles / model fields.
 _MPN_PATTERNS: tuple[re.Pattern[str], ...] = (
+    # Regional manufacturer PNs such as MSI's 306-7ZPAX39-HH9.
+    re.compile(r"\b\d{3}-[a-z0-9]{5,}(?:-[a-z0-9]{2,})+\b"),
     # AMD processor OPNs (boxed and tray are distinct packages of a known CPU).
     re.compile(r"\b100[-\s]?(?:100000|000000)\d{3}[a-z]{0,3}\b"),
     # Generic regional manufacturer part number (e.g. MG7L4LL/A). The
@@ -792,6 +800,7 @@ def extract_all_mpn_forms(*texts: str | None) -> list[tuple[str, str]]:
     seen: set[str] = set()
     raw_patterns = (
         re.compile(r"\b[A-Za-z]{2,4}\d[A-Za-z0-9]{2,8}/[A-Za-z]{1,3}\b"),
+        re.compile(r"\b\d{3}-[A-Za-z0-9]{5,}(?:-[A-Za-z0-9]{2,})+\b"),
         re.compile(r"\bMZ[-\s]?[A-Za-z]\d[A-Za-z0-9]{4,}(?:/[A-Za-z]{2})?\b"),
         re.compile(r"\bSM[-\s]?[A-Za-z]?\d{3}[A-Za-z0-9]*(?:/[A-Za-z]{2})?\b"),
         re.compile(r"\bCFI[-\s]?\d{4}[A-Za-z]?\b"),
@@ -1238,6 +1247,34 @@ def _motherboard_board_signature(text: str | None) -> str | None:
     return f"{base}{suffix}" if suffix else base
 
 
+def _psu_model_signature(text: str | None) -> str | None:
+    """Return the full alphanumeric PSU model token, including its suffix."""
+    folded = fold_text(text or "")
+    match = re.search(r"(?<![a-z0-9])([a-z]{1,5}\d{3,5}[a-z0-9]*)(?![a-z0-9])", folded)
+    return match.group(1) if match else None
+
+
+def _psu_wattage(text: str | None) -> str | None:
+    match = re.search(r"\b(\d{3,4})\s*(?:w|watts?)\b", fold_text(text or ""))
+    return f"{int(match.group(1))} w" if match else None
+
+
+def _normalize_psu_wattage_attribute(value: str) -> str | None:
+    """Normalize wattage from a field already labeled as PSU wattage."""
+    match = re.search(r"\b(\d{3,4})\b", fold_text(value))
+    if not match or int(match.group(1)) < 300:
+        return None
+    return f"{int(match.group(1))} w"
+
+
+def _psu_efficiency(text: str | None) -> str | None:
+    match = re.search(
+        r"\b80\s*(?:plus|\+)\s*(white|bronze|silver|gold|platinum|titanium)\b",
+        fold_text(text or ""),
+    )
+    return f"80 plus {match.group(1)}" if match else None
+
+
 def _motherboard_board_search_phrase(text: str | None) -> str | None:
     """Human-spaced board phrase for SERP (b650m-e wifi)."""
     folded = fold_text(text or "")
@@ -1482,6 +1519,34 @@ def critical_identity_conflict(
         if left and right and left != right:
             return f"{name}_mismatch:{left}!={right}"
 
+    if reference.category == "psu" or candidate.category == "psu":
+        left_text = _identity_blob(reference.model, reference.title)
+        right_text = _identity_blob(candidate.model, candidate.title)
+        left_model, right_model = (
+            _psu_model_signature(left_text),
+            _psu_model_signature(right_text),
+        )
+        if left_model and right_model and left_model != right_model:
+            return f"psu_model_mismatch:{left_model}!={right_model}"
+        left_wattage = reference.category_attrs.get("wattage") or _psu_wattage(
+            left_text
+        )
+        right_wattage = candidate.category_attrs.get("wattage") or _psu_wattage(
+            right_text
+        )
+        if left_wattage and right_wattage and left_wattage != right_wattage:
+            return f"psu_wattage_mismatch:{left_wattage}!={right_wattage}"
+        left_efficiency = reference.category_attrs.get("efficiency") or _psu_efficiency(
+            left_text
+        )
+        right_efficiency = candidate.category_attrs.get(
+            "efficiency"
+        ) or _psu_efficiency(right_text)
+        if left_efficiency and right_efficiency and left_efficiency != right_efficiency:
+            return f"psu_efficiency_mismatch:{left_efficiency}!={right_efficiency}"
+        if reference.mpn and candidate.mpn and reference.mpn != candidate.mpn:
+            return f"psu_mpn_mismatch:{reference.mpn}!={candidate.mpn}"
+
     left_cpu_text = _identity_blob(reference.model, reference.title)
     right_cpu_text = _identity_blob(candidate.model, candidate.title)
     left_cpu = _cpu_signature(left_cpu_text)
@@ -1700,6 +1765,12 @@ def infer_model_from_title(title: str | None) -> str | None:
     board = _motherboard_board_signature(folded)
     if board:
         return board
+    psu_model = _psu_model_signature(folded)
+    if psu_model:
+        return psu_model
+    parsed_psu = parse_title_identity(title or "", category="psu")
+    if parsed_psu.confidence == "contextual" and parsed_psu.model:
+        return normalize_model(parsed_psu.model)
     return None
 
 
@@ -2540,6 +2611,7 @@ class ProductIdentity:
     title: str
     title_normalized: str
     variant_attrs: dict[str, str] = field(default_factory=dict)
+    category_attrs: dict[str, str] = field(default_factory=dict)
     store: str | None = None
     product_id: str | None = None
     price: Decimal | None = None
@@ -2682,6 +2754,41 @@ def identity_from_price_item(item: ProductPriceItem) -> ProductIdentity:
 
         category = detect_product_category(item.title)
     category = str(category).casefold() if category else None
+    category_attrs: dict[str, str] = {}
+    if category == "psu":
+        from scout_api.modules.crawler.utils.product_attributes import (
+            resolve_product_identity,
+        )
+
+        resolved = resolve_product_identity(
+            specifications=specs,
+            title=item.title,
+            attributes=(
+                "wattage",
+                "efficiency",
+                "modularity",
+                "form_factor",
+                "fan_size",
+            ),
+            category="psu",
+        )
+        for key in ("wattage", "efficiency", "modularity", "form_factor", "fan_size"):
+            value = resolved.value(key)
+            if not value:
+                continue
+            if key == "wattage":
+                normalized = _normalize_psu_wattage_attribute(str(value))
+            elif key == "efficiency":
+                normalized = _psu_efficiency(str(value)) or fold_text(str(value))
+            else:
+                normalized = fold_text(str(value))
+            if normalized:
+                category_attrs[key] = normalized
+        logger.info(
+            "identity_category_attributes category=psu model=%r attrs=%r",
+            _strip_non_model_tokens(item.model) or item.model,
+            category_attrs,
+        )
     monitor_model_code = None
     model = resolve_model(item.model, item.title)
     if category == "monitor":
@@ -2729,10 +2836,29 @@ def identity_from_price_item(item: ProductPriceItem) -> ProductIdentity:
             "reference",
             "mpn",
             "part number",
+            "manufacturer part number",
+            "manufacturer sku",
+            "sku do fabricante",
             "codigo do fabricante",
             "manufacturer code",
         }
     ]
+    # Some stores expose the whole technical sheet as one HTML/text field
+    # rather than key/value attributes. Read only explicitly labeled MPN lines.
+    for key, value in specs.items():
+        if fold_text(str(key)) not in {"text", "description", "technical information"}:
+            continue
+        plain_text = html.unescape(re.sub(r"<[^>]*>", "\n", str(value)))
+        for line in plain_text.splitlines():
+            labeled = re.match(
+                r"\s*(?:manufacturer\s+part\s+number|manufacturer\s+sku|"
+                r"part\s+number|mpn|sku\s+do\s+fabricante|"
+                r"c[oó]digo\s+do\s+fabricante|refer[eê]ncia)\s*[:#-]\s*(.+?)\s*$",
+                line,
+                re.IGNORECASE,
+            )
+            if labeled:
+                spec_mpn_bits.append(labeled.group(1))
     mpn_forms = extract_all_mpn_forms(item.model, item.sku, item.title, *spec_mpn_bits)
     mpn = mpn_forms[0][0] if mpn_forms else None
     mpn_display = mpn_forms[0][1] if mpn_forms else None
@@ -2753,9 +2879,28 @@ def identity_from_price_item(item: ProductPriceItem) -> ProductIdentity:
         )
     model_number_values.discard("")
     brand = normalize_brand(item.brand)
+    if category == "psu" and brand in {"fonte", "psu", "power supply"}:
+        # Some PDP/SPAs expose the product type in the brand field.
+        brand = None
     if brand is None:
         # Title often starts with the real brand when PDP brand is a placeholder.
-        title_brand = fold_text((item.title or "").split(" ")[0] if item.title else "")
+        title_for_brand = fold_text(item.title or "")
+        if category == "psu":
+            title_for_brand = re.sub(
+                r"^(?:fonte(?:\s+de\s+alimentacao)?|psu|power\s+supply)\b[\s:,-]*",
+                "",
+                title_for_brand,
+            )
+            title_for_brand = re.sub(r"^(?:atx|sfx)\b[\s:,-]*", "", title_for_brand)
+        title_brand = next(
+            (
+                token
+                for token in title_for_brand.split()
+                if not re.fullmatch(r"\d{3,4}w?", token)
+                and token not in {"80", "plus", "bronze", "gold", "silver", "platinum"}
+            ),
+            "",
+        )
         if title_brand and title_brand not in {"iphone", "galaxy", "smartphone"}:
             brand = normalize_brand(title_brand)
         if brand is None and "iphone" in fold_text(item.title or ""):
@@ -2767,6 +2912,7 @@ def identity_from_price_item(item: ProductPriceItem) -> ProductIdentity:
         title=item.title,
         title_normalized=normalize_title(item.title),
         variant_attrs=attrs,
+        category_attrs=category_attrs,
         store=item.store,
         product_id=item.product_id,
         price=item.price,
@@ -2905,6 +3051,30 @@ def build_search_queries(
     ):
         if display not in alias_displays:
             alias_displays.append(display)
+
+    if identity.category == "psu":
+        parsed_psu = parse_title_identity(identity.title, category="psu")
+        model_phrase = parsed_psu.model or identity.model or ""
+        if identity.brand:
+            model_phrase = re.sub(
+                rf"^{re.escape(identity.brand)}\s+",
+                "",
+                model_phrase,
+                flags=re.IGNORECASE,
+            )
+        model_phrase = re.sub(r"\s+", " ", model_phrase).strip()
+        wattage = identity.category_attrs.get("wattage") or _psu_wattage(identity.title)
+        core = [part for part in (identity.brand, model_phrase) if part]
+        model_code = _psu_model_signature(
+            _identity_blob(identity.model, identity.title)
+        )
+        add(model_code)
+        add(" ".join(core) if core else None)
+        if wattage and model_phrase:
+            add(" ".join((model_phrase, wattage.replace(" w", "w"))))
+        for display in alias_displays:
+            add(display)
+        return queries
 
     # Monitor model codes are often extracted into their dedicated field while
     # generic identity resolution reduces ``model`` to the product family.

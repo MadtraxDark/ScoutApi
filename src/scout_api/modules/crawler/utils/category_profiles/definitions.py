@@ -309,7 +309,15 @@ _p(
 _p(
     "psu",
     "Fonte / PSU",
-    needles=("fonte ", " fonte", "psu", "80 plus", "full modular", "semi modular"),
+    needles=(
+        "fonte",
+        "psu",
+        "power supply",
+        "80 plus",
+        "80+",
+        "full modular",
+        "semi modular",
+    ),
     priority=55,
     attrs=("wattage", "efficiency", "modularity", "form_factor", "mpn"),
     critical=("wattage",),

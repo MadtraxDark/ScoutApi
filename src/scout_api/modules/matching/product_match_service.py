@@ -63,7 +63,6 @@ from scout_api.modules.matching.identity import (
     normalize_brand,
     normalize_gtin,
     prefer_identity_aligned_candidates,
-    processor_socket,
     serp_candidate_text,
 )
 from scout_api.modules.matching.match_deadlines import (
@@ -906,14 +905,16 @@ class ProductMatchService:
                     )[:500]
                     logger.info(
                         "match_candidate_decision store=%s query=%r title=%r url=%s "
-                        "model=%r socket=%r mpn=%r decision=%s confidence=%s "
+                        "category=%r model=%r category_attrs=%r mpn=%r "
+                        "decision=%s confidence=%s "
                         "reasons=%r",
                         store_key,
                         query,
                         (product.title or "")[:200],
                         candidate_log_url,
+                        candidate_identity.category,
                         candidate_identity.model,
-                        processor_socket(candidate_identity),
+                        candidate_identity.category_attrs,
                         candidate_identity.mpn_display or candidate_identity.mpn,
                         score.decision,
                         score.confidence,

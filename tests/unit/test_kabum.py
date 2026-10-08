@@ -53,6 +53,19 @@ def test_kabum_details_and_images_use_product_state_only() -> None:
     ]
 
 
+def test_kabum_description_labeled_fields_expose_model_and_mpn() -> None:
+    fields = KabumSpider._description_specifications(
+        "Fonte MSI MAG A650BNL 650W. Marca: MSI Linha: MAG "
+        "Modelo: MAG A650BNL Part Number: 306-7ZPAX39-HH9 "
+        "Potência nominal: 650 W Certificação de eficiência: 80 PLUS Bronze"
+    )
+
+    assert fields["model"] == "mag a650bnl"
+    assert fields["Part Number"] == "306-7zpax39-hh9"
+    assert fields["wattage"] == "650 w"
+    assert fields["efficiency"] == "80 plus bronze"
+
+
 def test_kabum_full_scrape_only_calls_gallery_when_requested(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     spider = KabumSpider()
     images = MagicMock(wraps=spider.extract_images)

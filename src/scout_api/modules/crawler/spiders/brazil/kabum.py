@@ -1,5 +1,6 @@
 import json
 import re
+import unicodedata
 from decimal import Decimal, InvalidOperation
 from html import unescape
 from typing import Any, Literal
@@ -115,13 +116,15 @@ class KabumSpider(BaseStoreSpider):
         if not title or not product_id:
             raise ParseError("Identidade do produto não encontrada")
 
-        specifications = self._specifications(product)
+        description = product.get("description") or json_ld.get("description")
+        description_specs = self._description_specifications(description)
+        technical_specs = self._specifications(product)
+        specifications = {**description_specs, **technical_specs}
         brand = self._dict(product.get("brands")).get("name") or self._brand(json_ld)
-        model = self._value_for_label(specifications, "modelo")
+        model = self._value_for_label(specifications, "modelo", "model")
         gtin = self._first_value(
             product, "gtin", "ean", "gtin13"
         ) or self._value_for_label(specifications, "ean", "gtin", "código de barras")
-        description = product.get("description") or json_ld.get("description")
         title_text = str(title).strip()
         resolved = resolve_product_identity(
             specifications=specifications,
@@ -140,9 +143,13 @@ class KabumSpider(BaseStoreSpider):
         metadata_source = {
             "title": "product-state" if product.get("title") else "json-ld-or-h1",
             "description": "product-state" if product.get("description") else "json-ld",
-            "specifications": "product-technical-information-state"
-            if specifications
-            else "not-found",
+            "specifications": (
+                "product-technical-information-state"
+                if technical_specs
+                else "product-description-labeled-fields"
+                if description_specs
+                else "not-found"
+            ),
             "brand": attribute_sources.get(
                 "brand",
                 "product-brand-state" if brand else "not-found",
@@ -310,6 +317,62 @@ class KabumSpider(BaseStoreSpider):
             key, value = (part.strip() for part in match.groups())
             if key and value:
                 result[key] = value
+        return result
+
+    @staticmethod
+    def _description_specifications(description: Any) -> dict[str, str]:
+        """Extract explicitly labeled identity/spec fields from the PDP description."""
+        if not isinstance(description, str) or not description.strip():
+            return {}
+        text = unescape(re.sub(r"<[^>]*>", " ", description))
+        text = re.sub(r"\s+", " ", text).strip()
+        folded = "".join(
+            char
+            for char in unicodedata.normalize("NFKD", text).casefold()
+            if not unicodedata.combining(char)
+        )
+        labels = {
+            "marca": "brand",
+            "linha": "line",
+            "modelo": "model",
+            "part number": "Part Number",
+            "manufacturer part number": "Part Number",
+            "manufacturer sku": "Part Number",
+            "sku do fabricante": "Part Number",
+            "codigo do fabricante": "Part Number",
+            "mpn": "Part Number",
+            "potencia nominal": "wattage",
+            "certificacao de eficiencia": "efficiency",
+            "formato (fator de forma)": "form_factor",
+            "tipo de cabeamento": "modularity",
+            "tamanho do ventilador": "fan_size",
+        }
+        stop_labels = set(labels) | {
+            "pfc",
+            "tensao de entrada",
+            "mecanismos de protecao",
+            "conectores disponiveis",
+            "atx (24 pinos)",
+            "eps / cpu (4+4 pinos)",
+            "pcie (6+2 pinos - placa de video)",
+            "sata",
+            "molex (perifericos de 4 pinos)",
+            "fdd (disquete/antigos)",
+        }
+        label_pattern = "|".join(
+            re.escape(label) for label in sorted(stop_labels, key=len, reverse=True)
+        )
+        result: dict[str, str] = {}
+        for match in re.finditer(
+            rf"(?<![a-z0-9])(?P<label>{label_pattern})\s*:\s*"
+            rf"(?P<value>.*?)(?=\s+(?:{label_pattern})\s*:|$)",
+            folded,
+            flags=re.IGNORECASE,
+        ):
+            value = match.group("value").strip(" .;,-")
+            output_key = labels.get(match.group("label").casefold())
+            if output_key and value:
+                result[output_key] = value
         return result
 
     @staticmethod

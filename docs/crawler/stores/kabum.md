@@ -31,6 +31,9 @@
 ## Details source
 
 - Specs from `technicalInformation` (often HTML fragments `- label: value`)
+- Explicitly labeled product-description fields (such as model, Part Number,
+  wattage, and efficiency) are a fallback when technical specs omit them;
+  values from `technicalInformation` take precedence
 - Brand/model via product state + `resolve_product_identity` (ADR 0026:
   cooler/MPN in specs is reclassified when the title has a base chip)
 

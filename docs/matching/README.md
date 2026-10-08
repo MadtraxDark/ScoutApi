@@ -74,6 +74,15 @@ não indexar o modelo concatenado `ryzen75800x3d`. O SKU e seus sufixos são
 mantidos integralmente. As queries genéricas de OPN continuam como fallback
 dentro do mesmo budget.
 
+Para fontes de alimentação, a escada usa rótulos de categoria locais e inclui
+o modelo codificado (por exemplo, `a650bnl`) e o MPN quando disponível, dentro
+do mesmo limite de cinco queries por loja. A identidade inclui potência,
+certificação de eficiência, modularidade e formato quando a fonte explicita
+esses dados. Modelos, potência, certificação e MPN explicitamente divergentes
+são gates de rejeição; atributos ausentes permanecem desconhecidos. Códigos
+MSI no formato `306-7ZPAX39-HH9` são normalizados como MPNs, sem regra
+específica para esse fabricante.
+
 Consultas com atributos localizáveis usam o `query_locale` configurado na
 integração da loja (`StoreConfig.search_locale` explícito, com fallback de
 país só como último recurso — ADR 0050). **País da loja ≠ idioma do índice de
@@ -143,7 +152,7 @@ mensagem, além dos extras estruturados:
   título e URL sem query string.
 - `match_serp_title_reject`: query, título e motivo da rejeição antes do PDP.
 - `match_candidate_decision`: query, título/URL PDP, modelo, socket, MPN,
-  decisão, confiança e razões do matcher.
+  categoria, atributos da categoria, decisão, confiança e razões do matcher.
 - `match_store_summary`: queries usadas, tempos de busca/scrape, contagens,
   resultado e motivo de parada por loja.
 
