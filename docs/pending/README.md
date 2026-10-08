@@ -80,7 +80,11 @@ Itens resolvidos **não** ficam no índice ativo.
 
 ## Índice ativo
 
-**Pendências ativas: 0.**
+**Pendências ativas: 1.**
+
+- [`PENDING-034-iphone-18-pro-match-gaps.md`](PENDING-034-iphone-18-pro-match-gaps.md)
+  — discovery incompleto por desvio de variante Amazon BR, catálogo Magalu/
+  Shopping China e tempo de navegação Best Buy.
 
 Resolvida em 2026-10-08:
 

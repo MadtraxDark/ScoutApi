@@ -2,6 +2,9 @@
 
 Product Match **compõe** duas capabilities independentes (ADR 0038):
 
+Caso real e matriz por loja: [iPhone 18 Pro 512GB Bordô
+(2026-10-08)](iphone-18-pro-investigation-2026-10-08.md).
+
 1. **Store Search** (`matching/search_adapters`) — descobre `SearchCandidate`
 2. **Product Scraping** (`crawler/spiders` + `ProductScrapeService`) — interpreta PDP
 
@@ -58,6 +61,16 @@ Fonte de Search: `matching/search_adapters/registry.py` — **não** `supports_s
 - `SearchRequest` — URL (+ `prefer_browser`)
 - `StoreSearchAdapter` — `build_search_request` / `parse_candidates` / `classify_empty_result`
 - `SearchCandidate` — `matching/search_candidate.py`
+
+## Aprovação de ofertas em revisão
+
+Ofertas persistidas com decisão `review` podem ser aprovadas por um usuário
+com permissão `products:write` em `POST /products/{product_id}/listings/{listing_id}/approve`.
+A API verifica o acesso ao produto e se a oferta pertence a ele, ativa a listing,
+registra o evento `match_review_approved` e inicia o monitoramento usando o
+snapshot mais recente, sem criar preço ou snapshot novo. A operação é idempotente
+para uma oferta já aprovada. O frontend pede confirmação para que o operador
+confira a correspondência e as condições da oferta na loja antes de aprovar.
 
 ### Empty SERP ≠ NO_MATCH
 
@@ -120,6 +133,17 @@ Identificadores, códigos de modelo e frases comerciais não são traduzidos.
 Apenas a representação preferida do locale entra na ladder colorida (sem
 explodir black+preto+negro). Tokens de marketing redundantes (`5g`/`4g`/`lte`)
 são removidos do título de busca.
+
+Para smartphones, a ladder prioriza modelo + armazenamento + cor localizada
+quando o título natural ultrapassa sete termos sem categoria explícita. Títulos
+curtos e títulos que já começam com a categoria mantêm a ordem natural. A
+consulta longa fica como fallback. Em seguida a ladder relaxa cor e
+armazenamento progressivamente, dentro do budget de cinco queries. Essa ordem
+evita que descrições longas de câmera, chip e tela consumam o budget antes da
+variante comercial. `Bordô`/`Burgundy`/`Borgoña`/`Burdeos` são aliases da
+mesma cor canônica;
+cores explicitamente diferentes continuam gates de rejeição, e cor ausente
+continua desconhecida até a PDP.
 
 ### Condição comercial ≠ identidade
 

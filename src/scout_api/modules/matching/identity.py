@@ -107,6 +107,8 @@ COLOR_CANONICAL: dict[str, str] = {
     "vinho": "burgundy",
     "bordo": "burgundy",
     "bordeaux": "burgundy",
+    "borgona": "burgundy",
+    "burdeos": "burgundy",
     "glacier": "glacier",
     "glacial": "glacier",
     "glaciar": "glacier",
@@ -250,7 +252,7 @@ _COLOR_SEARCH_SYNONYMS: dict[str, tuple[str, ...]] = {
         "naranja cosmico",
     ),
     "sage": ("sage",),
-    "burgundy": ("burgundy", "vinho", "bordo", "bordeaux"),
+    "burgundy": ("burgundy", "vinho", "bordo", "bordeaux", "borgona", "burdeos"),
     "glacier": ("glacier",),
     "midnight": ("midnight", "midnight black"),
     "starlight": ("starlight",),
@@ -276,6 +278,7 @@ _COLOR_SEARCH_LOCALE_LABELS: dict[str, dict[str, str]] = {
     "gold": {"en": "gold", "pt": "dourado", "es": "dorado"},
     "silver": {"en": "silver", "pt": "prata", "es": "plateado"},
     "orange": {"en": "orange", "pt": "laranja", "es": "naranja"},
+    "burgundy": {"en": "burgundy", "pt": "bordo", "es": "burdeos"},
 }
 
 # Category labels are search vocabulary, not scoring signals. The canonical
@@ -467,6 +470,7 @@ ACCESSORY_TOKENS = frozenset(
         "cover",
         "skin",
         "protetor",
+        "protector",
         "film",
         "adapter",
         "adaptador",
@@ -3353,6 +3357,50 @@ def build_search_queries(
             add(identity.mpn)
             if identity.brand:
                 add(f"{identity.brand} {identity.mpn}")
+        return queries
+
+    # Phone SERPs are especially sensitive to long camera/display descriptions.
+    # Put the commercial variant inside the per-store query budget, then relax
+    # color and storage progressively. Keep the natural title as a fallback.
+    if identity.category == "smartphone" and series:
+        natural_title_query = queries[0] if queries else None
+        category_terms = _CATEGORY_SEARCH_LABELS.get(identity.category, {}).values()
+        starts_with_category = bool(
+            natural_title_query
+            and any(
+                natural_title_query.startswith(f"{term} ") for term in category_terms
+            )
+        )
+        if (
+            natural_title_query
+            and len(natural_title_query.split()) > 7
+            and not starts_with_category
+        ):
+            queries = []
+        add(identity.gtin)
+        if color:
+            canon = normalize_variant_value("color", color)
+            language = (locale or "").replace("_", "-").split("-", 1)[0].lower()
+            hue = next((word for word in canon.split() if word in _COLOR_HUES), canon)
+            localized_color = _COLOR_SEARCH_LOCALE_LABELS.get(hue, {}).get(
+                language, canon
+            )
+            add(
+                " ".join(
+                    p for p in (identity.brand, series, storage, localized_color) if p
+                )
+            )
+        add(" ".join(p for p in (identity.brand, series, storage) if p))
+        if storage:
+            add(f"{series} {storage}")
+        add(" ".join(p for p in (identity.brand, series) if p))
+        add(series)
+        if color:
+            add(" ".join(p for p in (identity.brand, series, storage, color) if p))
+            if hue != canon and storage:
+                add(f"{series} {storage} {hue}")
+        insert_category_context((identity.brand, series))
+        add(natural_title_query)
         return queries
 
     # Bare manufacturer PN ranks best on Amazon BR for exact SKU recovery

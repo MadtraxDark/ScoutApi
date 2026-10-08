@@ -372,6 +372,67 @@ class ProductRegistrationService:
         assert view is not None
         return view
 
+    def approve_review_listing(
+        self,
+        product_id: UUID,
+        listing_id: UUID,
+        *,
+        owner: AuthenticatedPrincipal,
+    ) -> ProductView:
+        """Approve one reviewed offer and activate its existing listing."""
+        from datetime import UTC, datetime
+
+        repo = MatchingRepository(self._session)
+        canonical = repo.get_canonical(product_id)
+        if canonical is None or not can_access_product(canonical, owner):
+            raise RequestError(
+                "Produto canônico não encontrado",
+                code="PRODUCT_NOT_FOUND",
+            )
+
+        listing = repo.lock_listing(listing_id)
+        if listing is None or listing.canonical_product_id != canonical.id:
+            raise RequestError(
+                "Oferta em revisão não encontrada",
+                code="REVIEW_OFFER_NOT_FOUND",
+            )
+        if listing.status == "active" and listing.match_decision == "auto_match":
+            view = self.get_product(product_id, viewer=owner)
+            assert view is not None
+            return view
+        if listing.status != "review" and listing.match_decision != "review":
+            raise RequestError(
+                "Oferta não está aguardando revisão",
+                code="OFFER_NOT_REVIEWABLE",
+            )
+
+        from scout_api.modules.monitoring.hooks import initialize_listing_schedule
+
+        snapshot = repo.latest_snapshot(listing.id)
+        now = snapshot.scraped_at if snapshot is not None else None
+        before = {
+            "status": listing.status,
+            "match_decision": listing.match_decision,
+        }
+        listing.status = "active"
+        listing.match_decision = "auto_match"
+        listing.updated_at = datetime.now(UTC)
+        initialize_listing_schedule(listing, checked_at=now)
+        repo.append_event(
+            listing,
+            "match_review_approved",
+            before=before,
+            after={
+                "status": listing.status,
+                "match_decision": listing.match_decision,
+                "approved_by": str(owner.id),
+            },
+        )
+        self._session.flush()
+        view = self.get_product(product_id, viewer=owner)
+        assert view is not None
+        return view
+
     def delete_product(
         self,
         product_id: UUID,

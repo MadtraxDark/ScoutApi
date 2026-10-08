@@ -875,6 +875,67 @@ def get_product(
     return product
 
 
+@router.post(
+    "/products/{product_id}/listings/{listing_id}/approve",
+    response_model=ProductView,
+    tags=["Produtos"],
+    responses={
+        401: {
+            "model": CrawlErrorResponse,
+            "description": "Não autenticado.",
+        },
+        403: {
+            "model": CrawlErrorResponse,
+            "description": "Sem permissão de escrita.",
+        },
+        404: {
+            "model": CrawlErrorResponse,
+            "description": "Produto ou oferta em revisão não encontrada.",
+        },
+        409: {
+            "model": CrawlErrorResponse,
+            "description": "Oferta não está aguardando revisão.",
+        },
+        503: {
+            "model": CrawlErrorResponse,
+            "description": "Banco de dados indisponível.",
+        },
+    },
+    status_code=status.HTTP_200_OK,
+    dependencies=[Depends(require_permission("products:write")), _RL_DEFAULT],
+    summary="Aprovar oferta em revisão",
+    description=(
+        "Confirma manualmente uma correspondência em revisão, ativa a listing "
+        "e inicia seu monitoramento usando o último snapshot disponível."
+    ),
+)
+def approve_review_offer(
+    product_id: Annotated[UUID, Path(description="Identificador do produto canônico.")],
+    listing_id: Annotated[
+        UUID, Path(description="Identificador da oferta em revisão.")
+    ],
+    service: Annotated[ProductRegistrationService, Depends(get_registration_service)],
+    principal: Annotated[
+        AuthenticatedPrincipal, Depends(require_permission("products:write"))
+    ],
+) -> ProductView:
+    try:
+        return service.approve_review_listing(
+            product_id, listing_id, owner=principal
+        )
+    except RequestError as exc:
+        raise HTTPException(
+            status_code=_status_for_request_error(exc),
+            detail={
+                "code": exc.code,
+                "message": str(exc),
+                "retryable": exc.retryable,
+            },
+        ) from exc
+    except SQLAlchemyError as exc:
+        raise _http_for_database_error(exc) from exc
+
+
 @router.patch(
     "/products/{product_id}",
     response_model=ProductView,
@@ -1471,8 +1532,10 @@ def _status_for_request_error(exc: RequestError) -> int:
         return status.HTTP_503_SERVICE_UNAVAILABLE
     if exc.code in {"INVALID_REQUEST", "UNSUPPORTED_STORE", "SEARCH_UNSUPPORTED"}:
         return status.HTTP_422_UNPROCESSABLE_ENTITY
-    if exc.code == "PRODUCT_NOT_FOUND":
+    if exc.code in {"PRODUCT_NOT_FOUND", "REVIEW_OFFER_NOT_FOUND"}:
         return status.HTTP_404_NOT_FOUND
+    if exc.code == "OFFER_NOT_REVIEWABLE":
+        return status.HTTP_409_CONFLICT
     if exc.code == "FORBIDDEN":
         return status.HTTP_403_FORBIDDEN
     if exc.code == "AUTH_REQUIRED":

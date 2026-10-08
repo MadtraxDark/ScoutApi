@@ -14,8 +14,14 @@
 ## Live search (matching)
 
 - Search: `matching.search_adapters` (PDP spider sem Search)
-- SERP: `https://www.bestbuy.com/site/searchpage.jsp?st={query}`
+- SERP: `https://www.bestbuy.com/site/searchpage.jsp?st={query}&intl=nosplash`.
+  Sem `intl=nosplash`, o egress internacional pode receber a seleção de país
+  com HTTP 200 e zero produtos; essa página é `SEARCH_INCOMPLETE_RESPONSE`,
+  não uma busca vazia. Em teste real, o parâmetro retornou seis links de
+  produto para `apple iphone 18 pro 512gb burgundy`.
 - Parser: modern `/product/{slug}/{bsin}` and legacy `/site/…/{sku}.p?skuId=`
+- Links modernos com e sem `/sku/{sku}` são deduplicados pelo BSIN da PDP;
+  ambos podem aparecer na mesma SERP e a raspagem duplicada é custosa.
 - Used by `POST /match` (ADR 0019)
 
 ## Offer source

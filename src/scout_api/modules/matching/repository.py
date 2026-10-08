@@ -81,6 +81,16 @@ class MatchingRepository:
         )
         return self._session.scalars(stmt).first()
 
+    def lock_listing(self, listing_id: uuid.UUID) -> StoreListing | None:
+        """Load one listing and serialize concurrent catalog decisions."""
+        stmt = (
+            select(StoreListing)
+            .where(StoreListing.id == listing_id)
+            .options(selectinload(StoreListing.snapshots))
+            .with_for_update()
+        )
+        return self._session.scalars(stmt).first()
+
     def find_listing_by_url(
         self, store: str, canonical_url: str
     ) -> StoreListing | None:

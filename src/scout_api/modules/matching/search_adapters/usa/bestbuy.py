@@ -28,7 +28,7 @@ class BestBuySearchAdapter:
     def build_search_request(self, query: str) -> SearchRequest:
         q = quote_plus(query.strip())
         return SearchRequest(
-            url=f"https://www.bestbuy.com/site/searchpage.jsp?st={q}",
+            url=f"https://www.bestbuy.com/site/searchpage.jsp?st={q}&intl=nosplash",
             method="GET",
             prefer_browser=False,
         )
@@ -36,6 +36,7 @@ class BestBuySearchAdapter:
     def parse_candidates(self, response: Response) -> list[SearchCandidate]:
         candidates: list[SearchCandidate] = []
         seen: set[str] = set()
+        seen_product_ids: set[str] = set()
         for href in response.css(
             "a[href*='/product/']::attr(href), "
             "a[href*='/site/'][href*='.p']::attr(href), "
@@ -54,7 +55,6 @@ class BestBuySearchAdapter:
             canonical = canonicalize_url(absolute)
             if canonical in seen:
                 continue
-            seen.add(canonical)
             product_id = None
             title = None
             if modern:
@@ -68,6 +68,11 @@ class BestBuySearchAdapter:
                     title = slug_match.group(1).replace("-", " ").strip() or None
             elif sku_q:
                 product_id = sku_q.group(1)
+            if product_id and product_id in seen_product_ids:
+                continue
+            seen.add(canonical)
+            if product_id:
+                seen_product_ids.add(product_id)
             candidates.append(
                 SearchCandidate(
                     url=absolute,
@@ -81,4 +86,7 @@ class BestBuySearchAdapter:
         return candidates
 
     def classify_empty_result(self, response: Response) -> EmptySearchClassification:
+        title = (response.css("title::text").get() or "").casefold()
+        if "best buy international" in title and "select your country" in title:
+            return "incomplete"
         return "unknown"
