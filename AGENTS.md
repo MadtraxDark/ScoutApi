@@ -73,6 +73,17 @@
   externa exige validação SSRF. Ver `docs/persistence/product-images.md` e
   ADR 0029.
 
+## Execução de ferramentas
+
+- Execute comandos diretamente pelo terminal do agente (PowerShell no Windows),
+  sem depender do Cursor, de seu terminal integrado ou de automações do editor.
+- Se o sandbox falhar antes de criar o processo com
+  `helper_unknown_error: setup refresh had errors`, teste um comando somente de
+  leitura pelo terminal direto com `require_escalated`, sujeito à aprovação da
+  ferramenta. Não aplique escalonamento indiscriminado a outros comandos.
+  Em 2026-10-07, `Get-Location` falhou no sandbox e funcionou fora dele no
+  mesmo workspace; o teste não demonstrou falha no Cursor.
+
 ## Documentation
 
 Decisões arquiteturais e comportamentais importantes devem ficar no repositório.
