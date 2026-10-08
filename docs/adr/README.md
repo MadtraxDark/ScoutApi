@@ -74,6 +74,7 @@ Política de quando criar/atualizar docs:
 | [0050](0050-search-locale-and-offer-condition.md) | Search locale por integração + condição comercial ≠ identidade | Accepted |
 | [0051](0051-persistent-catalog-activity-read-model.md) | Atividade do catálogo como read-model do histórico persistido | Accepted |
 | [0052](0052-catalog-change-explorer.md) | Consulta administrativa do histórico do catálogo | Accepted |
+| [0053](0053-known-listing-refresh-before-discovery.md) | Refresh de listings conhecidas antes do discovery | Accepted |
 
 
 ## Quando criar ADR

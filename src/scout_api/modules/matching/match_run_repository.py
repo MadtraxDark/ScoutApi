@@ -9,6 +9,7 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, load_only, selectinload
 
+from scout_api.modules.matching.match_run_claim import TERMINAL_STORE_STATUSES
 from scout_api.modules.matching.models import (
     ACTIVE_MATCH_RUN_STATUSES,
     CanonicalProduct,
@@ -159,7 +160,7 @@ class MatchRunRepository:
         )
         keys: set[str] = set()
         for store, status in self._session.execute(stmt).all():
-            if (status or "").lower() in ("match", "no_match", "error"):
+            if (status or "").lower() in TERMINAL_STORE_STATUSES:
                 keys.add(str(store).lower())
         return keys
 

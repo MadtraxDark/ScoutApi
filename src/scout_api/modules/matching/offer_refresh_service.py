@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import logging
+import uuid
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from scout_api.modules.crawler.core.exceptions import ParseError, RequestError
@@ -99,14 +101,58 @@ class OfferRefreshService:
         self._offer_service = offer_service or OfferScrapeService()
         self._product_service = product_service or ProductScrapeService()
 
-    def refresh(self, request: OfferRefreshRequest) -> OfferRefreshResponse:
+    def refresh(
+        self,
+        request: OfferRefreshRequest,
+        *,
+        claim_worker_id: str | None = None,
+    ) -> OfferRefreshResponse:
         repo = MatchingRepository(self._session)
         listings = self._resolve_listings(repo, request)
         results: list[OfferRefreshResult] = []
         for listing in listings:
-            results.append(
-                self._refresh_listing(repo, listing, request.include_details)
-            )
+            locked = self._session.scalars(
+                select(StoreListing)
+                .where(StoreListing.id == listing.id)
+                .with_for_update()
+            ).first()
+            if locked is None:
+                continue
+            now = datetime.now(UTC)
+            claimed_until = locked.check_claim_expires_at
+            if claimed_until is not None and claimed_until.tzinfo is None:
+                claimed_until = claimed_until.replace(tzinfo=UTC)
+            if (
+                claimed_until is not None
+                and claimed_until > now
+                and locked.check_worker_id != claim_worker_id
+            ):
+                results.append(
+                    OfferRefreshResult(
+                        listing_id=locked.id,
+                        store=locked.store,
+                        url=locked.url,
+                        status="deferred",
+                        error="LISTING_CHECK_ALREADY_CLAIMED",
+                    )
+                )
+                continue
+            owner = claim_worker_id or f"refresh-{uuid.uuid4().hex}"
+            locked.check_worker_id = owner
+            locked.check_claimed_at = now
+            # The row lock is held until the scrape transaction commits; this
+            # lease also lets monitor workers avoid the listing after commit.
+            locked.check_claim_expires_at = None
+            try:
+                results.append(
+                    self._refresh_listing(repo, locked, request.include_details)
+                )
+            except Exception:
+                if locked.check_worker_id == owner:
+                    from scout_api.modules.monitoring.hooks import release_claim
+
+                    release_claim(locked)
+                raise
         self._session.flush()
         return OfferRefreshResponse(results=results)
 
@@ -162,38 +208,36 @@ class OfferRefreshService:
             else:
                 offer = self._offer_service.scrape_offer(listing.url)
         except RequestError as exc:
-            if exc.code in {"UPSTREAM_BLOCKED", "AUTH_REQUIRED"}:
-                diff = diff_offers(previous_payload, None, scrape_failed=True)
-                events = [
-                    OfferEventView(
-                        event_type="scrape_failed",
-                        before=previous_payload,
-                        after={"error": str(exc), "code": exc.code},
-                        detected_at=datetime.now(UTC),
-                    )
-                ]
-                for event in diff.events:
-                    repo.append_event(
-                        listing,
-                        event,
-                        before=previous_payload,
-                        after={"error": str(exc), "code": exc.code},
-                    )
-                mark_check_failure(
-                    listing, error=f"{exc.code}: {exc}", now=datetime.now(UTC)
+            diff = diff_offers(previous_payload, None, scrape_failed=True)
+            events = [
+                OfferEventView(
+                    event_type="scrape_failed",
+                    before=previous_payload,
+                    after={"error": str(exc), "code": exc.code},
+                    detected_at=datetime.now(UTC),
                 )
-                return OfferRefreshResult(
-                    listing_id=listing.id,
-                    store=listing.store,
-                    url=listing.url,
-                    status="scrape_failed",
-                    events=events,
-                    previous=_view_from_payload(previous_payload, previous.fingerprint)
-                    if previous_payload and previous
-                    else None,
-                    error=str(exc),
+            ]
+            for event in diff.events:
+                repo.append_event(
+                    listing,
+                    event,
+                    before=previous_payload,
+                    after={"error": str(exc), "code": exc.code},
                 )
-            raise
+            mark_check_failure(
+                listing, error=f"{exc.code}: {exc}", now=datetime.now(UTC)
+            )
+            return OfferRefreshResult(
+                listing_id=listing.id,
+                store=listing.store,
+                url=listing.url,
+                status="scrape_failed",
+                events=events,
+                previous=_view_from_payload(previous_payload, previous.fingerprint)
+                if previous_payload and previous
+                else None,
+                error=str(exc),
+            )
         except ParseError as exc:
             # Product page gone / unparseable as product → treat as removed.
             diff = diff_offers(previous_payload, None, removed=True)
@@ -296,7 +340,7 @@ class OfferRefreshService:
             status = "removed"
         elif "scrape_failed" in diff.events:
             status = "scrape_failed"
-        elif "out_of_stock" in diff.events and len(diff.events) == 1:
+        elif "out_of_stock" in diff.events:
             status = "out_of_stock"
         elif diff.events == ("unchanged",):
             status = "unchanged"

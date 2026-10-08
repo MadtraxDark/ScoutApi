@@ -7,17 +7,20 @@ from decimal import Decimal
 from unittest.mock import MagicMock
 
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from scout_api.core.database import Base
+from scout_api.modules.crawler.core.exceptions import ParseError, RequestError
 from scout_api.modules.crawler.models.product import ProductOffer, ProductPriceItem
 from scout_api.modules.matching.db import create_all
 from scout_api.modules.matching.identity import ProductIdentity
-from scout_api.modules.matching.models import StoreListing
+from scout_api.modules.matching.models import OfferEvent, StoreListing
 from scout_api.modules.matching.offer_diff import diff_offers
+from scout_api.modules.matching.offer_refresh_service import OfferRefreshService
 from scout_api.modules.matching.repository import MatchingRepository
+from scout_api.modules.matching.schemas import OfferRefreshRequest
 from scout_api.modules.monitoring.claim import claim_due_listings, release_claim
 from scout_api.modules.monitoring.extractors import extract_terabyte_countdown
 from scout_api.modules.monitoring.hooks import mark_check_failure, mark_check_success
@@ -293,6 +296,153 @@ def test_transient_failure_uses_retry_not_12h(session: Session) -> None:
     mark_check_failure(listing, error="timeout", now=now, settings=_settings())
     assert listing.next_check_at == now + timedelta(seconds=300)
     assert listing.consecutive_failures == 1
+
+
+def test_refresh_known_listing_uses_persisted_pdp_and_records_price_change(
+    session: Session,
+) -> None:
+    listing = _listing(session)
+    repo = MatchingRepository(session)
+    repo.append_snapshot_from_offer(listing, _offer("300.00"))
+    scraper = MagicMock()
+    scraper.scrape_offer.return_value = _offer("350.00", seller="Loja Parceira")
+
+    response = OfferRefreshService(session=session, offer_service=scraper).refresh(
+        OfferRefreshRequest(listing_ids=[listing.id])
+    )
+
+    assert scraper.scrape_offer.call_args.args == (listing.url,)
+    assert response.results[0].status == "changed"
+    assert "price_changed" in [event.event_type for event in response.results[0].events]
+    latest = repo.latest_snapshot(listing.id)
+    assert latest is not None
+    assert latest.price == Decimal("350.00")
+    assert latest.seller == "Loja Parceira"
+
+
+def test_refresh_unchanged_is_successful_and_out_of_stock_stays_known(
+    session: Session,
+) -> None:
+    listing = _listing(session)
+    repo = MatchingRepository(session)
+    repo.append_snapshot_from_offer(listing, _offer("100.00"))
+    scraper = MagicMock()
+    scraper.scrape_offer.return_value = _offer("100.00")
+
+    unchanged = OfferRefreshService(session=session, offer_service=scraper).refresh(
+        OfferRefreshRequest(listing_ids=[listing.id])
+    )
+    assert unchanged.results[0].status == "unchanged"
+
+    scraper.scrape_offer.return_value = _offer(
+        "100.00", availability="out_of_stock", available=False
+    )
+    out_of_stock = OfferRefreshService(session=session, offer_service=scraper).refresh(
+        OfferRefreshRequest(listing_ids=[listing.id])
+    )
+    assert out_of_stock.results[0].status == "out_of_stock"
+    assert listing.status == "active"
+
+
+def test_refresh_confirmed_missing_pdp_marks_removed_not_no_match(
+    session: Session,
+) -> None:
+    listing = _listing(session)
+    scraper = MagicMock()
+    scraper.scrape_offer.side_effect = ParseError("PDP removida")
+
+    response = OfferRefreshService(session=session, offer_service=scraper).refresh(
+        OfferRefreshRequest(listing_ids=[listing.id])
+    )
+
+    assert response.results[0].status == "removed"
+    assert listing.status == "removed"
+    events = session.scalars(
+        select(OfferEvent.event_type).where(OfferEvent.listing_id == listing.id)
+    ).all()
+    assert events == ["offer_removed"]
+
+
+def test_refresh_processes_all_active_listings_for_one_store(
+    session: Session,
+) -> None:
+    listing = _listing(session)
+    canonical = listing.canonical_product
+    second = MatchingRepository(session).upsert_listing(
+        canonical=canonical,
+        item=ProductPriceItem.model_validate(
+            {
+                "store": "kabum",
+                "country": "BR",
+                "product_id": "456",
+                "url": "https://www.kabum.com.br/produto/456",
+                "canonical_url": "https://www.kabum.com.br/produto/456",
+                "title": "Produto Teste",
+                "price": Decimal("120.00"),
+                "currency": "BRL",
+            }
+        ),
+        decision="auto_match",
+        confidence=Decimal("0.9500"),
+    )
+    scraper = MagicMock()
+    scraper.scrape_offer.side_effect = [
+        _offer(),
+        _offer(
+            "120.00",
+            product_id="456",
+            url=second.url,
+            canonical_url=second.canonical_url,
+        ),
+    ]
+
+    response = OfferRefreshService(session=session, offer_service=scraper).refresh(
+        OfferRefreshRequest(canonical_product_id=canonical.id)
+    )
+
+    assert {result.listing_id for result in response.results} == {
+        listing.id,
+        second.id,
+    }
+    assert scraper.scrape_offer.call_count == 2
+
+
+def test_refresh_timeout_preserves_known_listing_and_records_scrape_failed(
+    session: Session,
+) -> None:
+    listing = _listing(session)
+    scraper = MagicMock()
+    scraper.scrape_offer.side_effect = RequestError(
+        "timeout", code="NETWORK_TIMEOUT", retryable=True
+    )
+
+    response = OfferRefreshService(session=session, offer_service=scraper).refresh(
+        OfferRefreshRequest(listing_ids=[listing.id])
+    )
+
+    assert response.results[0].status == "scrape_failed"
+    assert listing.status == "active"
+    events = session.scalars(
+        select(OfferEvent.event_type).where(OfferEvent.listing_id == listing.id)
+    ).all()
+    assert events == ["scrape_failed"]
+
+
+def test_refresh_defers_when_monitor_already_claimed_listing(session: Session) -> None:
+    from datetime import timedelta
+
+    listing = _listing(session)
+    listing.check_worker_id = "monitor-worker"
+    listing.check_claimed_at = datetime.now(UTC)
+    listing.check_claim_expires_at = datetime.now(UTC) + timedelta(minutes=5)
+    scraper = MagicMock()
+
+    response = OfferRefreshService(session=session, offer_service=scraper).refresh(
+        OfferRefreshRequest(listing_ids=[listing.id])
+    )
+
+    assert response.results[0].status == "deferred"
+    scraper.scrape_offer.assert_not_called()
 
 
 def test_terabyte_countdown_extractor() -> None:

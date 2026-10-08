@@ -18,7 +18,19 @@ from scout_api.modules.matching.models import ProductMatchRun
 logger = logging.getLogger(__name__)
 
 ACTIVE_STATUSES = ("pending", "running")
-TERMINAL_STORE_STATUSES = frozenset({"match", "no_match", "error"})
+TERMINAL_STORE_STATUSES = frozenset(
+    {
+        "match",
+        "no_match",
+        "error",
+        "refresh_updated",
+        "refresh_unchanged",
+        "refresh_out_of_stock",
+        "refresh_removed",
+        "refresh_failed",
+        "refresh_deferred",
+    }
+)
 FAILURE_CODE_WORKER_LOST = "worker_lost"
 WORKER_LOST_MESSAGE = (
     "A busca foi interrompida (worker perdido ou lease expirada). "

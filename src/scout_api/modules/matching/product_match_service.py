@@ -262,7 +262,7 @@ class ProductMatchService:
         on_store_outcome: StoreOutcomeCallback | None = None,
         restored_matches: list[MatchHit] | None = None,
         target_stores: list[str] | None = None,
-        on_targets_resolved: Callable[[list[str], ProductPriceItem], None]
+        on_targets_resolved: Callable[[list[str], ProductPriceItem], set[str] | None]
         | None = None,
         on_store_started: Callable[[str], None] | None = None,
         before_persist: Callable[[], None] | None = None,
@@ -330,7 +330,7 @@ class ProductMatchService:
         on_store_outcome: StoreOutcomeCallback | None = None,
         restored_matches: list[MatchHit] | None = None,
         target_stores: list[str] | None = None,
-        on_targets_resolved: Callable[[list[str], ProductPriceItem], None]
+        on_targets_resolved: Callable[[list[str], ProductPriceItem], set[str] | None]
         | None = None,
         on_store_started: Callable[[str], None] | None = None,
         before_persist: Callable[[], None] | None = None,
@@ -386,7 +386,7 @@ class ProductMatchService:
         on_store_outcome: StoreOutcomeCallback | None = None,
         restored_matches: list[MatchHit] | None = None,
         target_stores: list[str] | None = None,
-        on_targets_resolved: Callable[[list[str], ProductPriceItem], None]
+        on_targets_resolved: Callable[[list[str], ProductPriceItem], set[str] | None]
         | None = None,
         on_store_started: Callable[[str], None] | None = None,
         before_persist: Callable[[], None] | None = None,
@@ -432,10 +432,15 @@ class ProductMatchService:
                 reference_has_gtin=bool(ref_identity.gtin),
             )
         )
+        resolved_skip_stores = set(skip_stores or ())
         if on_targets_resolved is not None:
-            on_targets_resolved(target_stores, reference)
-        if skip_stores:
-            skip = {s.strip().lower() for s in skip_stores if s and str(s).strip()}
+            additional_skip_stores = on_targets_resolved(target_stores, reference)
+            if additional_skip_stores:
+                resolved_skip_stores.update(additional_skip_stores)
+        if resolved_skip_stores:
+            skip = {
+                s.strip().lower() for s in resolved_skip_stores if s and str(s).strip()
+            }
             if skip:
                 target_stores = [s for s in target_stores if s not in skip]
 

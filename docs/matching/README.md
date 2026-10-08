@@ -12,6 +12,30 @@ ProductMatchService
   → ProductIdentity → ProductMatcher
 ```
 
+## Outras lojas: refresh de conhecidas e discovery de desconhecidas
+
+Cada Match Run resolve primeiro suas lojas elegíveis. Para cada target, uma
+`StoreListing` ativa do mesmo `CanonicalProduct` transforma a estratégia em
+`refresh_existing`: todas as listings ativas dessa loja são revisitadas pela
+URL persistida via `OfferRefreshService`. Snapshots, eventos comerciais e
+agenda do monitor seguem o fluxo existente; a loja não passa pelo Store Search.
+
+Targets sem listing ativa usam `discover` e seguem Store Search + matcher.
+`no_match` representa somente esse caminho. Falha de refresh preserva a listing
+e termina como `refresh_failed`; estoque, remoção confirmada, oferta atualizada
+ou sem alteração têm estados próprios no progresso. Falha temporária não
+dispara discovery imediato. Uma listing removida deixa de ser ativa e pode ser
+redescoberta na próxima Match Run.
+
+Quando há várias listings ativas do produto na mesma loja, todas são
+atualizadas e o progresso agrega seus resultados em uma linha por loja. O
+refresh compartilha a claim/row lock da listing com o monitor para não executar
+duas coletas simultâneas. O outcome da loja e os snapshots/eventos de refresh
+são commitados na mesma transação para permitir reclaim sem perder o resultado.
+
+Logs `match_store_strategy` distinguem `refresh_existing` de `discover`.
+Decisão arquitetural e trade-offs: [ADR 0053](../adr/0053-known-listing-refresh-before-discovery.md).
+
 ## Adicionar loja
 
 | Objetivo | O que implementar |

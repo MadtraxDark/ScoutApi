@@ -16,6 +16,7 @@ from scout_api.modules.auth.schemas import AuthenticatedPrincipal
 from scout_api.modules.crawler.stores import store_display_name
 from scout_api.modules.matching.match_run_claim import (
     FAILURE_CODE_WORKER_LOST,
+    TERMINAL_STORE_STATUSES,
     WORKER_LOST_MESSAGE,
     is_effectively_active,
     is_stale_running,
@@ -547,10 +548,9 @@ class MatchRunService:
             ),
             None,
         )
-        if existing is not None and (existing.status or "").lower() in (
-            "match",
-            "no_match",
-            "error",
+        if (
+            existing is not None
+            and (existing.status or "").lower() in TERMINAL_STORE_STATUSES
         ):
             return existing
 
@@ -597,11 +597,13 @@ class MatchRunService:
 
         # Aggregates
         run.stores_completed = sum(
-            1 for row in run.store_runs if row.status in ("match", "no_match", "error")
+            1 for row in run.store_runs if row.status in TERMINAL_STORE_STATUSES
         )
         run.matches_found = sum(1 for row in run.store_runs if row.status == "match")
         run.no_matches = sum(1 for row in run.store_runs if row.status == "no_match")
-        run.errors = sum(1 for row in run.store_runs if row.status == "error")
+        run.errors = sum(
+            1 for row in run.store_runs if row.status in {"error", "refresh_failed"}
+        )
         run.last_activity_at = now
         self._session.flush()
         return store_run
@@ -623,7 +625,7 @@ class MatchRunService:
 
     def record_store_started(self, run: ProductMatchRun, store: str) -> None:
         row = self._runs.get_or_create_store_run(run.id, store)
-        if row.status not in ("match", "no_match", "error"):
+        if row.status not in TERMINAL_STORE_STATUSES:
             row.status = "running"
             row.started_at = _utcnow()
             run.last_activity_at = row.started_at

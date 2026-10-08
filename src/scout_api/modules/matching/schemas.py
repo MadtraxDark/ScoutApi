@@ -39,6 +39,7 @@ RefreshStatus = Literal[
     "out_of_stock",
     "scrape_failed",
     "new_offer",
+    "deferred",
 ]
 
 __all__ = [
@@ -583,7 +584,19 @@ class StoreListResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 MatchRunStatus = Literal["pending", "running", "completed", "failed", "cancelled"]
-MatchStoreRunStatus = Literal["pending", "running", "match", "no_match", "error"]
+MatchStoreRunStatus = Literal[
+    "pending",
+    "running",
+    "match",
+    "no_match",
+    "error",
+    "refresh_updated",
+    "refresh_unchanged",
+    "refresh_out_of_stock",
+    "refresh_removed",
+    "refresh_failed",
+    "refresh_deferred",
+]
 
 
 class MatchRunStatusView(BaseModel):

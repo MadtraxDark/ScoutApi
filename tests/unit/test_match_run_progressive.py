@@ -95,6 +95,38 @@ def test_reclaim_inclui_hit_anterior_na_persistencia_sem_nova_busca() -> None:
     search.search.assert_not_called()
 
 
+def test_target_callback_classifica_listing_conhecida_como_refresh_e_pula_serp() -> (
+    None
+):
+    search = MagicMock()
+    search.search.return_value = []
+    service = ProductMatchService(
+        search_service=search, scrape_service=MagicMock(), session=MagicMock()
+    )
+    service._resolve_stores = MagicMock(return_value=["kabum", "amazon_br"])
+    service._persist = MagicMock(return_value=uuid.uuid4())
+    reference = _hit().product.model_copy(
+        update={"store": "synthetic", "product_id": "identity:phone"}
+    )
+    callback = MagicMock(return_value={"kabum"})
+
+    response = service._match_with_reference(
+        reference,
+        identity_from_price_item(reference),
+        stores=None,
+        include_review=True,
+        persist=True,
+        include_images=False,
+        max_candidates_per_store=1,
+        on_targets_resolved=callback,
+    )
+
+    callback.assert_called_once()
+    assert response.unmatched_stores == ["amazon_br"]
+    searched_stores = {call.args[0] for call in search.search.call_args_list}
+    assert searched_stores == {"amazon_br"}
+
+
 @pytest.mark.parametrize("decision", ["auto_match", "review"])
 def test_reclaim_preserva_regra_de_consenso_gtin(decision: str) -> None:
     restored = _hit(decision)

@@ -48,11 +48,18 @@ from scout_api.modules.matching.match_run_staging import (
 )
 from scout_api.modules.matching.match_watchdog import MatchHangWatchdog
 from scout_api.modules.matching.models import CanonicalProduct, ProductMatchRun
+from scout_api.modules.matching.offer_refresh_service import OfferRefreshService
 from scout_api.modules.matching.product_match_service import (
     MatchStoreOutcome,
     ProductMatchService,
 )
-from scout_api.modules.matching.schemas import MatchHit, MatchRequest, MatchResponse
+from scout_api.modules.matching.repository import MatchingRepository
+from scout_api.modules.matching.schemas import (
+    MatchHit,
+    MatchRequest,
+    MatchResponse,
+    OfferRefreshRequest,
+)
 
 _embedding_runtime: MatchEmbeddingRuntime | None = None
 
@@ -392,12 +399,162 @@ def process_claimed_run(
             action(MatchRunService(update_session), row)
             update_session.commit()
 
-    def on_targets_resolved(stores: list[str], reference: Any) -> None:
+    def on_targets_resolved(stores: list[str], reference: Any) -> set[str]:
         short_update(
             lambda svc, row: svc.record_targets(row, stores, stage_product(reference))
         )
+        terminal = set(skip_stores or ())
+        target_keys = {store.casefold() for store in stores}
+        known_by_store: dict[str, list[Any]] = {}
+        for listing in MatchingRepository(session).list_listings_for_canonical(
+            product_id
+        ):
+            key = (listing.store or "").casefold()
+            if key in target_keys and listing.status == "active" and listing.url:
+                known_by_store.setdefault(key, []).append(listing)
+
+        # Known catalog relationships are refreshed from their persisted PDPs.
+        # Only stores with no active listing are returned to SERP discovery.
+        for store, listings in known_by_store.items():
+            if store in terminal:
+                continue
+            logger.info(
+                "match_store_strategy run_id=%s product_id=%s store=%s "
+                "strategy=refresh_existing listing_count=%d",
+                run_id,
+                product_id,
+                store,
+                len(listings),
+            )
+            GLOBAL_MATCH_PROGRESS.mark_progress(
+                run_id=run_id_str, store=store, phase=MatchProgressPhase.MATCHING
+            )
+            store_started = time.perf_counter()
+            refresh_results = []
+            failure_code = None
+            failure_message = None
+            for listing in listings:
+                try:
+                    response = OfferRefreshService(session=session).refresh(
+                        OfferRefreshRequest(listing_ids=[listing.id])
+                    )
+                    refresh_results.extend(response.results)
+                except RequestError as exc:
+                    failure_code = exc.code or "SCRAPE_FAILED"
+                    failure_message = str(exc)
+            statuses = {result.status for result in refresh_results}
+            if failure_code or "scrape_failed" in statuses:
+                status = "refresh_failed"
+            elif "deferred" in statuses:
+                status = "refresh_deferred"
+            elif statuses and statuses <= {"removed"}:
+                status = "refresh_removed"
+            elif "out_of_stock" in statuses and not (statuses - {"out_of_stock"}):
+                status = "refresh_out_of_stock"
+            elif statuses <= {"unchanged"}:
+                status = "refresh_unchanged"
+            else:
+                status = "refresh_updated"
+
+            successful = [
+                result
+                for result in refresh_results
+                if result.current is not None or result.previous is not None
+            ]
+            chosen = next(
+                (result for result in successful if result.current is not None),
+                successful[0] if successful else None,
+            )
+            refresh_outcome = MatchStoreOutcome(
+                store=store,
+                display_name=listings[0].store,
+                status=status,
+                duration_ms=int((time.perf_counter() - store_started) * 1000),
+                queries=(),
+                candidates_found=0,
+                candidates_evaluated=0,
+                search_duration_ms=0,
+                candidate_fetch_duration_ms=int(
+                    (time.perf_counter() - store_started) * 1000
+                ),
+                matched_url=chosen.url if chosen else listings[0].url,
+                matched_title=listings[0].title,
+                matched_price=(
+                    chosen.current.price
+                    if chosen and chosen.current
+                    else chosen.previous.price
+                    if chosen and chosen.previous
+                    else None
+                ),
+                matched_currency=(
+                    chosen.current.currency
+                    if chosen and chosen.current
+                    else chosen.previous.currency
+                    if chosen and chosen.previous
+                    else None
+                ),
+                error_code=(
+                    failure_code
+                    or (
+                        "LISTING_CHECK_ALREADY_CLAIMED"
+                        if status == "refresh_deferred"
+                        else None
+                    )
+                ),
+                error_message=failure_message,
+                matched_reasons=tuple(
+                    event.event_type
+                    for result in refresh_results
+                    for event in result.events
+                ),
+            )
+            # Offer snapshots/events and the terminal store outcome commit in
+            # one transaction. A reclaim can therefore never skip a refresh
+            # whose commercial data rolled back, or repeat a committed result.
+            GLOBAL_MATCH_PROGRESS.mark_progress(
+                run_id=run_id_str,
+                store=store,
+                phase=MatchProgressPhase.FINALIZING_STORE,
+            )
+            session.flush()
+            session.expire_all()
+            run_row = MatchRunRepository(session).lock_claim(
+                run_id, worker_id=worker_id, attempts=claim_attempts
+            )
+            if run_row is None:
+                raise RequestError("Attempt substituída", code="MATCH_CLAIM_LOST")
+            MatchRunService(session).apply_store_outcome(
+                run_row,
+                store=refresh_outcome.store,
+                display_name=refresh_outcome.display_name,
+                status=refresh_outcome.status,
+                duration_ms=refresh_outcome.duration_ms,
+                queries=[],
+                candidates_found=0,
+                candidates_evaluated=0,
+                matched_url=refresh_outcome.matched_url,
+                matched_title=refresh_outcome.matched_title,
+                matched_price=refresh_outcome.matched_price,
+                matched_currency=refresh_outcome.matched_currency,
+                matched_reasons=list(refresh_outcome.matched_reasons),
+                error_code=refresh_outcome.error_code,
+                error_message=refresh_outcome.error_message,
+                search_duration_ms=0,
+                candidate_fetch_duration_ms=refresh_outcome.candidate_fetch_duration_ms,
+                expected_worker_id=worker_id,
+                expected_attempts=claim_attempts,
+            )
+            session.commit()
+        return set(known_by_store)
 
     def on_store_started(store: str) -> None:
+        logger.info(
+            "match_store_strategy run_id=%s product_id=%s store=%s "
+            "strategy=discover reason=no_existing_listing",
+            run_id,
+            product_id,
+            store,
+        )
         short_update(lambda svc, row: svc.record_store_started(row, store))
 
     def before_persist() -> None:

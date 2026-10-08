@@ -122,7 +122,8 @@ class OfferMonitorService:
                     OfferRefreshRequest(
                         listing_ids=[listing.id],
                         include_details=include_details,
-                    )
+                    ),
+                    claim_worker_id=self.worker_id,
                 )
                 if listing.check_worker_id == self.worker_id:
                     release_claim(listing)
