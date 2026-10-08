@@ -211,12 +211,42 @@ def test_shopee_falls_back_to_proxy_after_upstream_blocked() -> None:
                 url, body=b"<html>ok</html>", encoding="utf-8", request=Request(url)
             )
 
-    response = StoreAwareHtmlFetcher(direct=Direct(), proxied=Proxied()).fetch(
-        KINGSTON_URL
-    )
+    fetcher = StoreAwareHtmlFetcher(direct=Direct(), proxied=Proxied())
+    response = fetcher.fetch(KINGSTON_URL)
     assert calls == ["direct", "proxied"]
     assert response.meta["fetch_metrics"]["proxy_used"] is True
     assert response.meta["fetch_metrics"].get("proxy_fallback") is True
+    again = fetcher.fetch(KINGSTON_URL)
+    assert calls == ["direct", "proxied", "proxied"]
+    assert again.meta["fetch_metrics"].get("proxy_sticky") is True
+
+
+def test_proxy_fallback_skipped_when_store_deadline_is_too_short() -> None:
+    import time
+
+    from scout_api.modules.crawler.core.browser_scheduler import browser_queue_deadline
+
+    calls: list[str] = []
+
+    class Direct:
+        def fetch(self, url: str) -> HtmlResponse:
+            calls.append("direct")
+            raise RequestError(
+                "blocked", code="UPSTREAM_BLOCKED", url=url, retryable=True
+            )
+
+    class Proxied:
+        def fetch(self, url: str) -> HtmlResponse:
+            calls.append("proxied")
+            return HtmlResponse(url, body=b"x", encoding="utf-8", request=Request(url))
+
+    with (
+        browser_queue_deadline(time.monotonic() + 1.0),
+        pytest.raises(RequestError) as exc,
+    ):
+        StoreAwareHtmlFetcher(direct=Direct(), proxied=Proxied()).fetch(KINGSTON_URL)
+    assert exc.value.code == "UPSTREAM_BLOCKED"
+    assert calls == ["direct"]
 
 
 def test_shopee_early_stop_skips_networkidle(tmp_path: Path) -> None:

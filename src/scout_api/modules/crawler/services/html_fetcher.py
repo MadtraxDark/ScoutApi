@@ -1076,6 +1076,7 @@ class CamoufoxHtmlFetcher:
         # BrowserScheduler: bounded FIFO queue (Phase 1 / C1 hardening)
         self._scheduler = scheduler
         self._scheduler_enabled = scheduler_enabled and scheduler is not None
+        self._interstitial_resolution_attempted = False
 
     @property
     def proxy_url(self) -> str | None:
@@ -1497,6 +1498,9 @@ class CamoufoxHtmlFetcher:
         oneshot = self._oneshot_browser(url)
         browser: Any = None
         reused = False
+        # ``_wait_for_product_html`` already runs the resolver once. A second
+        # full pass after fail-fast only repeats the same interstitial.
+        self._interstitial_resolution_attempted = False
         try:
             from scout_api.modules.crawler.core.browser_health import (
                 TrialToken,  # noqa: F401 (local re-import for oneshot path)
@@ -1770,8 +1774,12 @@ class CamoufoxHtmlFetcher:
                 if needs_interstitial_resolution(
                     html, url=final_url or url, title=title
                 ):
-                    # ADR 0017 / 0018: attempt CAPTCHA + auth-wall resolution.
-                    if self._challenge_resolver is not None:
+                    # ADR 0017 / 0018: attempt CAPTCHA + auth-wall resolution
+                    # when the settle loop did not already do so.
+                    if (
+                        self._challenge_resolver is not None
+                        and not self._interstitial_resolution_attempted
+                    ):
                         resolved = self._challenge_resolver.try_resolve(
                             page,
                             html=html,
@@ -2186,6 +2194,10 @@ class CamoufoxHtmlFetcher:
             from .magalu_readiness import magalu_document_ready
 
             html = page.content()
+            if is_akamai_sec_cpt_page(html):
+                # The stub is already the challenge. networkidle does not
+                # clear sec-cpt and can spend the store wall before resolve.
+                return
             if not needs_interstitial_resolution(
                 html, url=url
             ) and magalu_document_ready(html, url):
@@ -2271,6 +2283,7 @@ class CamoufoxHtmlFetcher:
             )
             # Mid-settle resolution (CAPTCHA / CF / auth wall).
             if self._challenge_resolver is not None and attempt >= 1:
+                self._interstitial_resolution_attempted = True
                 resolved = self._challenge_resolver.try_resolve(
                     page,
                     html=html,
@@ -2788,4 +2801,18 @@ def build_html_fetcher(
     from .terabyteshop_http_first_fetcher import TerabyteShopHttpFirstHtmlFetcher
 
     terabyte_http = CurlCffiHtmlFetcher(timeout=float(urllib_timeout))
-    return TerabyteShopHttpFirstHtmlFetcher(http=terabyte_http, browser=kabum_first)
+    terabyte_first = TerabyteShopHttpFirstHtmlFetcher(
+        http=terabyte_http, browser=kabum_first
+    )
+
+    # AliExpress SERP is SSR itemList; PDP stays on the browser stack below.
+    from .aliexpress_http_first_fetcher import AliExpressHttpFirstHtmlFetcher
+
+    ae_http = CurlCffiHtmlFetcher(timeout=float(urllib_timeout))
+    ae_first = AliExpressHttpFirstHtmlFetcher(http=ae_http, browser=terabyte_first)
+
+    # Magalu: accept HTTP only when the document is already a SERP/PDP.
+    from .magalu_http_first_fetcher import MagaluHttpFirstHtmlFetcher
+
+    magalu_http = CurlCffiHtmlFetcher(timeout=float(urllib_timeout))
+    return MagaluHttpFirstHtmlFetcher(http=magalu_http, browser=ae_first)

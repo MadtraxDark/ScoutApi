@@ -51,6 +51,20 @@ class AliExpressSearchAdapter:
         if candidates:
             return candidates
 
+        embedded = self._embedded_item_rows(response.text or "")
+        if embedded:
+            wrapped = json.dumps({"mods": {"itemList": {"content": embedded}}})
+            for candidate in self._candidates_from_search_payload(
+                wrapped, response.url, limit=60
+            ):
+                canonical = canonicalize_url(candidate.url)
+                if canonical in seen:
+                    continue
+                seen.add(canonical)
+                candidates.append(candidate)
+            if candidates:
+                return candidates
+
         for href in response.css("a[href*='/item/']::attr(href)").getall():
             absolute = urljoin(response.url, href.strip())
             item_id = self._item_id_from_url(absolute)
@@ -124,9 +138,33 @@ class AliExpressSearchAdapter:
             text = text[:-2]
         return text if text.isdigit() or text.isalnum() else text
 
+    @staticmethod
+    def _embedded_item_rows(html: str) -> list[dict[str, Any]]:
+        """Rows from SSR ``itemList`` (``_init_data_``), not only intercepted JSON."""
+        decoder = json.JSONDecoder()
+        needle = '"itemList"'
+        start = 0
+        text = html or ""
+        while True:
+            idx = text.find(needle, start)
+            if idx < 0:
+                return []
+            brace = text.find("{", idx)
+            if brace < 0:
+                return []
+            try:
+                obj, _end = decoder.raw_decode(text[brace:])
+            except json.JSONDecodeError:
+                start = idx + len(needle)
+                continue
+            content = obj.get("content") if isinstance(obj, dict) else None
+            if isinstance(content, list) and content:
+                return [row for row in content if isinstance(row, dict)]
+            start = idx + len(needle)
+
     @classmethod
     def _candidates_from_search_payload(
-        cls, raw: str, page_url: str
+        cls, raw: str, page_url: str, *, limit: int = 10
     ) -> list[SearchCandidate]:
         try:
             payload: Any = json.loads(raw)
@@ -165,7 +203,7 @@ class AliExpressSearchAdapter:
                     },
                 )
             )
-            if len(out) >= 10:
+            if len(out) >= limit:
                 break
         return out
 

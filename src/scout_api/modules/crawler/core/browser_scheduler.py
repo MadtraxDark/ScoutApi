@@ -58,6 +58,18 @@ def browser_queue_deadline(deadline_monotonic: float | None) -> Iterator[None]:
         _queue_deadline.reset(token)
 
 
+def operation_remaining_seconds() -> float | None:
+    """Seconds left on the current Match deadline, or ``None`` when unset.
+
+    Negative values mean the deadline already passed. Callers outside a Match
+    store (no context deadline) keep their normal timeouts.
+    """
+    deadline = _queue_deadline.get()
+    if deadline is None:
+        return None
+    return deadline - time.monotonic()
+
+
 @dataclass
 class _Waiter:
     """Internal queue entry for a blocked acquire() call.

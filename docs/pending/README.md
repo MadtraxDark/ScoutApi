@@ -80,9 +80,13 @@ Itens resolvidos **não** ficam no índice ativo.
 
 ## Índice ativo
 
-**Pendências ativas: 1.**
+**Pendências ativas: 0.**
 
-- [PENDING-033 — Fechar Product Match em Magalu e AliExpress](PENDING-033-magalu-aliexpress-match-timeouts.md) — `OPEN`, `INCOMPLETE`, P2; Magalu e AliExpress excederam o wall timeout na Run real pós-correções.
+Resolvida em 2026-10-08:
+
+- [`resolved/PENDING-033-magalu-aliexpress-match-timeouts.md`](resolved/PENDING-033-magalu-aliexpress-match-timeouts.md)
+  — Magalu `auto_match` do A12 360 sem wall timeout; AliExpress `no_match`
+  após SERP HTTP com título, sem PDP de acessório.
 
 Resolvida em 2026-10-07:
 

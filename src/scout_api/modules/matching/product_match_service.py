@@ -222,7 +222,9 @@ def _serp_title_reject_reason(
     form = form_factor_conflict(reference.title, title_text)
     if form:
         return form
-    probe = identity_from_price_item(identity_reference_item(title_text))
+    probe = identity_from_price_item(
+        identity_reference_item(title_text, category=reference.category)
+    )
     critical = critical_identity_conflict(reference, probe)
     if critical:
         return critical

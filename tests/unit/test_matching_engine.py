@@ -206,6 +206,16 @@ def test_cooler_radiator_size_and_manufacturer_code_are_discriminative() -> None
         and "radiator_size_mismatch" in (reason.detail or "")
         for reason in score.reasons
     )
+    from scout_api.modules.matching.product_match_service import (
+        _serp_title_reject_reason,
+    )
+
+    serp_reason = _serp_title_reject_reason(
+        source,
+        title="Water Cooler MSI MAG CoreLiquid A12 240mm ARGB - CLA12240",
+    )
+    assert serp_reason is not None
+    assert "radiator_size_mismatch" in serp_reason
 
 
 def test_cooler_missing_radiator_size_and_argb_do_not_conflict() -> None:

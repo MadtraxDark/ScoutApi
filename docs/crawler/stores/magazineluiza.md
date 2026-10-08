@@ -58,7 +58,17 @@
 
 ## Fetch strategy
 
-- Default Camoufox + Proxy Cost Mode
+- HTTP-first (`curl_cffi`) when the body is already a SERP (`/busca/` product
+  cards) or a ready PDP (`__NEXT_DATA__` item + offers). Akamai sec-cpt is not
+  treated as a document: it escalates to Camoufox.
+- Camoufox + Proxy Cost Mode after that miss. A sec-cpt stub skips
+  `networkidle` (it does not clear the interstitial). The settle loop resolves
+  the challenge once; the fetch does not run a second full pass on the same
+  page.
+- After a classified direct block whose proxy fallback succeeds, the same host
+  skips another doomed direct navigation for a few minutes (`proxy_sticky`).
+  The first request of a process is still direct. Proxy is not started when
+  the Match store deadline cannot fit another browser attempt.
 - Budget validado em 2026-10-05: 15 s frio e 1 s cache, escolhido pelo usuário.
   Warmup mantém a pausa de cookies/challenge e dispensa analytics networkidle
   na homepage. PDP dispensa essa espera apenas com NEXT_DATA pronto (item,

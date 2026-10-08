@@ -223,6 +223,33 @@ def test_search_candidates() -> None:
     assert candidates
     assert candidates[0].product_id == "1005011737968391"
     assert "1005011737968391" in candidates[0].url
+    assert candidates[0].title and "5070" in candidates[0].title
+
+
+def test_search_candidates_from_embedded_item_list() -> None:
+    html = """
+    <html><body><script>
+    window._dida_config_ = {"data":{"root":{"fields":{"mods":
+    {"itemList":{"content":[
+      {"productId":"1005012081177760",
+       "title":{"displayTitle":"Ventilador MAG CORELIQUID 240R"}},
+      {"productId":"1005009990000001",
+       "title":{"displayTitle":"Water Cooler MSI MAG CoreLiquid A12 360"}}
+    ]}}}}}}
+    </script>
+    <a href="/item/999.html">sem titulo</a>
+    </body></html>
+    """
+    from scrapy.http import HtmlResponse
+
+    response = HtmlResponse(url=SEARCH_URL, body=html.encode(), encoding="utf-8")
+    candidates = AliExpressSearchAdapter().parse_candidates(response)
+    assert [c.product_id for c in candidates] == [
+        "1005012081177760",
+        "1005009990000001",
+    ]
+    assert candidates[1].title and "A12" in candidates[1].title
+    assert candidates[0].metadata.get("source") == "aliexpress-search-api"
 
 
 def test_prepare_fetch_url_preserves_sku_hint() -> None:

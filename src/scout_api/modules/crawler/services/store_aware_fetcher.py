@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import logging
+import threading
+import time
 from collections.abc import Callable
 from typing import Any, Protocol, cast
 from urllib.parse import urlparse
@@ -14,6 +16,15 @@ from ..core.proxy_policy import ProxyPolicy, proxy_policy_for_url
 from .html_fetcher import CamoufoxHtmlFetcher, HtmlFetcher
 
 logger = logging.getLogger(__name__)
+
+# After a classified direct block, the same host keeps failing direct for a
+# while (Magalu Akamai on this egress). Repeating that failure before every
+# PDP multiplies browser time past the store wall. The first request is still
+# direct; stickiness starts only after proxy fallback actually succeeds.
+_DIRECT_BLOCK_STICKY_SECONDS = 300.0
+# A proxy browser attempt that cannot finish inside the Match deadline would
+# be reported as STORE_WALL_TIMEOUT. Skip it and keep the classified block.
+_MIN_PROXY_FALLBACK_SECONDS = 25.0
 
 
 class _BrowserPostProvider(Protocol):
@@ -49,6 +60,8 @@ class StoreAwareHtmlFetcher:
         self._direct = direct
         self._proxied = proxied
         self._http = http
+        self._direct_block_until: dict[str, float] = {}
+        self._direct_block_lock = threading.Lock()
 
     def browser_post(
         self,
@@ -109,11 +122,36 @@ class StoreAwareHtmlFetcher:
         return self._annotate(response, proxy_used=True, policy=policy)
 
     def _fetch_fallback(self, url: str, policy: ProxyPolicy) -> HtmlResponse:
+        host = _host_key(url)
+        if self._proxied is not None and self._direct_block_active(host):
+            logger.info(
+                "proxy_skip_direct_after_classified_block",
+                extra={"url": url, "proxy_policy": policy.value},
+            )
+            response = self._proxied.fetch(url)
+            return self._annotate(
+                response,
+                proxy_used=True,
+                policy=policy,
+                fallback=True,
+                sticky=True,
+            )
         try:
             response = self._direct.fetch(url)
+            self._clear_direct_block(host)
             return self._annotate(response, proxy_used=False, policy=policy)
         except RequestError as exc:
             if exc.code not in PROXY_FALLBACK_ERROR_CODES or self._proxied is None:
+                raise
+            if not _proxy_fallback_fits_deadline():
+                logger.info(
+                    "proxy_fallback_skipped_deadline",
+                    extra={
+                        "url": url,
+                        "proxy_policy": policy.value,
+                        "code": exc.code,
+                    },
+                )
                 raise
             logger.info(
                 "proxy_fallback_after_block",
@@ -136,12 +174,38 @@ class StoreAwareHtmlFetcher:
                     extra={"url": url, "code": proxy_exc.code},
                 )
                 response = self._proxied.fetch(url)
+            self._remember_direct_block(host)
             return self._annotate(
                 response,
                 proxy_used=True,
                 policy=policy,
                 fallback=True,
             )
+
+    def _direct_block_active(self, host: str) -> bool:
+        if not host:
+            return False
+        now = time.monotonic()
+        with self._direct_block_lock:
+            until = self._direct_block_until.get(host, 0.0)
+            if until <= now:
+                self._direct_block_until.pop(host, None)
+                return False
+            return True
+
+    def _remember_direct_block(self, host: str) -> None:
+        if not host:
+            return
+        with self._direct_block_lock:
+            self._direct_block_until[host] = (
+                time.monotonic() + _DIRECT_BLOCK_STICKY_SECONDS
+            )
+
+    def _clear_direct_block(self, host: str) -> None:
+        if not host:
+            return
+        with self._direct_block_lock:
+            self._direct_block_until.pop(host, None)
 
     @staticmethod
     def _annotate(
@@ -150,14 +214,33 @@ class StoreAwareHtmlFetcher:
         proxy_used: bool,
         policy: ProxyPolicy,
         fallback: bool = False,
+        sticky: bool = False,
     ) -> HtmlResponse:
         metrics: dict[str, Any] = dict(response.meta.get("fetch_metrics") or {})
         metrics["proxy_used"] = proxy_used
         metrics["proxy_policy"] = policy.value
         if fallback:
             metrics["proxy_fallback"] = True
+        if sticky:
+            metrics["proxy_sticky"] = True
         response.meta["fetch_metrics"] = metrics
         return response
+
+
+def _host_key(url: str) -> str:
+    return (urlparse(url).hostname or "").lower().removeprefix("www.")
+
+
+def _proxy_fallback_fits_deadline() -> bool:
+    """False when the Match store deadline cannot fit another browser attempt."""
+    from scout_api.modules.crawler.core.browser_scheduler import (  # noqa: PLC0415
+        operation_remaining_seconds,
+    )
+
+    remaining = operation_remaining_seconds()
+    if remaining is None:
+        return True
+    return remaining >= _MIN_PROXY_FALLBACK_SECONDS
 
 
 def is_proxied_camoufox(fetcher: HtmlFetcher) -> bool:

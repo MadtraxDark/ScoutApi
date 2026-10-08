@@ -87,12 +87,16 @@ Currency comes from the price payload (`originalPrice.currency` /
 
 - Search: `matching.search_adapters` (PDP spider sem Search)
 - SERP: `https://pt.aliexpress.com/w/wholesale-{query}.html`
-- Prefer captured search JSON (`data-aliexpress-search`) → `/item/{id}.html` links
-  → embedded item ids
+- HTTP-first (`curl_cffi`) when the HTML already embeds `itemList` with
+  `productId` and `displayTitle`. Browser is the fallback for a TMD/RGV587
+  shell, not the first search transport.
+- Prefer that SSR list (titles included) → captured search JSON
+  (`data-aliexpress-search`) → `/item/{id}.html` links → embedded item ids
+- Title-less numeric item URLs are not a brand hint. With a title, the normal
+  SERP identity reject runs before any PDP scrape.
 - Candidate retrieval is separate from Product Match scoring
-- `/item/{numeric-id}.html` is not a title hint. If the SERP omits a title, keep
-  identity unknown and let the normal PDP scrape/matcher evaluate the offer;
-  never infer the candidate brand from the numeric item ID.
+- PDP remains browser MTop interception (CSR). One fresh profile per PDP, then
+  proxy only after a classified block.
 
 ## Fetch strategy
 
@@ -100,7 +104,8 @@ Priority observed in baseline (2026-09-20, reference GPU PDP):
 
 | Strategy | Result |
 |---|---|
-| Plain HTTP / curl_cffi | CSR shell, empty title, no PRICE/SKU (`RGV587` / gated) |
+| Plain HTTP / curl_cffi search | SSR `itemList` with titles (accepted; no browser) |
+| Plain HTTP / curl_cffi PDP | CSR shell, empty title, no PRICE/SKU (`RGV587` / gated) |
 | HTTP session (homepage→PDP) | Same shell |
 | Camoufox direct | MTop often `FAIL_SYS_TOKEN_EMPTY` / incomplete |
 | Camoufox + residential proxy (`FALLBACK`) | MTop `SUCCESS` + full components (~50KB+) |

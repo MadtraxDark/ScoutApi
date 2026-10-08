@@ -623,6 +623,61 @@ def test_camoufox_fetcher_raises_when_challenge_persists(tmp_path: Any) -> None:
     assert exc.value.retryable is True
 
 
+def test_camoufox_does_not_resolve_the_same_interstitial_twice(tmp_path: Any) -> None:
+    class FakePage:
+        url = "https://www.magazineluiza.com.br/busca/cooler/"
+
+        def goto(self, url: str, **kwargs: Any) -> None:
+            del url, kwargs
+
+        def content(self) -> str:
+            return (
+                "<html><body><div id='sec-if-cpt-container'>"
+                "<div class='behavioral-content'></div></div></body></html>"
+            )
+
+        def title(self) -> str:
+            return ""
+
+        def wait_for_timeout(self, ms: int) -> None:
+            del ms
+
+        def wait_for_load_state(self, *_args: Any, **_kwargs: Any) -> None:
+            return None
+
+    class FakeBrowser:
+        def new_page(self) -> FakePage:
+            return FakePage()
+
+    class CountingResolver:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def try_resolve(self, *_args: Any, **_kwargs: Any) -> bool:
+            self.calls += 1
+            return False
+
+    @contextmanager
+    def fake_factory(**kwargs: Any) -> Iterator[FakeBrowser]:
+        del kwargs
+        yield FakeBrowser()
+
+    resolver = CountingResolver()
+    fetcher = CamoufoxHtmlFetcher(
+        browser_factory=fake_factory,
+        settle_ms=0,
+        max_settle_attempts=2,
+        user_data_dir=tmp_path / "once",
+        warmup_origin=False,
+        warm_reuse=False,
+        challenge_resolver=resolver,
+    )
+    with pytest.raises(RequestError) as exc:
+        fetcher.fetch("https://www.magazineluiza.com.br/busca/cooler/")
+    assert exc.value.code == "UPSTREAM_BLOCKED"
+    assert resolver.calls == 1
+
+
 def test_camoufox_fetcher_raises_non_retryable_on_hard_block(tmp_path: Any) -> None:
     class FakePage:
         url = "https://nissei.com/py/x"

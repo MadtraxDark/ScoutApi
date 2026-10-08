@@ -36,6 +36,20 @@ def test_magalu_ready_pdp_does_not_wait_for_analytics_network_idle() -> None:
         fetcher.close()
 
 
+def test_magalu_sec_cpt_does_not_wait_for_network_idle() -> None:
+    page = MagicMock()
+    page.content.return_value = (
+        "<html><body><div id='sec-if-cpt-container'>"
+        "<div class='behavioral-content'></div></div></body></html>"
+    )
+    fetcher = CamoufoxHtmlFetcher()
+    try:
+        fetcher._goto(page, "https://www.magazineluiza.com.br/busca/cooler/")
+        page.wait_for_load_state.assert_not_called()
+    finally:
+        fetcher.close()
+
+
 def test_magalu_incomplete_document_keeps_existing_wait() -> None:
     page = MagicMock()
     page.content.return_value = "<html>loading</html>"
