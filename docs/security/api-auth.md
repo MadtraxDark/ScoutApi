@@ -165,8 +165,7 @@ controle. Seus erros 429 preservam códigos existentes (`RATE_LIMITED` ou
 `CORS_ALLOWED_ORIGINS` = lista CSV explícita. Wildcard `*` é ignorado/rejeitado
 com credentials.
 
-Métodos: `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `OPTIONS`.
-`PUT` é necessário para a criação idempotente de favoritos no PriceScout.
+Métodos: `GET`, `POST`, `PATCH`, `DELETE`, `OPTIONS`.
 Headers: `Authorization`, `Content-Type`, `Accept`.
 Expostos: `Retry-After`, `X-RateLimit-Limit`, `X-RateLimit-Remaining`,
 `X-RateLimit-Scope`.

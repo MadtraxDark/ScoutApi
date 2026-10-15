@@ -42,7 +42,6 @@ dev = [
 [project.scripts]
 scout-monitor = "scout_api.modules.monitoring.worker:main"
 scout-exchange = "scout_api.modules.exchange.worker:main"
-scout-email = "scout_api.modules.favorites.worker:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

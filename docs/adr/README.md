@@ -84,4 +84,3 @@ trade-offs relevantes, múltiplos módulos, ou alternativas importantes rejeitad
 
 Não crie ADR para selector quebrado, typo ou refactor local sem mudança semântica.
 Comportamento operacional por loja → `docs/crawler/stores/` (não ADR, salvo trade-off arquitetural).
-| [0054](0054-favorites-price-drop-email-outbox.md) | Favoritos, alertas e-mail e outbox PostgreSQL | Accepted |

@@ -80,10 +80,7 @@ Itens resolvidos **não** ficam no índice ativo.
 
 ## Índice ativo
 
-**Pendências ativas: 2.**
-
-- [`PENDING-035-favorites-email-live-validation.md`](PENDING-035-favorites-email-live-validation.md)
-  ? falta valida??o real em ambiente configurado (SMTP Google, banco/migration, restart e benchmark).
+**Pendências ativas: 1.**
 
 - [`PENDING-034-iphone-18-pro-match-gaps.md`](PENDING-034-iphone-18-pro-match-gaps.md)
   — discovery incompleto por desvio de variante Amazon BR, catálogo Magalu/

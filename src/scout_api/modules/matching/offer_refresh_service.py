@@ -18,7 +18,6 @@ from scout_api.modules.crawler.services.offer_scrape_service import OfferScrapeS
 from scout_api.modules.crawler.services.product_scrape_service import (
     ProductScrapeService,
 )
-from scout_api.modules.favorites.service import record_price_drop
 from scout_api.modules.matching.models import StoreListing
 from scout_api.modules.matching.offer_diff import (
     diff_offers,
@@ -278,23 +277,13 @@ class OfferRefreshService:
         event_views: list[OfferEventView] = []
         now = datetime.now(UTC)
         for event_type in diff.events:
-            event_row = repo.append_event(
+            repo.append_event(
                 listing,
                 event_type,
                 before=previous_payload,
                 after=current_payload,
                 detected_at=now,
             )
-            if event_type == "price_changed":
-                record_price_drop(
-                    self._session,
-                    listing=listing,
-                    event_id=event_row.id,
-                    event_type=event_type,
-                    detected_at=now,
-                    before=previous_payload,
-                    after=current_payload,
-                )
             event_views.append(
                 OfferEventView(
                     event_type=event_type,

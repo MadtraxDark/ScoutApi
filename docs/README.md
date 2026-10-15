@@ -31,7 +31,6 @@ Governança de documentação: [`.cursor/rules/documentation-governance.mdc`](..
 | Falha do sandbox de execução no Windows | [`.cursor/rules/windows-sandbox-exec.mdc`](../.cursor/rules/windows-sandbox-exec.mdc) |
 | Fetch / Camoufox imutáveis | [`.cursor/rules/scraper-camoufox-immutable.mdc`](../.cursor/rules/scraper-camoufox-immutable.mdc) |
 | Segurança da API (auth/CORS/rate limit) | [`security/api-auth.md`](security/api-auth.md) + [ADR 0023](adr/0023-api-auth-supabase-deny-by-default.md) + [`.cursor/rules/security.mdc`](../.cursor/rules/security.mdc) |
-| Favoritos e alertas de queda | [`notifications/price-drop-alerts.md`](notifications/price-drop-alerts.md) + [ADR 0054](adr/0054-favorites-price-drop-email-outbox.md) |
 | Atividade do catálogo | [`matching/catalog-activity.md`](matching/catalog-activity.md) + [ADR 0051](adr/0051-persistent-catalog-activity-read-model.md) |
 | Pesquisa de alterações do catálogo | [`matching/catalog-changes.md`](matching/catalog-changes.md) + [ADR 0052](adr/0052-catalog-change-explorer.md) |
 | Integração PriceScout | [`integration/pricescout.md`](integration/pricescout.md) |
