@@ -418,6 +418,22 @@ def test_log_redaction_strips_secrets() -> None:
     assert "pass@" not in mapping["database_url"]
 
 
+def test_cors_allows_favorite_put_from_pricescout(auth_settings: str) -> None:
+    client = TestClient(app)
+    response = client.options(
+        f"/products/{uuid4()}/favorite",
+        headers={
+            "Origin": "http://localhost:3000",
+            "Access-Control-Request-Method": "PUT",
+            "Access-Control-Request-Headers": "authorization,content-type",
+        },
+    )
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "http://localhost:3000"
+    assert "PUT" in response.headers["access-control-allow-methods"]
+    assert response.headers["access-control-allow-credentials"] == "true"
+
+
 def test_cors_does_not_echo_unknown_origin(auth_settings: str) -> None:
     client = TestClient(app)
     response = client.options(

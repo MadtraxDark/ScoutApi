@@ -544,6 +544,11 @@ class UserNotification(Base):
             "type",
             name="uq_user_notifications_match_run_type",
         ),
+        UniqueConstraint(
+            "favorite_id",
+            "offer_event_id",
+            name="uq_user_notifications_favorite_offer_event",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -563,6 +568,12 @@ class UserNotification(Base):
         ForeignKey("product_match_runs.id", ondelete="SET NULL"),
         nullable=True,
     )
+    favorite_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("product_favorites.id", ondelete="SET NULL")
+    )
+    offer_event_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("offer_events.id", ondelete="SET NULL")
+    )
     title: Mapped[str] = mapped_column(String(256), nullable=False)
     message: Mapped[str] = mapped_column(Text, nullable=False)
     metadata_json: Mapped[dict[str, Any]] = mapped_column(
@@ -573,4 +584,101 @@ class UserNotification(Base):
     )
     read_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
+    )
+
+
+class ProductFavorite(Base):
+    __tablename__ = "product_favorites"
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id", "product_id", name="uq_product_favorites_user_product"
+        ),
+        Index("ix_product_favorites_product_created", "product_id", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    product_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("canonical_products.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    notify_price_drop: Mapped[bool] = mapped_column(
+        Boolean, default=True, nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow, nullable=False
+    )
+
+
+class UserNotificationPreference(Base):
+    __tablename__ = "user_notification_preferences"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    email_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow, nullable=False
+    )
+
+
+class EmailDelivery(Base):
+    __tablename__ = "email_deliveries"
+    __table_args__ = (
+        UniqueConstraint(
+            "favorite_id",
+            "offer_event_id",
+            name="uq_email_deliveries_favorite_offer_event",
+        ),
+        Index("ix_email_deliveries_due", "status", "next_attempt_at", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    notification_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("user_notifications.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    favorite_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("product_favorites.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    offer_event_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("offer_events.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    recipient: Mapped[str] = mapped_column(String(320), nullable=False)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    next_attempt_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utcnow
+    )
+    message_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    last_error: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    claimed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    claim_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    worker_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+    sent_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow, nullable=False
     )

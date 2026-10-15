@@ -53,6 +53,24 @@ class Settings(BaseSettings):
     # Lightweight SPA polling (match status, notifications) — separate bucket
     # so continuous polls do not starve CRUD or crawler start endpoints.
     rate_limit_poll_per_minute: int = Field(default=300, ge=1)
+    # Durable email delivery uses PostgreSQL; SMTP is an external transport only.
+    email_enabled: bool = False
+    email_transport: Literal["smtp"] = "smtp"
+    smtp_host: str = "smtp.gmail.com"
+    smtp_port: int = Field(default=587, ge=1, le=65535)
+    smtp_starttls: bool = True
+    smtp_ssl: bool = False
+    smtp_username: str | None = None
+    smtp_password: str | None = Field(default=None, repr=False)
+    email_from_address: str | None = None
+    email_from_name: str = "PriceScout"
+    smtp_timeout_seconds: float = Field(default=15, ge=1, le=60)
+    email_worker_enabled: bool = True
+    email_worker_sweep_interval_seconds: int = Field(default=5, ge=1, le=300)
+    email_worker_batch_size: int = Field(default=10, ge=1, le=100)
+    email_worker_lease_seconds: int = Field(default=120, ge=30, le=900)
+    email_worker_max_attempts: int = Field(default=5, ge=1, le=20)
+    public_app_url: str = "http://localhost:3000"
     scraper_user_agent: str = "ScoutApiV2/0.1 (+price-monitoring)"
     scraper_log_level: str = "INFO"
     scraper_default_concurrency: int = 2
@@ -279,6 +297,29 @@ class Settings(BaseSettings):
                 "AUTH_REQUIRED=false (ou AUTH_ENABLED=false) não é permitido "
                 "quando ENVIRONMENT=production. "
                 "Defina AUTH_REQUIRED=true ou use um ambiente não-produção."
+            )
+        if self.smtp_starttls and self.smtp_ssl:
+            raise ValueError(
+                "SMTP_STARTTLS e SMTP_SSL não podem estar ativos simultaneamente."
+            )
+        if self.email_enabled and (not self.smtp_host or not self.email_from_address):
+            raise ValueError(
+                "SMTP_HOST e EMAIL_FROM_ADDRESS são obrigatórios com "
+                "EMAIL_ENABLED=true."
+            )
+        if self.email_enabled and self.smtp_username and not self.smtp_password:
+            raise ValueError(
+                "SMTP_PASSWORD é obrigatória quando SMTP_USERNAME estiver configurado."
+            )
+        if (
+            self.environment.lower() == "production"
+            and self.email_enabled
+            and self.public_app_url.lower().startswith(
+                ("http://localhost", "https://localhost")
+            )
+        ):
+            raise ValueError(
+                "PUBLIC_APP_URL não pode apontar para localhost em production."
             )
         if self.image_optimization_concurrency is not None:
             self.image_avif_max_concurrency = max(

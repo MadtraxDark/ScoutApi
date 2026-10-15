@@ -14,6 +14,8 @@ Python 3.12+; Docker e Docker Compose.
 
 Copie `.env.example` para `.env` e ajuste os valores conforme o ambiente. O `.env` é ignorado pelo Git e não deve conter valores versionados.
 
+Alertas por e-mail são desligados por padrão. Para ativá-los, configure `EMAIL_ENABLED`, `EMAIL_FROM_ADDRESS` e SMTP em `.env`; Gmail pessoal requer App Password com verificação em duas etapas, e o serviço Compose `email-worker` processa a outbox PostgreSQL. Veja [alertas de queda de preço](docs/notifications/price-drop-alerts.md) e [ADR 0054](docs/adr/0054-favorites-price-drop-email-outbox.md). Nunca use a senha normal da conta nem versione `SMTP_PASSWORD`.
+
 ## Docker
 
 Runtime reproduzível do crawler: Camoufox 0.5.7 e browser oficial
