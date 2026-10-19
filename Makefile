@@ -45,7 +45,7 @@ seed-mercadolivre:
 	powershell -NoProfile -ExecutionPolicy Bypass -File scripts/seed-camoufox-profile.ps1 -MercadoLivre
 
 renew-drive-token:
-	python scripts/google_drive_oauth_bootstrap.py --write-env
+	.\.venv\Scripts\python.exe scripts/google_drive_oauth_bootstrap.py --write-env
 	docker compose up -d --no-deps --force-recreate api image-optimizer
 
 up:
