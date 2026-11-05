@@ -103,6 +103,11 @@ def main() -> int:
         action="store_true",
         help="Salva token e pasta no .env sem imprimir credenciais.",
     )
+    parser.add_argument(
+        "--new-root",
+        action="store_true",
+        help="Cria uma nova raiz PriceScout, ignorando a raiz configurada.",
+    )
     args = parser.parse_args()
     _load_dotenv()
     client_id = os.environ.get("GOOGLE_DRIVE_CLIENT_ID", "").strip()
@@ -126,6 +131,7 @@ def main() -> int:
 
     from google_auth_oauthlib.flow import InstalledAppFlow
     from googleapiclient.discovery import build
+    from googleapiclient.errors import HttpError
     from oauthlib.oauth2.rfc6749.errors import MismatchingStateError
 
     redirect_used = REDIRECT_URIS[0]
@@ -138,8 +144,9 @@ def main() -> int:
         "computador), NÃO o cliente Web do login Supabase.\n"
         "Se o Google mostrar redirect_uri_mismatch, o client_id do .env\n"
         "ainda é o Web/Supabase — crie um Desktop novo e atualize o .env.\n"
-        f"\nAbrindo consentimento em 127.0.0.1:{OAUTH_PORT} …\n"
-        "Use só a janela que o script abrir; não recarregue URLs antigas.\n"
+        f"\nTentando abrir o consentimento em 127.0.0.1:{OAUTH_PORT} …\n"
+        "Se nenhuma janela abrir, use a URL exibida pelo script abaixo; "
+        "não recarregue URLs antigas.\n"
     )
 
     client_config = {
@@ -160,7 +167,9 @@ def main() -> int:
             prompt="consent",
             open_browser=True,
             timeout_seconds=300,
-            authorization_prompt_message="",
+            authorization_prompt_message=(
+                "URL de autorização (abra manualmente se necessário): {url}"
+            ),
         )
     except OSError as exc:
         print(
@@ -219,10 +228,28 @@ def main() -> int:
         created = service.files().create(body=body, fields="id").execute()
         return str(created["id"])
 
-    products = os.environ.get("GOOGLE_DRIVE_ROOT_FOLDER_ID", "").strip()
+    products = "" if args.new_root else os.environ.get(
+        "GOOGLE_DRIVE_ROOT_FOLDER_ID", ""
+    ).strip()
     if products:
         # Renewal must retain the storage root used by existing catalog images.
-        service.files().get(fileId=products, fields="id").execute()
+        try:
+            service.files().get(fileId=products, fields="id").execute()
+        except HttpError as exc:
+            status = getattr(getattr(exc, "resp", None), "status", None)
+            if status in (403, 404):
+                print(
+                    "A conta/client OAuth autorizado não pode acessar "
+                    "GOOGLE_DRIVE_ROOT_FOLDER_ID.\n"
+                    "Isso normalmente ocorre quando a pasta foi criada por "
+                    "outro OAuth client usando o scope drive.file.\n"
+                    "Autorize novamente com o client original que criou a "
+                    "pasta ou faça uma migração explícita; o .env foi "
+                    "preservado e nenhuma pasta nova foi criada.",
+                    file=sys.stderr,
+                )
+                return 1
+            raise
     else:
         pricescout = ensure_folder("PriceScout")
         products = ensure_folder("products", parent_id=pricescout)

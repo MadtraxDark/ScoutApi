@@ -24,6 +24,7 @@ build/
 *.db
 .cache/
 data/camoufox-profiles/
+data/backups/
 data/fetch-cost-metrics/
 .idea/
 .vscode/*.code-snippets

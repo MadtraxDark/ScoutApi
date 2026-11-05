@@ -50,6 +50,10 @@ de original síncrono; PriceScout não usa esse endpoint durante a importação.
   `GOOGLE_DRIVE_ROOT_FOLDER_ID`.
 - Scope: `https://www.googleapis.com/auth/drive.file`.
 - Bootstrap one-shot: `python scripts/google_drive_oauth_bootstrap.py`.
+  - Para iniciar uma raiz nova sem reutilizar uma pasta inacessível pelo OAuth
+    atual, use `python scripts/google_drive_oauth_bootstrap.py --write-env --new-root`.
+    Esse modo não migra arquivos antigos; a reidratação deve reutilizar as
+    `source_url` persistidas em `product_images` e atualizar os IDs no banco.
   - Preferir OAuth client tipo **Desktop app** no Google Cloud Console
     (APIs e serviços → Credenciais → Criar credenciais → ID do cliente OAuth
     → **Aplicativo para computador**). Atualize `GOOGLE_DRIVE_CLIENT_ID` /
