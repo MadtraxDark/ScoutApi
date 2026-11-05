@@ -328,6 +328,39 @@ def test_notification_unread_and_mark_read(session: Session) -> None:
     assert service.unread_count(user_id) == 0
 
 
+def test_notification_delete_is_scoped_to_user_and_delete_all_removes_owned_rows(
+    session: Session,
+) -> None:
+    user_id = uuid.uuid4()
+    other_user_id = uuid.uuid4()
+    owned = UserNotification(
+        user_id=user_id,
+        type="PRODUCT_MATCH_COMPLETED",
+        title="Busca concluída",
+        message="ok",
+        metadata_json={},
+    )
+    other = UserNotification(
+        user_id=other_user_id,
+        type="PRODUCT_MATCH_COMPLETED",
+        title="Busca concluída",
+        message="ok",
+        metadata_json={},
+    )
+    session.add_all([owned, other])
+    session.commit()
+
+    service = NotificationService(session)
+    with pytest.raises(LookupError, match="NOTIFICATION_NOT_FOUND"):
+        service.delete(owned.id, user_id=other_user_id)
+    assert session.get(UserNotification, owned.id) is not None
+
+    service.delete(owned.id, user_id=user_id)
+    assert session.get(UserNotification, owned.id) is None
+    assert service.delete_all(user_id) == 0
+    assert session.get(UserNotification, other.id) is not None
+
+
 def test_select_reference_url_prefers_reliable_store(session: Session) -> None:
     from scout_api.modules.matching.match_run_service import (
         select_reference_url_for_product,

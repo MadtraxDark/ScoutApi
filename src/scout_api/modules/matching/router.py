@@ -1401,6 +1401,47 @@ def mark_all_notifications_read(
     return UnreadCountResponse(unread_count=0)
 
 
+@router.delete(
+    "/notifications/{notification_id}",
+    response_model=UnreadCountResponse,
+    tags=["Notificações"],
+    dependencies=[Depends(require_authenticated_user), _RL_DEFAULT],
+    summary="Remover uma notificação",
+)
+def delete_notification(
+    notification_id: Annotated[UUID, Path()],
+    principal: Annotated[AuthenticatedPrincipal, Depends(require_authenticated_user)],
+    service: Annotated[NotificationService, Depends(get_notification_service)],
+) -> UnreadCountResponse:
+    try:
+        service.delete(notification_id, user_id=principal.id)
+    except LookupError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "code": "NOTIFICATION_NOT_FOUND",
+                "message": "Notificação não encontrada.",
+                "retryable": False,
+            },
+        ) from None
+    return UnreadCountResponse(unread_count=service.unread_count(principal.id))
+
+
+@router.delete(
+    "/notifications",
+    response_model=UnreadCountResponse,
+    tags=["Notificações"],
+    dependencies=[Depends(require_authenticated_user), _RL_DEFAULT],
+    summary="Remover todas as notificações",
+)
+def delete_all_notifications(
+    principal: Annotated[AuthenticatedPrincipal, Depends(require_authenticated_user)],
+    service: Annotated[NotificationService, Depends(get_notification_service)],
+) -> UnreadCountResponse:
+    service.delete_all(principal.id)
+    return UnreadCountResponse(unread_count=0)
+
+
 @router.post(
     "/offers/refresh",
     response_model=OfferRefreshResponse,

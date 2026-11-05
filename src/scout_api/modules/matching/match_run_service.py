@@ -660,3 +660,12 @@ class NotificationService:
 
     def mark_all_read(self, user_id: UUID) -> int:
         return self._repo.mark_all_read(user_id)
+
+    def delete(self, notification_id: UUID, *, user_id: UUID) -> None:
+        row = self._repo.get(notification_id)
+        if row is None or row.user_id != user_id:
+            raise LookupError("NOTIFICATION_NOT_FOUND")
+        self._repo.delete(row)
+
+    def delete_all(self, user_id: UUID) -> int:
+        return self._repo.delete_all(user_id)

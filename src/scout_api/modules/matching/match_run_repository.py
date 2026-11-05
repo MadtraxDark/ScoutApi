@@ -368,3 +368,16 @@ class NotificationRepository:
             row.read_at = moment
         self._session.flush()
         return len(rows)
+
+    def delete(self, notification: UserNotification) -> None:
+        self._session.delete(notification)
+        self._session.flush()
+
+    def delete_all(self, user_id: uuid.UUID) -> int:
+        rows = self._session.scalars(
+            select(UserNotification).where(UserNotification.user_id == user_id)
+        ).all()
+        for row in rows:
+            self._session.delete(row)
+        self._session.flush()
+        return len(rows)

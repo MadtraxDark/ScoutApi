@@ -40,7 +40,7 @@ PriceScout (localhost:3000)
 | other-store match run | job + poll | `POST /products/{id}/match-runs` + `GET /match-runs/{id}/live` | DIRECT_MAPPING | job persistente (ADR 0036) e ofertas progressivas (ADR 0049) |
 | other-store active | — | `GET /products/{id}/match-runs/active` | DIRECT_MAPPING | banner / botão |
 | other-store history/detail | — | `GET …/match-runs` + `GET /match-runs/{id}/details` | DIRECT_MAPPING | log consultável |
-| notifications | — | `GET/POST /notifications*` | DIRECT_MAPPING | central persistente |
+| notifications | — | `GET/POST/DELETE /notifications*` | DIRECT_MAPPING | central persistente |
 | other-store refresh | (opcional) | `POST /offers/refresh` | DIRECT_MAPPING | refresh de listings existentes |
 | offers refresh | — | `POST /offers/refresh` | DIRECT_MAPPING | integrar |
 | list stores | `GET …/catalog/stores` | `GET /stores` | DIRECT_MAPPING | registry `STORE_CONFIGS` + `display_name` + `match_enabled` |

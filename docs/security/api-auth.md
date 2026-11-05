@@ -71,6 +71,8 @@ desabilitados.
 | `GET /notifications/unread-count` | autenticado | poll |
 | `POST /notifications/{id}/read` | autenticado | default |
 | `POST /notifications/read-all` | autenticado | default |
+| `DELETE /notifications/{id}` | autenticado | default |
+| `DELETE /notifications` | autenticado | default |
 | `POST /offers/refresh` | `offers:refresh` | crawler |
 | `POST /products` | `products:write` | default |
 | `GET /products` | `products:read` | default |
