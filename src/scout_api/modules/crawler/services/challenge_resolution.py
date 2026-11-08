@@ -18,6 +18,8 @@ from typing import Any, Protocol
 from urllib.parse import parse_qs, quote, unquote, urlparse
 from urllib.request import Request, urlopen
 
+from .amazon_continue import continue_interstitial_url
+
 logger = logging.getLogger(__name__)
 
 
@@ -669,6 +671,11 @@ class ChallengeResolver:
             except Exception:
                 image_url = None
         if not image_url:
+            if continue_interstitial_url(html, base_url=_safe_url(page) or "") or (
+                "continue shopping" in (html or "").casefold()
+                and "validatecaptcha" in (html or "").casefold()
+            ):
+                return self._click_amazon_continue(page)
             logger.warning("amazon_captcha_image_not_found")
             return False
 
@@ -677,6 +684,24 @@ class ChallengeResolver:
         if not solution:
             return False
         return self._submit_amazon_captcha(page, solution)
+
+    def _click_amazon_continue(self, page: Any) -> bool:
+        """ "Continue shopping" interstitial: no image, just submit the form."""
+        try:
+            page.click(
+                "form[action*='validateCaptcha'] button[type='submit'], "
+                "form[action*='validateCaptcha'] input[type='submit']",
+                timeout=5_000,
+            )
+        except Exception:
+            logger.warning("amazon_continue_click_failed", exc_info=True)
+            return False
+        try:
+            page.wait_for_timeout(min(self.soft_wait_ms, 6_000))
+        except Exception:
+            pass
+        logger.info("amazon_continue_clicked")
+        return True
 
     def _download_image(self, page: Any, image_url: str) -> bytes:
         try:

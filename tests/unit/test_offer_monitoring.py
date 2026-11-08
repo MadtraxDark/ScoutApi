@@ -12,7 +12,11 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from scout_api.core.database import Base
-from scout_api.modules.crawler.core.exceptions import ParseError, RequestError
+from scout_api.modules.crawler.core.exceptions import (
+    ListingGoneError,
+    ParseError,
+    RequestError,
+)
 from scout_api.modules.crawler.models.product import ProductOffer, ProductPriceItem
 from scout_api.modules.matching.db import create_all
 from scout_api.modules.matching.identity import ProductIdentity
@@ -349,7 +353,7 @@ def test_refresh_confirmed_missing_pdp_marks_removed_not_no_match(
 ) -> None:
     listing = _listing(session)
     scraper = MagicMock()
-    scraper.scrape_offer.side_effect = ParseError("PDP removida")
+    scraper.scrape_offer.side_effect = ListingGoneError("PDP removida")
 
     response = OfferRefreshService(session=session, offer_service=scraper).refresh(
         OfferRefreshRequest(listing_ids=[listing.id])
@@ -477,3 +481,133 @@ def test_create_all_includes_monitor_columns(session: Session) -> None:
     assert hasattr(listing, "next_check_at")
     assert hasattr(listing, "promotion_expires_at")
     assert Base.metadata.tables["monitor_scheduler_state"] is not None
+
+
+def test_refresh_transient_parse_error_does_not_remove_listing(
+    session: Session,
+) -> None:
+    listing = _listing(session)
+    scraper = MagicMock()
+    scraper.scrape_offer.side_effect = ParseError("Sinal de disponibilidade")
+
+    response = OfferRefreshService(session=session, offer_service=scraper).refresh(
+        OfferRefreshRequest(listing_ids=[listing.id])
+    )
+
+    assert response.results[0].status == "scrape_failed"
+    assert listing.status == "active"
+    assert listing.monitoring_enabled is not False
+    assert listing.consecutive_failures == 1
+
+
+def test_refresh_repeated_parse_errors_eventually_remove_listing(
+    session: Session,
+) -> None:
+    listing = _listing(session)
+    listing.consecutive_failures = 2
+    listing.last_check_error = "EXTRACTION#2: Sinal de disponibilidade"
+    scraper = MagicMock()
+    scraper.scrape_offer.side_effect = ParseError("Sinal de disponibilidade")
+
+    response = OfferRefreshService(session=session, offer_service=scraper).refresh(
+        OfferRefreshRequest(listing_ids=[listing.id])
+    )
+
+    assert response.results[0].status == "removed"
+
+
+@pytest.mark.parametrize("code", ["RATE_LIMITED", "DUPLICATE_REQUEST"])
+def test_refresh_local_throttle_defers_without_failure_or_event(
+    session: Session, code: str
+) -> None:
+    listing = _listing(session)
+    scraper = MagicMock()
+    scraper.scrape_offer.side_effect = RequestError(
+        "cooldown", code=code, retryable=True, retry_after=120
+    )
+
+    response = OfferRefreshService(session=session, offer_service=scraper).refresh(
+        OfferRefreshRequest(listing_ids=[listing.id])
+    )
+
+    assert response.results[0].status == "deferred"
+    assert listing.consecutive_failures in (0, None)
+    assert listing.status == "active"
+    assert (
+        session.scalars(
+            select(OfferEvent.event_type).where(OfferEvent.listing_id == listing.id)
+        ).all()
+        == []
+    )
+
+
+def test_refresh_failure_keeps_last_snapshot_and_marks_event_unobserved(
+    session: Session,
+) -> None:
+    listing = _listing(session)
+    repo = MatchingRepository(session)
+    repo.append_snapshot_from_offer(listing, _offer("300.00", seller="Loja X"))
+    scraper = MagicMock()
+    scraper.scrape_offer.side_effect = RequestError(
+        "blocked", code="UPSTREAM_BLOCKED", retryable=True
+    )
+
+    OfferRefreshService(session=session, offer_service=scraper).refresh(
+        OfferRefreshRequest(listing_ids=[listing.id])
+    )
+
+    latest = repo.latest_snapshot(listing.id)
+    assert latest is not None and latest.seller == "Loja X"
+    event = session.scalars(
+        select(OfferEvent).where(OfferEvent.listing_id == listing.id)
+    ).one()
+    assert event.after["observed"] is False
+    assert event.after["kind"] == "blocked"
+
+
+def test_monitor_defers_paused_store_without_failure_and_processes_others(
+    session: Session,
+) -> None:
+    from scout_api.modules.crawler.core.exceptions import RequestError as RErr
+    from scout_api.modules.crawler.core.scrape_guard import ScrapeGuard
+    from scout_api.modules.monitoring.service import OfferMonitorService
+
+    listing = _listing(session)
+    host = listing.url.split("/")[2]
+    guard = ScrapeGuard(store_failure_cooldown_base_seconds=60)
+    with pytest.raises(RErr):
+        with guard.live_fetch(listing.url):
+            raise RErr("blocked", code="UPSTREAM_BLOCKED")
+    assert guard.store_cooldown_remaining(host) > 0
+    refresh = MagicMock()
+    service = OfferMonitorService(
+        session=session,
+        refresh_service=refresh,
+        settings=_settings(),
+        guard=guard,
+    )
+    now = datetime(2026, 9, 21, 10, 0, tzinfo=UTC)
+    listing.monitoring_enabled = True
+    listing.next_check_at = now - timedelta(minutes=1)
+    session.flush()
+    out = service.sweep_once(now=now)
+    refresh.refresh.assert_not_called()
+    assert out["results"][0]["status"] == "deferred"
+    assert listing.consecutive_failures in (0, None)
+
+
+def test_refresh_old_unrelated_failures_do_not_count_toward_removal(
+    session: Session,
+) -> None:
+    listing = _listing(session)
+    listing.consecutive_failures = 38
+    listing.last_check_error = "RATE_LIMITED: antigo"
+    scraper = MagicMock()
+    scraper.scrape_offer.side_effect = ParseError("Sinal de disponibilidade")
+
+    response = OfferRefreshService(session=session, offer_service=scraper).refresh(
+        OfferRefreshRequest(listing_ids=[listing.id])
+    )
+
+    assert response.results[0].status == "scrape_failed"
+    assert listing.status == "active"

@@ -86,6 +86,12 @@ def get_shared_scrape_guard() -> ScrapeGuard:
         url_cooldown_seconds=settings.scrape_url_cooldown_seconds,
         domain_min_interval_seconds=settings.scrape_domain_min_interval_seconds,
         result_cache_ttl_seconds=settings.scrape_result_cache_ttl_seconds,
+        store_failure_cooldown_base_seconds=(
+            settings.scrape_store_failure_cooldown_base_seconds
+        ),
+        store_failure_cooldown_max_seconds=(
+            settings.scrape_store_failure_cooldown_max_seconds
+        ),
         cache=cache,
         distributed_flight=distributed_flight,
         distributed_cooldown=distributed_cooldown,
@@ -229,30 +235,30 @@ class ProductScrapeService:
 
             spider = self._spider_for(url)
             fetch_url = spider.prepare_fetch_url(url)
-            self._guard.acquire_for_live_fetch(url, purpose=purpose)
-            response = self._fetch(fetch_url)
-            offer = spider.extract_offer(response)
-            details = spider.extract_details(response)
-            proxy_used = _proxy_used(response)
-            urls, image_meta = extract_images_for_response(
-                spider,
-                response,
-                include_images=include_images,
-                proxy_used=proxy_used,
-            )
-            if include_images:
-                details = details.model_copy(
-                    update={
-                        "images": urls,
-                        "image_candidates": candidates_from_urls(urls),
-                        "metadata": {**details.metadata, **image_meta},
-                    }
+            with self._guard.live_fetch(url, purpose=purpose):
+                response = self._fetch(fetch_url)
+                offer = spider.extract_offer(response)
+                details = spider.extract_details(response)
+                proxy_used = _proxy_used(response)
+                urls, image_meta = extract_images_for_response(
+                    spider,
+                    response,
+                    include_images=include_images,
+                    proxy_used=proxy_used,
                 )
-            item = compose_product_price_item(offer, details)
-            if include_images and image_meta:
-                item = item.model_copy(
-                    update={"metadata": {**item.metadata, **image_meta}}
-                )
+                if include_images:
+                    details = details.model_copy(
+                        update={
+                            "images": urls,
+                            "image_candidates": candidates_from_urls(urls),
+                            "metadata": {**details.metadata, **image_meta},
+                        }
+                    )
+                item = compose_product_price_item(offer, details)
+                if include_images and image_meta:
+                    item = item.model_copy(
+                        update={"metadata": {**item.metadata, **image_meta}}
+                    )
             self._guard.store_success(url, item)
             return item
 

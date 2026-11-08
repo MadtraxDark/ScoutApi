@@ -7,7 +7,7 @@ from urllib.parse import parse_qs, urlparse
 
 from scrapy.http import Response
 
-from ...core.exceptions import ParseError
+from ...core.exceptions import ListingGoneError, ParseError
 from ...core.fingerprints import canonicalize_url
 from ...models.product import (
     ProductDetails,
@@ -82,6 +82,15 @@ class MagazineLuizaSpider(BaseStoreSpider):
             or self._seller_from_text(page_text)
         )
         sku = seller_data.get("sku") or offer.get("sku") or json_ld.get("sku")
+        requested_seller = self._seller_from_url(response.url)
+        if not requested_seller:
+            seller_match = "not-requested"
+        elif seller_data.get("id") == requested_seller:
+            seller_match = "requested"
+        else:
+            # The URL asked for a seller that is not among the page offers:
+            # price/seller below come from another offer and must be flagged.
+            seller_match = "fallback"
         original_price = (
             original_price if original_price and original_price > price else None
         )
@@ -111,6 +120,7 @@ class MagazineLuizaSpider(BaseStoreSpider):
                     "installment": installment_source,
                     "availability": availability_source,
                     "seller": "offer-state" if seller_data else "url-or-rendered-text",
+                    "seller_match": seller_match,
                     "product_id": "product-state"
                     if item.get("id")
                     else "json-ld-or-url",
@@ -376,7 +386,7 @@ class MagazineLuizaSpider(BaseStoreSpider):
         )
         folded_h1 = cls._fold(h1)
         if folded_h1 == "oops" or folded_h1.startswith("oops"):
-            raise ParseError("Página Magalu não encontrada (soft-404)")
+            raise ListingGoneError("Página Magalu não encontrada (soft-404)")
         has_product = bool(
             item.get("id")
             or item.get("offerId")
@@ -386,7 +396,7 @@ class MagazineLuizaSpider(BaseStoreSpider):
         if not has_product:
             title = (response.css("title::text").get() or "").strip()
             if "pra voce e magalu" in cls._fold(title):
-                raise ParseError("Página Magalu não encontrada (soft-404)")
+                raise ListingGoneError("Página Magalu não encontrada (soft-404)")
 
     @classmethod
     def _selected_offer(cls, item: dict[str, Any], url: str) -> dict[str, Any]:

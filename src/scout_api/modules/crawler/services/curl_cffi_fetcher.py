@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import random
+import threading
 import time
 from typing import Any
 
@@ -43,8 +44,13 @@ class CurlCffiHtmlFetcher:
         base_delay: float = 0.75,
         max_delay: float = 12.0,
         rng: random.Random | None = None,
+        persist_cookies: bool = False,
     ) -> None:
         self._impersonate = impersonate
+        # Opt-in cookie reuse (per thread) for flows that must carry a session
+        # minted by an interstitial (e.g. Amazon "Continue shopping").
+        self._persist_cookies = persist_cookies
+        self._local = threading.local()
         self._timeout = timeout
         self._max_retries = max(0, max_retries)
         self._base_delay = base_delay
@@ -130,6 +136,15 @@ class CurlCffiHtmlFetcher:
         assert last_error is not None
         raise last_error
 
+    def _http_get(self, curl_requests: Any) -> Any:
+        if not self._persist_cookies:
+            return curl_requests.get
+        session = getattr(self._local, "session", None)
+        if session is None:
+            session = curl_requests.Session(impersonate=self._impersonate)
+            self._local.session = session
+        return session.get
+
     def _fetch_once(self, url: str) -> HtmlResponse:
         try:
             from curl_cffi import requests as curl_requests
@@ -152,7 +167,7 @@ class CurlCffiHtmlFetcher:
             "Upgrade-Insecure-Requests": "1",
         }
         try:
-            response = curl_requests.get(
+            response = self._http_get(curl_requests)(
                 url,
                 impersonate=self._impersonate,
                 headers=headers,

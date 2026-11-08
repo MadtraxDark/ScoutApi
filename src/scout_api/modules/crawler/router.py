@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from scout_api.modules.auth.deps import enforce_rate_limit, require_permission
 
-from .core.exceptions import ParseError, RequestError
+from .core.exceptions import ParseError, RequestError, classify_failure
 from .models.product import ProductOffer, ProductPriceItem
 from .schemas import CrawlErrorResponse, CrawlRequest
 from .services.offer_scrape_service import OfferScrapeService
@@ -70,6 +70,7 @@ def crawl_product(
                 "upstream_status": exc.upstream_status,
                 "retryable": exc.retryable,
                 "retry_after": exc.retry_after,
+                "kind": classify_failure(exc),
             },
         ) from exc
     except ParseError as exc:
@@ -126,6 +127,7 @@ def crawl_offer(
                 "upstream_status": exc.upstream_status,
                 "retryable": exc.retryable,
                 "retry_after": exc.retry_after,
+                "kind": classify_failure(exc),
             },
         ) from exc
     except ParseError as exc:

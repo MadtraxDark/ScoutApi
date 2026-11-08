@@ -66,9 +66,29 @@ No FX conversion in spiders.
 - Title, byline/brand, detail tables, feature bullets
 - Attributes via `resolve_product_identity` after structured specs
 
+## Payment conditions (BR)
+
+- `price` = Buy Box total as displayed. "N% off à vista no cartão de crédito" is a
+  **cash/card** condition, never Pix: it goes to `metadata.pricing`
+  (`cash_discount_percent`, `cash_discount_method` = `credit_card|card|boleto|pix|other`).
+  `pix_price` is only set when the page says Pix (rules above).
+- "(total parcelado R$ X)" -> `metadata.pricing.installment_total`; "sem juros" ->
+  `installment_interest_free`.
+- `original_price` normally comes from strike/basis price. When absent, the
+  installment total is used as reference **only if** the declared cash discount
+  reproduces the displayed price from it (a few cents tolerance); source
+  `installment-total-consistent-with-cash-discount`. Otherwise `None`.
+- "Preços menores encontrados / Poupe R$ X" (other sellers) and coupons never become
+  price.
+
 ## Images source
 
-- Official variant gallery: `colorImages` `hiRes` (then landing image)
+- Gallery of the **selected ASIN only**: `colorImages.initial` (balanced JSON parse),
+  accepted when its MAIN image matches `#landingImage` and the `landingAsinColor`
+  entry; otherwise discarded and only the confirmed landing image is used
+  (never `#imageBlock`/carousels). Dedup by image id, cap 15.
+- PDP URL forms `/dp/`, `/gp/product/`, `/gp/aw/d/` (mobile) and
+  `/exec/obidos/ASIN/` are canonicalised to `/dp/{ASIN}` before fetch
 - Exclude review/customer/recommendation imagery
 - Only when `include_images=true`
 
@@ -158,6 +178,16 @@ AOD / “outras ofertas” never becomes `price`. HTTP 500 → browser fallback;
 proxy only after classified `UPSTREAM_BLOCKED`.
 
 ## Known blocking behavior
+
+- **"Continue shopping" interstitial (2026-11):** tiny page with a GET form to
+  `/errors_page/validateCaptcha` (hidden `amzn`, `amzn-r`, `field-keywords`), no
+  image. Resolved by submitting the form with the same cookie session and
+  re-fetching the PDP (`amazon_continue.py`; HTTP leg in
+  `AmazonHttpFirstHtmlFetcher`, browser leg clicks the button in
+  `ChallengeResolver`). The HTTP leg uses `curl_cffi` (Chrome TLS) with
+  per-thread cookies: plain urllib is answered with HTTP 503 / soft-error pages.
+- A real HTTP 404/410 on the PDP is returned as-is (no browser/proxy
+  escalation); it is not a block.
 
 - Robot check / `validateCaptcha` / “not a robot” → **must be resolved** in
   the fetch layer (ADR 0017) via `ChallengeResolver` + offline

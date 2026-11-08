@@ -3219,13 +3219,13 @@ def build_search_queries(
 
     if identity.category == "cooler":
         parsed_cooler = parse_title_identity(identity.title, category="cooler")
-        model_phrase = parsed_cooler.model or model_search_phrase(
+        cooler_model = parsed_cooler.model or model_search_phrase(
             model=identity.model,
             title=identity.title,
         )
-        model_phrase = re.sub(r"\s+", " ", model_phrase or "").strip()
-        radiator_size = identity.category_attrs.get("radiator_size")
-        if not radiator_size:
+        cooler_model = re.sub(r"\s+", " ", cooler_model or "").strip()
+        radiator = identity.category_attrs.get("radiator_size")
+        if not radiator:
             from scout_api.modules.crawler.utils.product_attributes import (
                 resolve_product_identity,
             )
@@ -3235,15 +3235,15 @@ def build_search_queries(
                 attributes=("radiator_size",),
                 category="cooler",
             )
-            radiator_size = resolved.value("radiator_size")
-        size_phrase = re.sub(r"\s+", "", radiator_size or "").strip()
-        core = " ".join(part for part in (identity.brand, model_phrase) if part)
-        if core and size_phrase:
-            add(f"{core} {size_phrase}")
-        if core:
-            add(core)
-        if model_phrase and size_phrase:
-            add(f"{model_phrase} {size_phrase}")
+            radiator = resolved.value("radiator_size")
+        size_phrase = re.sub(r"\s+", "", radiator or "").strip()
+        cooler_core = " ".join(part for part in (identity.brand, cooler_model) if part)
+        if cooler_core and size_phrase:
+            add(f"{cooler_core} {size_phrase}")
+        if cooler_core:
+            add(cooler_core)
+        if cooler_model and size_phrase:
+            add(f"{cooler_model} {size_phrase}")
         for display in alias_displays:
             add(display)
         return queries[:5]

@@ -25,6 +25,7 @@ class CrawlError(BaseModel):
     retry_after: int | None = None
     rate_limit_scope: str | None = None
     rate_limit_policy: str | None = None
+    kind: str | None = None
 
 
 class CrawlErrorResponse(BaseModel):

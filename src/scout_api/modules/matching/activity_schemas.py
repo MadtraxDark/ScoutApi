@@ -53,6 +53,9 @@ class ActivityOffer(BaseModel):
     promotion_expires_at: datetime | None = None
     old_seller: str | None = None
     seller: str | None = None
+    # False for failed refreshes: no new state was observed (values carried over).
+    observed: bool = True
+    error_kind: str | None = None
 
 
 class ActivityItem(BaseModel):

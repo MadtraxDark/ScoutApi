@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from redis.exceptions import RedisError
 
 from .redis_client import RedisGateway
-from .redis_keys import domain_cooldown_key, url_cooldown_key
+from .redis_keys import domain_cooldown_key, store_cooldown_key, url_cooldown_key
 
 logger = logging.getLogger(__name__)
 
@@ -99,6 +99,57 @@ class DistributedCooldown:
             )
             self._gateway.reset()
             return CooldownAcquireResult(allowed=True, redis_ok=False)
+
+    def release(self, url: str, hostname: str, *, release_domain: bool) -> None:
+        """Free reservations after a failed fetch (best effort, fail-open)."""
+        client = self._gateway.get_client()
+        if client is None:
+            return
+        try:
+            client.delete(url_cooldown_key(url))
+            if release_domain and hostname:
+                client.delete(domain_cooldown_key(hostname))
+        except RedisError:
+            logger.warning(
+                "redis_operation_failed",
+                extra={"op": "cooldown_release"},
+                exc_info=True,
+            )
+            self._gateway.reset()
+
+    def set_store_cooldown(self, hostname: str, seconds: int) -> None:
+        """Pause a store host after classified upstream failures (shared)."""
+        client = self._gateway.get_client()
+        if client is None or not hostname or seconds <= 0:
+            return
+        try:
+            client.set(store_cooldown_key(hostname), b"1", ex=int(seconds))
+        except RedisError:
+            logger.warning(
+                "redis_operation_failed",
+                extra={"op": "store_cooldown_set"},
+                exc_info=True,
+            )
+            self._gateway.reset()
+
+    def store_cooldown_remaining(self, hostname: str) -> int | None:
+        """Seconds left of a store pause, 0 if none, None if Redis is down."""
+        client = self._gateway.get_client()
+        if client is None or not hostname:
+            return None
+        try:
+            pttl = client.pttl(store_cooldown_key(hostname))
+        except RedisError:
+            logger.warning(
+                "redis_operation_failed",
+                extra={"op": "store_cooldown_get"},
+                exc_info=True,
+            )
+            self._gateway.reset()
+            return None
+        if isinstance(pttl, int) and pttl > 0:
+            return max(1, (pttl + 999) // 1000)
+        return 0
 
 
 def _retry_after_from_pttl(pttl: object, *, fallback: int) -> int:

@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from threading import Lock
 from typing import TypeVar
 from urllib.parse import urlparse
@@ -19,7 +20,16 @@ from .distributed_single_flight import (
     DistributedSingleFlight,
     NullDistributedSingleFlight,
 )
-from .exceptions import RequestError
+from .exceptions import (
+    FAILURE_BLOCKED,
+    FAILURE_INFRA,
+    FAILURE_LOCAL_THROTTLE,
+    FAILURE_TIMEOUT,
+    FAILURE_UPSTREAM,
+    ParseError,
+    RequestError,
+    classify_failure,
+)
 from .fingerprints import canonicalize_url
 from .redis_keys import scrape_cache_key
 from .scrape_purpose import ScrapePurpose
@@ -54,6 +64,8 @@ class ScrapeGuard:
         distributed_cooldown: DistributedCooldown | None = None,
         distributed_lock_enabled: bool = False,
         distributed_cooldown_enabled: bool = False,
+        store_failure_cooldown_base_seconds: int = 30,
+        store_failure_cooldown_max_seconds: int = 300,
     ) -> None:
         self._url_cooldown_seconds = max(0, url_cooldown_seconds)
         self._domain_min_interval_seconds = max(0.0, domain_min_interval_seconds)
@@ -70,6 +82,12 @@ class ScrapeGuard:
         self._distributed_cooldown_enabled = distributed_cooldown_enabled
         self._url_blocked_until: dict[str, float] = {}
         self._domain_next_ok: dict[str, float] = {}
+        self._store_failure_base = max(0, store_failure_cooldown_base_seconds)
+        self._store_failure_max = max(
+            self._store_failure_base, store_failure_cooldown_max_seconds
+        )
+        self._store_failures: dict[str, int] = {}
+        self._store_blocked_until: dict[str, float] = {}
         self._lock = Lock()
 
     def get_cached(self, url: str) -> ProductPriceItem | None:
@@ -132,6 +150,15 @@ class ScrapeGuard:
         key = self._cache_key(url)
         host = (urlparse(url).hostname or "").lower()
 
+        store_wait = self.store_cooldown_remaining(host)
+        if store_wait > 0:
+            # The store recently blocked/timed out: pause this store only, with
+            # an escalating window, instead of hammering it. Other stores are
+            # unaffected (Proxy Cost Mode / egress IP protection).
+            self._raise_cooldown(
+                url, code="RATE_LIMITED", retry_after=store_wait, store_pause=True
+            )
+
         if (
             self._distributed_cooldown_enabled
             and self._distributed_cooldown is not None
@@ -156,11 +183,98 @@ class ScrapeGuard:
 
         self._acquire_local(url, key, host)
 
+    @contextmanager
+    def live_fetch(
+        self,
+        url: str,
+        *,
+        purpose: ScrapePurpose = ScrapePurpose.UNSPECIFIED,
+    ) -> Iterator[None]:
+        """Reserve for a live fetch and release/penalise correctly on failure."""
+        self.acquire_for_live_fetch(url, purpose=purpose)
+        try:
+            yield
+        except (RequestError, ParseError) as exc:
+            self.release_failed_fetch(url, exc)
+            raise
+
+    def store_cooldown_remaining(self, host: str) -> int:
+        """Seconds left of the failure pause for ``host`` (0 when none)."""
+        if not host:
+            return 0
+        now = time.monotonic()
+        with self._lock:
+            until = self._store_blocked_until.get(host, 0.0)
+        local = max(0, int(until - now + 0.999)) if until > now else 0
+        remote = 0
+        if (
+            self._distributed_cooldown_enabled
+            and self._distributed_cooldown is not None
+        ):
+            remote = self._distributed_cooldown.store_cooldown_remaining(host) or 0
+        return max(local, remote)
+
+    def release_failed_fetch(self, url: str, exc: BaseException) -> None:
+        """Undo the pre-fetch reservation after a failed live fetch.
+
+        The URL lock is always freed so a user retry is not rejected by our own
+        cooldown. Browser-infra failures (never reached the store) also free the
+        domain spacing; extraction failures keep it (the store was hit). Real store-side
+        failures (block, timeout, upstream error) open an escalating per-store
+        pause instead.
+        """
+        key = self._cache_key(url)
+        host = (urlparse(url).hostname or "").lower()
+        kind = classify_failure(exc)
+        if kind == FAILURE_LOCAL_THROTTLE:
+            # Rejected by our own cooldown before reaching the store: the
+            # existing reservation belongs to someone else. Leave it intact.
+            return
+        store_side = kind in (FAILURE_BLOCKED, FAILURE_TIMEOUT, FAILURE_UPSTREAM)
+        with self._lock:
+            self._url_blocked_until.pop(key, None)
+            if host and kind == FAILURE_INFRA:
+                self._domain_next_ok.pop(host, None)
+        if (
+            self._distributed_cooldown_enabled
+            and self._distributed_cooldown is not None
+        ):
+            self._distributed_cooldown.release(
+                url, host, release_domain=bool(host) and kind == FAILURE_INFRA
+            )
+        if store_side and host and self._store_failure_base > 0:
+            self._open_store_pause(host)
+
+    def _open_store_pause(self, host: str) -> None:
+        with self._lock:
+            count = self._store_failures.get(host, 0) + 1
+            self._store_failures[host] = count
+            seconds = min(
+                self._store_failure_max,
+                self._store_failure_base * (2 ** (count - 1)),
+            )
+            self._store_blocked_until[host] = time.monotonic() + seconds
+        if (
+            self._distributed_cooldown_enabled
+            and self._distributed_cooldown is not None
+        ):
+            self._distributed_cooldown.set_store_cooldown(host, int(seconds))
+
+    def _clear_store_failures(self, url: str) -> None:
+        host = (urlparse(url).hostname or "").lower()
+        if not host:
+            return
+        with self._lock:
+            self._store_failures.pop(host, None)
+            self._store_blocked_until.pop(host, None)
+
     def store_success(self, url: str, item: ProductPriceItem) -> None:
+        self._clear_store_failures(url)
         self._cache.set(self._cache_key(url), item, self._result_cache_ttl_seconds)
 
     def store_offer_success(self, url: str, offer: ProductOffer) -> None:
         """Cache an offer without downgrading an existing full product entry."""
+        self._clear_store_failures(url)
         key = self._cache_key(url)
         existing = self._cache.get(key)
         if isinstance(existing, ProductPriceItem):
@@ -236,7 +350,18 @@ class ScrapeGuard:
             self._purge_expired_locked(now)
 
     @staticmethod
-    def _raise_cooldown(url: str, *, code: str, retry_after: int) -> None:
+    def _raise_cooldown(
+        url: str, *, code: str, retry_after: int, store_pause: bool = False
+    ) -> None:
+        if store_pause:
+            raise RequestError(
+                "A loja falhou há pouco; pausa de proteção "
+                f"({retry_after}s) antes de nova tentativa nesta loja",
+                code="RATE_LIMITED",
+                url=url,
+                retryable=True,
+                retry_after=retry_after,
+            )
         if code == "RATE_LIMITED":
             raise RequestError(
                 "Muitas requisições seguidas para a mesma loja; aguarde "

@@ -265,3 +265,19 @@ def test_product_scrape_include_images_true_extracts_once(monkeypatch) -> None: 
         "https://a-static.mlcdn.com.br/ps5-side.jpg",
         "https://www.magazineluiza.com.br/relative/ps5-back.jpg",
     ]
+
+
+def test_magalu_seller_match_flags_requested_vs_fallback_offer() -> None:
+    spider = MagazineLuizaSpider()
+    body = (FIXTURES / "product_structured_offer.html").read_bytes()
+
+    def _offer(seller_id: str) -> ProductOffer:
+        url = f"https://www.magazineluiza.com.br/p/240590700/ga/gap5/?seller_id={seller_id}"
+        return spider.extract_offer(
+            HtmlResponse(url, body=body, encoding="utf-8", request=Request(url))
+        )
+
+    assert _offer("kabum").metadata["source"]["seller_match"] == "requested"
+    flagged = _offer("loja-inexistente")
+    assert flagged.metadata["source"]["seller_match"] == "fallback"
+    assert flagged.seller == "kabum"  # real seller of the offer shown, never invented

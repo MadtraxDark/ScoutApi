@@ -28,24 +28,24 @@ class ProductDetailsService:
         self, url: str, *, include_images: bool = False
     ) -> ProductDetails:
         spider = self._spider_for(url)
-        self._guard.acquire_for_live_fetch(url)
-        response = self._fetch(spider.prepare_fetch_url(url))
-        details = spider.extract_details(response)
-        proxy_used = _proxy_used(response)
-        urls, image_meta = extract_images_for_response(
-            spider,
-            response,
-            include_images=include_images,
-            proxy_used=proxy_used,
-        )
-        if include_images:
-            details = details.model_copy(
-                update={
-                    "images": urls,
-                    "image_candidates": candidates_from_urls(urls),
-                    "metadata": {**details.metadata, **image_meta},
-                }
+        with self._guard.live_fetch(url):
+            response = self._fetch(spider.prepare_fetch_url(url))
+            details = spider.extract_details(response)
+            proxy_used = _proxy_used(response)
+            urls, image_meta = extract_images_for_response(
+                spider,
+                response,
+                include_images=include_images,
+                proxy_used=proxy_used,
             )
+            if include_images:
+                details = details.model_copy(
+                    update={
+                        "images": urls,
+                        "image_candidates": candidates_from_urls(urls),
+                        "metadata": {**details.metadata, **image_meta},
+                    }
+                )
         return details
 
     def _fetch(self, url: str) -> HtmlResponse:

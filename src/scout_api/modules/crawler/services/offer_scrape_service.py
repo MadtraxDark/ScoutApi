@@ -41,12 +41,12 @@ class OfferScrapeService:
             if again is not None:
                 return again
             spider = self._spider_for(url)
-            self._guard.acquire_for_live_fetch(url, purpose=purpose)
-            response = self._fetch(spider.prepare_fetch_url(url))
-            offer = spider.extract_offer(response)
-            # Same HTML → details are free; populate product cache for Match.
-            details = spider.extract_details(response)
-            item = compose_product_price_item(offer, details)
+            with self._guard.live_fetch(url, purpose=purpose):
+                response = self._fetch(spider.prepare_fetch_url(url))
+                offer = spider.extract_offer(response)
+                # Same HTML → details are free; populate product cache for Match.
+                details = spider.extract_details(response)
+                item = compose_product_price_item(offer, details)
             self._guard.store_success(url, item)
             return offer
 

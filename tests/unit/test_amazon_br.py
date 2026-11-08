@@ -155,3 +155,133 @@ def test_amazon_br_full_scrape_only_calls_gallery_when_requested(
     images.assert_not_called()
     service.scrape(URL, include_images=True)
     images.assert_called_once()
+
+
+# --- Card cash discount page (B0HJ9YB5QN-like): no Pix, no strike price --------
+MOBILE_URL = "https://www.amazon.com.br/gp/aw/d/B0HJ9YB5QN?th=1&ref_=sbx"
+
+
+def _variants_response() -> HtmlResponse:
+    return response_from_fixture("br_card_cash_discount_variants.html", MOBILE_URL)
+
+
+def test_amazon_br_mobile_url_is_canonicalised_before_fetch() -> None:
+    spider = AmazonBrazilSpider()
+    assert (
+        spider.prepare_fetch_url(MOBILE_URL)
+        == "https://www.amazon.com.br/dp/B0HJ9YB5QN"
+    )
+
+
+def test_amazon_br_cash_discount_is_not_pix_and_keeps_payment_conditions() -> None:
+    offer = AmazonBrazilSpider().extract_offer(_variants_response())
+
+    assert offer.price == Decimal("10799.09")
+    assert offer.pix_price is None  # "10% off à vista no cartão" is not Pix
+    assert offer.installment_count == 12
+    assert offer.installment_price == Decimal("999.99")
+    assert offer.seller == "Amazon.com.br"
+    assert offer.metadata["fulfilled_by"] == "Amazon.com.br"
+    assert offer.availability == "available"
+    pricing = offer.metadata["pricing"]
+    assert pricing["cash_discount_percent"] == "10"
+    assert pricing["cash_discount_method"] == "credit_card"
+    assert pricing["installment_total"] == "11999.00"
+    assert pricing["installment_interest_free"] is True
+    # The installment total is the reference price only because 10% off of it
+    # reproduces the displayed price.
+    assert offer.original_price == Decimal("11999.00")
+    assert offer.discount_percentage == Decimal("10.00")
+    assert (
+        offer.metadata["source"]["original_price"]
+        == "installment-total-consistent-with-cash-discount"
+    )
+    assert offer.metadata["parent_asin"] == "B0HJK997VM"
+
+
+def test_amazon_br_images_are_the_selected_variant_gallery_only() -> None:
+    images = AmazonBrazilSpider().extract_images(_variants_response())
+
+    assert len(images) == 11
+    assert images[0].endswith("71E-J09sb6L._AC_SL1500_.jpg")
+    ids = [u.split("/I/")[1].split(".")[0] for u in images]
+    assert len(set(ids)) == len(ids)
+
+
+def _buybox_page(
+    *, price: str, body: str, gallery: str = "", landing: str = ""
+) -> HtmlResponse:
+    html = (
+        '<html><head><title>x</title></head><body><input id="ASIN" value="B0AAAAAAA1">'
+        '<span id="productTitle">Produto</span>'
+        f'<div id="ppd"><div id="corePrice_feature_div"><span class="a-price">'
+        f'<span class="a-offscreen">{price}</span></span></div>'
+        f'<div id="buybox">{body}</div></div>{landing}{gallery}</body></html>'
+    )
+    return HtmlResponse(
+        "https://www.amazon.com.br/dp/B0AAAAAAA1",
+        body=html.encode(),
+        encoding="utf-8",
+        request=Request("https://www.amazon.com.br/dp/B0AAAAAAA1"),
+    )
+
+
+def test_amazon_br_incoherent_installment_total_gives_no_original_price() -> None:
+    page = _buybox_page(
+        price="R$ 9.000,00",
+        body=(
+            "<span>10% off à vista</span><span>no cartão de crédito</span>"
+            "<span>ou em até 12x de R$ 1.000,00 sem juros</span>"
+            "<span>(total parcelado R$ 12.000,00)</span>"
+        ),
+    )
+    offer = AmazonBrazilSpider().extract_offer(page)
+    assert offer.original_price is None
+    assert offer.discount_percentage is None
+    assert offer.metadata["pricing"]["installment_total"] == "12000.00"
+
+
+def test_amazon_br_explicit_pix_discount_is_reported_as_pix() -> None:
+    page = _buybox_page(
+        price="R$ 900,00",
+        body="<span>R$ 850,00 no Pix</span><span>10% off à vista no Pix</span>",
+    )
+    offer = AmazonBrazilSpider().extract_offer(page)
+    assert offer.pix_price == Decimal("850.00")
+    assert offer.metadata["pricing"]["cash_discount_method"] == "pix"
+
+
+def test_amazon_br_gallery_for_another_asin_is_discarded() -> None:
+    other = (
+        "<script>var x = {'colorImages': { 'initial': A.$.parseJSON('"
+        '[{"hiRes":"https://m.media-amazon.com/images/I/OTHERMAIN1._AC_SL1500_.jpg",'
+        '"variant":"MAIN"},'
+        '{"hiRes":"https://m.media-amazon.com/images/I/OTHERPT001._AC_SL1000_.jpg",'
+        '"variant":"PT01"}]'
+        "') }};</script>"
+    )
+    landing = (
+        '<img id="landingImage" data-old-hires="https://m.media-amazon.com/images/I/'
+        'MINEMAIN01._AC_SL1500_.jpg">'
+    )
+    images = AmazonBrazilSpider().extract_images(
+        _buybox_page(price="R$ 10,00", body="", gallery=other, landing=landing)
+    )
+    assert images == ["https://m.media-amazon.com/images/I/MINEMAIN01._AC_SL1500_.jpg"]
+
+
+def test_amazon_br_gallery_dedups_same_image_id_and_caps_size() -> None:
+    items = ",".join(
+        f'{{"hiRes":"https://m.media-amazon.com/images/I/IMG{i:07d}._AC_SL1000_.jpg"}}'
+        for i in range(30)
+    )
+    dup = '{"hiRes":"https://m.media-amazon.com/images/I/IMG0000000._AC_SX342_.jpg"}'
+    script = (
+        "<script>var x = {'colorImages': { 'initial': A.$.parseJSON('"
+        f"[{items},{dup}]') }};</script>"
+    )
+    images = AmazonBrazilSpider().extract_images(
+        _buybox_page(price="R$ 10,00", body="", gallery=script)
+    )
+    assert len(images) == 15
+    assert images[0].endswith("IMG0000000._AC_SL1000_.jpg")

@@ -27,17 +27,35 @@ from .marketplace import AmazonMarketplace
 
 Availability = Literal["available", "out_of_stock", "unavailable"]
 
-_ASIN_RE = re.compile(r"(?:/dp/|/gp/product/)([A-Z0-9]{10})(?:[/?]|$)", re.I)
+# Desktop, legacy and mobile (``/gp/aw/d/``) PDP forms all carry the ASIN.
+_ASIN_RE = re.compile(
+    r"(?:/dp/|/gp/product/|/gp/aw/d/|/exec/obidos/ASIN/)([A-Z0-9]{10})(?:[/?]|$)",
+    re.I,
+)
 _ASIN_TOKEN = re.compile(r"^[A-Z0-9]{10}$", re.I)
 _PARENT_ASIN_RE = re.compile(
     r"""["']parentAsin["']\s*:\s*["']([A-Z0-9]{10})["']""",
     re.I,
 )
-_COLOR_IMAGES_RE = re.compile(
-    r"""['"]colorImages['"]\s*:\s*\{\s*['"]initial['"]\s*:\s*"""
-    r"""(?:A\.\$\.parseJSON\(['"](.+?)['"]\)|(\[[\s\S]*?\]))\s*\}""",
+_COLOR_INITIAL_RE = re.compile(
+    r"""['"]colorImages['"]\s*:\s*\{\s*['"]initial['"]\s*:\s*""",
     re.I,
 )
+_LANDING_COLOR_RE = re.compile(r""""landingAsinColor"\s*:\s*"([^"]+)"\s*,""")
+_COLOR_MAP_RE = re.compile(r""""colorImages"\s*:\s*(?=\{\s*")""")
+_IMAGE_ID_RE = re.compile(r"/images/[A-Za-z]/([^./?]+)\.")
+_CASH_DISCOUNT_RE = re.compile(
+    r"""(\d{1,2}(?:[.,]\d{1,2})?)\s*%\s*off\s*(?:à|a)\s*vista"""
+    r"""(?:\s+(?:no|na|com|via))?\s*([a-zçãáéíóúô ]{0,40})""",
+    re.I,
+)
+_INSTALLMENT_TOTAL_RE = re.compile(
+    r"""total\s+parcelado\s*(?:de\s*)?R\$\s*([\d.]+,\d{2})""", re.I
+)
+_INTEREST_FREE_RE = re.compile(
+    r"""\d+\s*x\s*de\s*R\$\s*[\d.]+,\d{2}\s*sem\s+juros""", re.I
+)
+MAX_AMAZON_IMAGES = 15
 _DIMENSION_VALUES_RE = re.compile(
     r""""dimensionValuesDisplayData"\s*:\s*(\{.*?\})\s*,""",
     re.S,
@@ -124,6 +142,12 @@ def extract_amazon_offer(
     original, original_source = extract_list_price(
         response, marketplace.currency, price
     )
+    payment = extract_payment_conditions(response, marketplace)
+    if original is None:
+        derived = derive_original_from_payment(payment, price)
+        if derived is not None:
+            original = derived
+            original_source = "installment-total-consistent-with-cash-discount"
     discount = None
     if original is not None and original > price:
         discount = ((original - price) * 100 / original).quantize(Decimal("0.01"))
@@ -137,6 +161,7 @@ def extract_amazon_offer(
         response, marketplace
     )
     pricing_meta = extract_conditional_pricing(response, marketplace)
+    pricing_meta.update(payment_metadata(payment))
     parent_asin = extract_parent_asin(response.text or "", asin)
     variants = extract_selected_variant_dimensions(response.text or "", asin)
 
@@ -149,6 +174,7 @@ def extract_amazon_offer(
             "availability": availability_source,
             "seller": seller_source,
             "asin": "url-or-dom",
+            "payment_conditions": "buybox-text" if payment else "not-found",
         },
         "marketplace": marketplace.host,
         "asin": asin,
@@ -272,24 +298,117 @@ def extract_amazon_details(
 
 
 def extract_amazon_images(response: Response) -> list[str]:
+    """Gallery of the *selected* ASIN/variant only.
+
+    Source: ``colorImages.initial`` (Amazon's own gallery for the landing ASIN),
+    accepted only when its MAIN image matches the confirmed landing image and the
+    ``landingAsinColor`` entry. If identity cannot be confirmed the gallery is
+    dropped and only the confirmed landing image is used. Carousels, swatches and
+    related-product images are never scraped.
+    """
     ensure_amazon_product_page(response)
+    text = response.text or ""
+    landing = _landing_image_urls(response)
+    landing_ids = {_image_id(u) for u in landing}
+    gallery = extract_color_images(text)
+    if gallery and not _gallery_matches_selected(gallery, landing_ids, text):
+        gallery = []
+    urls = gallery or landing[:1]
+    seen: set[str] = set()
+    unique: list[str] = []
+    for url in urls:
+        key = _image_id(url)
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(url)
+    return BaseStoreSpider.normalize_image_urls(
+        unique[:MAX_AMAZON_IMAGES], base_url=response.url
+    )
+
+
+def _image_id(url: str) -> str:
+    match = _IMAGE_ID_RE.search(url or "")
+    return match.group(1) if match else (url or "")
+
+
+def _landing_image_urls(response: Response) -> list[str]:
     urls: list[str] = []
-    urls.extend(extract_color_images(response.text or ""))
-    if not urls:
-        landing = response.css("#landingImage::attr(data-old-hires)").get()
-        if landing:
-            urls.append(landing.strip())
-        dynamic = response.css("#landingImage::attr(data-a-dynamic-image)").get()
-        urls.extend(_dynamic_image_urls(dynamic))
-    if not urls:
-        urls.extend(
-            u.strip()
-            for u in response.css(
-                "#altImages img::attr(src), #imageBlock img::attr(src)"
-            ).getall()
-            if u and "transparent-pixel" not in u and "sprite" not in u.lower()
+    hires = response.css("#landingImage::attr(data-old-hires)").get()
+    if hires and hires.strip():
+        urls.append(hires.strip())
+    urls.extend(
+        _dynamic_image_urls(
+            response.css("#landingImage::attr(data-a-dynamic-image)").get()
         )
-    return BaseStoreSpider.normalize_image_urls(urls, base_url=response.url)
+    )
+    return urls
+
+
+def _gallery_matches_selected(
+    gallery: list[str], landing_ids: set[str], text: str
+) -> bool:
+    """MAIN image must belong to the landing ASIN (when it can be checked)."""
+    main_id = _image_id(gallery[0])
+    if landing_ids and main_id not in landing_ids:
+        return False
+    label_match = _LANDING_COLOR_RE.search(text)
+    color_map = _json_object_after(text, _COLOR_MAP_RE)
+    if label_match and isinstance(color_map, dict):
+        entry = color_map.get(label_match.group(1))
+        if isinstance(entry, list) and entry and isinstance(entry[0], dict):
+            mapped = _first_image_url(entry[0])
+            if mapped and _image_id(mapped) != main_id:
+                return False
+    return True
+
+
+def _json_object_after(text: str, pattern: re.Pattern[str]) -> Any:
+    match = pattern.search(text)
+    if not match:
+        return None
+    return _scan_json(text, match.end())
+
+
+def _scan_json(text: str, start: int) -> Any:
+    """Parse the balanced JSON object/array starting at ``text[start]``."""
+    if start >= len(text) or text[start] not in "{[":
+        return None
+    opener = text[start]
+    closer = "}" if opener == "{" else "]"
+    depth = 0
+    in_string = False
+    escaped = False
+    for index in range(start, len(text)):
+        char = text[index]
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+            continue
+        if char == '"':
+            in_string = True
+        elif char == opener:
+            depth += 1
+        elif char == closer:
+            depth -= 1
+            if depth == 0:
+                try:
+                    return json.loads(text[start : index + 1])
+                except json.JSONDecodeError:
+                    return None
+    return None
+
+
+def _first_image_url(item: dict[str, Any]) -> str | None:
+    for key in ("hiRes", "large", "main"):
+        value = item.get(key)
+        if isinstance(value, str) and value.startswith("http"):
+            return value
+    return None
 
 
 def ensure_amazon_product_page(response: Response) -> None:
@@ -471,6 +590,87 @@ def extract_installment(
     return amount, count, "buybox-installment"
 
 
+def extract_payment_conditions(
+    response: Response, marketplace: AmazonMarketplace
+) -> dict[str, Any]:
+    """Explicit card/cash conditions shown in the buy box (BR only).
+
+    ``cash_discount_percent`` + ``cash_discount_method`` come from text such as
+    "10% off à vista no cartão de crédito"; ``installment_total`` from
+    "(total parcelado R$ X)". A cash discount is **not** a Pix price: Pix is only
+    reported by :func:`extract_pix_price` when the page says Pix.
+    """
+    if marketplace.country != "BR":
+        return {}
+    text = " ".join(
+        " ".join(t.split())
+        for t in response.css(
+            "#ppd ::text, #buybox ::text, #desktop_qualifiedBuyBox ::text, "
+            "#apex_desktop ::text, #installmentCalculatorCentral_feature_div ::text"
+        ).getall()
+        if t and t.strip()
+    )
+    found: dict[str, Any] = {}
+    cash = _CASH_DISCOUNT_RE.search(text)
+    if cash:
+        try:
+            percent = Decimal(cash.group(1).replace(",", "."))
+        except ArithmeticError:
+            percent = Decimal(0)
+        if Decimal(0) < percent < Decimal(100):
+            tail = cash.group(2).casefold()
+            if "pix" in tail:
+                method = "pix"
+            elif "boleto" in tail:
+                method = "boleto"
+            elif "cart" in tail:
+                method = "credit_card" if "cr" in tail else "card"
+            else:
+                method = "other"
+            found["cash_discount_percent"] = percent
+            found["cash_discount_method"] = method
+    total = _INSTALLMENT_TOTAL_RE.search(text)
+    if total:
+        try:
+            found["installment_total"] = parse_money(
+                total.group(1), marketplace.currency
+            )
+        except MissingPriceError:
+            pass
+    if _INTEREST_FREE_RE.search(text):
+        found["installment_interest_free"] = True
+    return found
+
+
+def derive_original_from_payment(
+    payment: dict[str, Any], price: Decimal
+) -> Decimal | None:
+    """Installment total as reference price, only when the page proves it.
+
+    Requires a declared cash discount whose percentage reproduces ``price`` from
+    the installment total (within a few cents). Otherwise no original price.
+    """
+    total = payment.get("installment_total")
+    percent = payment.get("cash_discount_percent")
+    if not isinstance(total, Decimal) or not isinstance(percent, Decimal):
+        return None
+    if total <= price:
+        return None
+    expected = total * (Decimal(100) - percent) / Decimal(100)
+    tolerance = max(Decimal("0.05"), total * Decimal("0.0005"))
+    if abs(expected - price) > tolerance:
+        return None
+    return total
+
+
+def payment_metadata(payment: dict[str, Any]) -> dict[str, Any]:
+    """JSON-safe form (Decimals as strings) for ``metadata.pricing``."""
+    return {
+        key: (str(value) if isinstance(value, Decimal) else value)
+        for key, value in payment.items()
+    }
+
+
 def extract_conditional_pricing(
     response: Response, marketplace: AmazonMarketplace
 ) -> dict[str, Any]:
@@ -638,19 +838,10 @@ def extract_selected_variant_dimensions(text: str, asin: str) -> dict[str, str]:
 
 
 def extract_color_images(text: str) -> list[str]:
-    match = _COLOR_IMAGES_RE.search(text)
+    match = _COLOR_INITIAL_RE.search(text)
     if not match:
         return []
-    raw = match.group(1) or match.group(2) or ""
-    if match.group(1):
-        try:
-            raw = raw.encode("utf-8").decode("unicode_escape")
-        except UnicodeDecodeError:
-            pass
-    try:
-        images = json.loads(raw)
-    except json.JSONDecodeError:
-        return []
+    images = _color_initial_value(text, match.end())
     if not isinstance(images, list):
         return []
     urls: list[str] = []
@@ -680,6 +871,39 @@ def extract_color_images(text: str) -> list[str]:
                     urls.append(best)
                     break
     return urls
+
+
+def _color_initial_value(text: str, pos: int) -> Any:
+    """``initial`` is either a raw JSON array or ``A.$.parseJSON('[...]')``."""
+    wrapper = "A.$.parseJSON("
+    if text.startswith(wrapper, pos):
+        quote_at = pos + len(wrapper)
+        quote = text[quote_at : quote_at + 1]
+        if quote not in {"'", '"'}:
+            return None
+        end = quote_at + 1
+        while end < len(text):
+            if text[end] == "\\":
+                end += 2
+                continue
+            if text[end] == quote:
+                break
+            end += 1
+        raw = text[quote_at + 1 : end]
+        for candidate in (raw, _unescape_js(raw)):
+            try:
+                return json.loads(candidate)
+            except json.JSONDecodeError:
+                continue
+        return None
+    return _scan_json(text, pos)
+
+
+def _unescape_js(raw: str) -> str:
+    try:
+        return raw.encode("utf-8").decode("unicode_escape")
+    except UnicodeDecodeError:
+        return raw
 
 
 def extract_brand(response: Response, specifications: dict[str, Any]) -> str | None:

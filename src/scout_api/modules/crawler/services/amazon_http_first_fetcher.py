@@ -16,6 +16,7 @@ from scrapy.http import HtmlResponse
 
 from ..core.exceptions import RequestError
 from ..core.proxy_policy import proxy_policy_for_url
+from .amazon_continue import continue_interstitial_url
 from .html_fetcher import (
     HtmlFetcher,
     is_amazon_robot_check,
@@ -26,7 +27,10 @@ from .html_fetcher import (
 
 logger = logging.getLogger(__name__)
 
-_ASIN_IN_URL = re.compile(r"(?:/dp/|/gp/product/)([A-Z0-9]{10})(?:[/?]|$)", re.I)
+_ASIN_IN_URL = re.compile(
+    r"(?:/dp/|/gp/product/|/gp/aw/d/|/exec/obidos/ASIN/)([A-Z0-9]{10})(?:[/?]|$)",
+    re.I,
+)
 
 _BUYBOX_SIGNAL_SELECTORS = (
     "#ppd .apex-pricetopay-value .a-offscreen",
@@ -188,6 +192,11 @@ class AmazonHttpFirstHtmlFetcher:
         try:
             response = self._http.fetch(url)
         except RequestError as exc:
+            if exc.upstream_status in {404, 410}:
+                # A real "not found" is an answer, not a block: the browser would
+                # only receive the same page (or a soft-error shell mistaken for
+                # a block) and burn ~1 min plus proxy budget.
+                raise
             if exc.code not in {
                 "UPSTREAM_BLOCKED",
                 "AUTH_REQUIRED",
@@ -201,6 +210,7 @@ class AmazonHttpFirstHtmlFetcher:
             )
             return self._browser.fetch(url)
 
+        response = self._clear_continue_interstitial(response, url)
         text = response.text or ""
         title_node = response.css("title::text").get()
         title = title_node.strip() if title_node else None
@@ -264,6 +274,31 @@ class AmazonHttpFirstHtmlFetcher:
 
         logger.info("amazon_http_empty_buybox_fallback_browser", extra={"url": url})
         return self._browser.fetch(url)
+
+    def _clear_continue_interstitial(
+        self, response: HtmlResponse, url: str
+    ) -> HtmlResponse:
+        """Submit Amazon's "Continue shopping" form over HTTP and re-fetch the PDP.
+
+        Challenge resolution (ADR 0017): no third-party solver, just what a
+        browser does. On any failure the original response is returned so the
+        normal browser escalation still applies.
+        """
+        target = continue_interstitial_url(
+            response.text or "", base_url=str(response.url or url)
+        )
+        if target is None:
+            return response
+        try:
+            self._http.fetch(target)
+            resumed = self._http.fetch(url)
+        except RequestError as exc:
+            if exc.upstream_status in {404, 410}:
+                raise  # the PDP really does not exist; same rule as ``fetch``
+            logger.info("amazon_http_continue_failed", extra={"url": url})
+            return response
+        logger.info("amazon_http_continue_submitted", extra={"url": url})
+        return resumed
 
     @staticmethod
     def _annotate_http(response: HtmlResponse, *, url: str) -> HtmlResponse:

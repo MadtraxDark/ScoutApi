@@ -2835,9 +2835,13 @@ def build_html_fetcher(
         )
     browser = StoreAwareHtmlFetcher(direct=direct, proxied=proxied, http=http)
     # Amazon HTTP leg only (non-Amazon never hits this fetcher).
-    amazon_http = UrllibHtmlFetcher(
-        user_agent=_AMAZON_HTTP_USER_AGENT,
-        timeout=urllib_timeout,
+    # Browser-like TLS (curl_cffi) + per-thread cookies: plain urllib is answered
+    # with HTTP 503 / soft-error pages, and the "Continue shopping" interstitial
+    # needs the session cookie it mints (see amazon_continue.py).
+    from .curl_cffi_fetcher import CurlCffiHtmlFetcher as _AmazonCurlFetcher
+
+    amazon_http = _AmazonCurlFetcher(
+        timeout=float(urllib_timeout), max_retries=1, persist_cookies=True
     )
     amazon_first = AmazonHttpFirstHtmlFetcher(http=amazon_http, browser=browser)
 

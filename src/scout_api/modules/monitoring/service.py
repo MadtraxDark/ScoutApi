@@ -5,12 +5,18 @@ from __future__ import annotations
 import logging
 import time
 from datetime import datetime
+from itertools import zip_longest
 from typing import Any
+from urllib.parse import urlparse
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from scout_api.core.config import Settings, get_settings
+from scout_api.modules.crawler.core.scrape_guard import ScrapeGuard
+from scout_api.modules.crawler.services.product_scrape_service import (
+    get_shared_scrape_guard,
+)
 from scout_api.modules.matching.models import MonitorSchedulerState, StoreListing
 from scout_api.modules.matching.offer_refresh_service import OfferRefreshService
 from scout_api.modules.matching.repository import MatchingRepository
@@ -26,12 +32,26 @@ from scout_api.modules.monitoring.claim import (
 )
 from scout_api.modules.monitoring.hooks import (
     initialize_listing_schedule,
+    mark_check_deferred,
     mark_check_failure,
 )
 from scout_api.modules.monitoring.promotion import expire_due_promotions
 from scout_api.modules.monitoring.schedule import ensure_aware, utcnow
 
 logger = logging.getLogger(__name__)
+
+
+def _interleave_by_store(listings: list[StoreListing]) -> list[StoreListing]:
+    """Round-robin across stores so one host is never hit back-to-back."""
+    groups: dict[str, list[StoreListing]] = {}
+    for listing in listings:
+        groups.setdefault(listing.store or "", []).append(listing)
+    return [
+        item
+        for row in zip_longest(*groups.values())
+        for item in row
+        if item is not None
+    ]
 
 
 class OfferMonitorService:
@@ -42,8 +62,10 @@ class OfferMonitorService:
         refresh_service: OfferRefreshService | None = None,
         settings: Settings | None = None,
         worker_id: str | None = None,
+        guard: ScrapeGuard | None = None,
     ) -> None:
         self._session = session
+        self._guard = guard
         self._settings = settings or get_settings()
         self._refresh = refresh_service or OfferRefreshService(session=session)
         self.worker_id = worker_id or new_worker_id()
@@ -95,6 +117,13 @@ class OfferMonitorService:
             listing.next_check_at = moment
         return expired
 
+    def _store_pause_remaining(self, listing: StoreListing) -> int:
+        host = (urlparse(listing.url or "").hostname or "").lower()
+        if not host:
+            return 0
+        guard = self._guard or get_shared_scrape_guard()
+        return guard.store_cooldown_remaining(host)
+
     def sweep_once(
         self,
         *,
@@ -112,8 +141,37 @@ class OfferMonitorService:
             settings=self._settings,
         )
         results: list[dict[str, Any]] = []
-        for listing in claimed:
+        for listing in _interleave_by_store(claimed):
             self.apply_wall_clock_promo_expiry(listing, now=moment)
+            paused_for = self._store_pause_remaining(listing)
+            if paused_for > 0:
+                # One struggling store must not burn the batch (or the others):
+                # defer its listings without counting failures or writing events.
+                mark_check_deferred(
+                    listing,
+                    reason="STORE_PAUSED",
+                    retry_after=paused_for,
+                    now=moment,
+                    settings=self._settings,
+                )
+                logger.info(
+                    "offer_monitor_store_paused listing_id=%s store=%s retry_after=%s",
+                    listing.id,
+                    listing.store,
+                    paused_for,
+                )
+                results.append(
+                    {
+                        "listing_id": str(listing.id),
+                        "store": listing.store,
+                        "status": "deferred",
+                        "error": "STORE_PAUSED",
+                        "next_check_at": listing.next_check_at.isoformat()
+                        if listing.next_check_at
+                        else None,
+                    }
+                )
+                continue
             item_started = time.perf_counter()
             scheduled_for = listing.last_check_scheduled_for
             delay_seconds = listing.last_check_delay_seconds

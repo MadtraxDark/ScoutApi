@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from scout_api.core.config import Settings, get_settings
@@ -136,17 +136,48 @@ def mark_check_failure(
     error: str,
     now: datetime | None = None,
     settings: Settings | None = None,
+    retry_after: int | None = None,
 ) -> None:
     cfg = settings or get_settings()
     moment = ensure_aware(now or utcnow())
     listing.last_checked_at = moment
     listing.consecutive_failures = int(listing.consecutive_failures or 0) + 1
     listing.last_check_error = (error or "")[:2000]
-    listing.next_check_at = compute_retry_at(
+    retry_at = compute_retry_at(
         consecutive_failures=listing.consecutive_failures,
         now=moment,
         settings=cfg,
     )
+    if retry_after:
+        # Honour the store/guard hint, bounded by the configured retry cap.
+        hinted = moment + timedelta(
+            seconds=min(int(retry_after), int(cfg.offer_monitor_retry_max_seconds))
+        )
+        retry_at = max(retry_at, hinted)
+    listing.next_check_at = retry_at
+    release_claim(listing)
+
+
+def mark_check_deferred(
+    listing: StoreListing,
+    *,
+    reason: str,
+    retry_after: int | None = None,
+    now: datetime | None = None,
+    settings: Settings | None = None,
+) -> None:
+    """Reschedule without counting a failure (our own throttle / infra outage).
+
+    The listing stays healthy: ``consecutive_failures`` is untouched and no
+    ``scrape_failed`` event is written, so transient local conditions never
+    look like the store failing.
+    """
+    cfg = settings or get_settings()
+    moment = ensure_aware(now or utcnow())
+    base = max(30, int(retry_after or 0), int(cfg.offer_monitor_defer_seconds))
+    cap = max(base, int(cfg.offer_monitor_retry_max_seconds))
+    listing.last_check_error = (reason or "")[:2000]
+    listing.next_check_at = moment + timedelta(seconds=min(base, cap))
     release_claim(listing)
 
 

@@ -160,7 +160,7 @@ def fetch_after_http_crypto_sec_cpt(
     from .html_fetcher import accept_language_for_url
 
     try:
-        session = curl_requests.Session(impersonate="chrome")
+        session: Any = curl_requests.Session(impersonate="chrome")
     except Exception:
         logger.info("akamai_sec_cpt_http_session_failed", exc_info=True)
         return None

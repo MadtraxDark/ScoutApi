@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import uuid
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -11,7 +12,16 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from scout_api.modules.crawler.core.exceptions import ParseError, RequestError
+from scout_api.core.config import get_settings
+from scout_api.modules.crawler.core.exceptions import (
+    FAILURE_EXTRACTION,
+    FAILURE_GONE,
+    FAILURE_INFRA,
+    FAILURE_LOCAL_THROTTLE,
+    ParseError,
+    RequestError,
+    classify_failure,
+)
 from scout_api.modules.crawler.core.fingerprints import canonicalize_url
 from scout_api.modules.crawler.models.product import product_offer_from_price_item
 from scout_api.modules.crawler.services.offer_scrape_service import OfferScrapeService
@@ -33,6 +43,7 @@ from scout_api.modules.matching.schemas import (
     OfferSnapshotView,
 )
 from scout_api.modules.monitoring.hooks import (
+    mark_check_deferred,
     mark_check_failure,
     mark_check_success,
     mark_removed_listing,
@@ -87,6 +98,15 @@ def _view_from_payload(
         scraped_at=scraped_at,
         fingerprint=fingerprint,
     )
+
+
+_EXTRACTION_STREAK = re.compile(r"^EXTRACTION#(\d+):")
+
+
+def _extraction_streak(listing: StoreListing) -> int:
+    """Consecutive extraction failures encoded in the last recorded error."""
+    match = _EXTRACTION_STREAK.match(listing.last_check_error or "")
+    return int(match.group(1)) if match else 0
 
 
 class OfferRefreshService:
@@ -207,64 +227,102 @@ class OfferRefreshService:
                 offer = product_offer_from_price_item(item)
             else:
                 offer = self._offer_service.scrape_offer(listing.url)
-        except RequestError as exc:
-            diff = diff_offers(previous_payload, None, scrape_failed=True)
-            events = [
-                OfferEventView(
-                    event_type="scrape_failed",
-                    before=previous_payload,
-                    after={"error": str(exc), "code": exc.code},
-                    detected_at=datetime.now(UTC),
-                )
-            ]
-            for event in diff.events:
-                repo.append_event(
+        except (RequestError, ParseError) as exc:
+            kind = classify_failure(exc)
+            code = getattr(exc, "code", "PARSE_ERROR")
+            retry_after = getattr(exc, "retry_after", None)
+            cfg = get_settings()
+            prev_view = (
+                _view_from_payload(previous_payload, previous.fingerprint)
+                if previous_payload and previous
+                else None
+            )
+            if kind in (FAILURE_LOCAL_THROTTLE, FAILURE_INFRA):
+                # Our own spacing / browser outage: not the store's fault. Defer
+                # without a failure count or a history event so valid data and
+                # the listing health are untouched.
+                mark_check_deferred(
                     listing,
-                    event,
-                    before=previous_payload,
-                    after={"error": str(exc), "code": exc.code},
+                    reason=f"{code}: {exc}",
+                    retry_after=retry_after,
+                    settings=cfg,
                 )
+                return OfferRefreshResult(
+                    listing_id=listing.id,
+                    store=listing.store,
+                    url=listing.url,
+                    status="deferred",
+                    previous=prev_view,
+                    error=f"{code}: {exc}",
+                )
+            # Only a streak of *extraction* failures counts toward removal; blocks,
+            # timeouts and throttling accumulated earlier say nothing about the page.
+            streak = (
+                _extraction_streak(listing) + 1 if kind == FAILURE_EXTRACTION else 0
+            )
+            gone = kind == FAILURE_GONE or (
+                kind == FAILURE_EXTRACTION
+                and streak
+                >= max(1, int(cfg.offer_monitor_extraction_failures_before_removal))
+            )
+            if gone:
+                repo.mark_listing_removed(listing)
+                mark_removed_listing(listing)
+                after = {"error": str(exc), "kind": kind, "observed": False}
+                repo.append_event(
+                    listing, "offer_removed", before=previous_payload, after=after
+                )
+                return OfferRefreshResult(
+                    listing_id=listing.id,
+                    store=listing.store,
+                    url=listing.url,
+                    status="removed",
+                    events=[
+                        OfferEventView(
+                            event_type="offer_removed",
+                            before=previous_payload,
+                            after=after,
+                            detected_at=datetime.now(UTC),
+                        )
+                    ],
+                    previous=prev_view,
+                    error=str(exc),
+                )
+            # blocked / timeout / extraction (below threshold) / upstream error:
+            # keep the last good snapshot untouched and record an *unobserved*
+            # failure so readers never mistake it for a new (empty) state.
+            after = {
+                "error": str(exc),
+                "code": code,
+                "kind": kind,
+                "observed": False,
+            }
+            diff = diff_offers(previous_payload, None, scrape_failed=True)
+            for event in diff.events:
+                repo.append_event(listing, event, before=previous_payload, after=after)
             mark_check_failure(
-                listing, error=f"{exc.code}: {exc}", now=datetime.now(UTC)
+                listing,
+                error=f"EXTRACTION#{streak}: {exc}"
+                if kind == FAILURE_EXTRACTION
+                else f"{code}: {exc}",
+                now=datetime.now(UTC),
+                settings=cfg,
+                retry_after=retry_after,
             )
             return OfferRefreshResult(
                 listing_id=listing.id,
                 store=listing.store,
                 url=listing.url,
                 status="scrape_failed",
-                events=events,
-                previous=_view_from_payload(previous_payload, previous.fingerprint)
-                if previous_payload and previous
-                else None,
-                error=str(exc),
-            )
-        except ParseError as exc:
-            # Product page gone / unparseable as product → treat as removed.
-            diff = diff_offers(previous_payload, None, removed=True)
-            repo.mark_listing_removed(listing)
-            mark_removed_listing(listing)
-            repo.append_event(
-                listing,
-                "offer_removed",
-                before=previous_payload,
-                after={"error": str(exc)},
-            )
-            return OfferRefreshResult(
-                listing_id=listing.id,
-                store=listing.store,
-                url=listing.url,
-                status="removed",
                 events=[
                     OfferEventView(
-                        event_type="offer_removed",
+                        event_type="scrape_failed",
                         before=previous_payload,
-                        after={"error": str(exc)},
+                        after=after,
                         detected_at=datetime.now(UTC),
                     )
                 ],
-                previous=_view_from_payload(previous_payload, previous.fingerprint)
-                if previous_payload and previous
-                else None,
+                previous=prev_view,
                 error=str(exc),
             )
 

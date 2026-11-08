@@ -149,6 +149,18 @@ def _offer(row: ActivityRow) -> ActivityOffer:
     if kind in {"offer_removed", "out_of_stock", "promotion_expired"}:
         new_price, new_kind = None, None
         currency = currency or old_currency
+    unobserved = kind == "scrape_failed" or after.get("observed") is False
+    if unobserved:
+        # A failed refresh observed nothing: never present the failure payload as
+        # a new (empty) state. The last known values simply remain in force.
+        new_price, new_kind = None, None
+        currency = currency or old_currency
+        after = {
+            **after,
+            "seller": before.get("seller"),
+            "availability": before.get("availability"),
+            "available": before.get("available"),
+        }
     direction: Literal["decreased", "increased", "unchanged"] | None = None
     if (
         kind == "price_changed"
@@ -186,6 +198,8 @@ def _offer(row: ActivityRow) -> ActivityOffer:
         if isinstance(before.get("seller"), str)
         else None,
         seller=after.get("seller") if isinstance(after.get("seller"), str) else None,
+        observed=not unobserved,
+        error_kind=after.get("kind") if unobserved else None,
     )
 
 

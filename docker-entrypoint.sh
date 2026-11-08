@@ -41,6 +41,22 @@ case "$_chown_mode" in
     ;;
 esac
 
+# The entrypoint runs as root, so the directories created above are root-owned
+# (0755). The API/workers run as `app` and must be able to create the per-locale
+# profile dirs (``direct/locale_*``) inside them; otherwise every Camoufox
+# launch fails with EACCES and each store fetch surfaces as a block/cooldown.
+# Fix only the top-level directories (non-recursive, cheap, safe on bind mounts):
+# prefer chown, fall back to a permissive mode when chown is a no-op (Docker
+# Desktop bind mounts).
+for _dir in "$PROFILE_ROOT" "$PROFILE_DIR" "${PROFILE_ROOT}/direct"; do
+  if ! runuser -u app -- test -w "$_dir" 2>/dev/null; then
+    chown app:app "$_dir" 2>/dev/null || chmod a+rwx "$_dir" 2>/dev/null || true
+    if ! runuser -u app -- test -w "$_dir" 2>/dev/null; then
+      echo "camoufox_profile_dir_not_writable: $_dir" >&2
+    fi
+  fi
+done
+
 # Disposable Firefox caches are safe to recreate. Purge them on startup so a
 # previously corrupted cache2 (e.g. after failed recursive chown) cannot hang
 # launch_persistent_context. Session cookies / prefs / logins are preserved.

@@ -76,6 +76,7 @@ Política de quando criar/atualizar docs:
 | [0052](0052-catalog-change-explorer.md) | Consulta administrativa do histórico do catálogo | Accepted |
 | [0053](0053-known-listing-refresh-before-discovery.md) | Refresh de listings conhecidas antes do discovery | Accepted |
 | [0054](0054-registration-canonical-identity-resolution.md) | Resolução de identidade canônica no cadastro de produtos | Accepted |
+| [0055](0055-failure-aware-scrape-cooldown-and-refresh.md) | Cooldown ciente de falha e refresh que preserva dados válidos | Accepted |
 
 
 ## Quando criar ADR

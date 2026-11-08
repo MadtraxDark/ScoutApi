@@ -305,3 +305,114 @@ def test_pdp_with_related_asins_is_not_treated_as_search() -> None:
     ).fetch(url)
     assert browser.calls == [url]
     assert has_buybox_price_signal(response)
+
+
+_CONTINUE_HTML = (
+    __import__("pathlib")
+    .Path(__file__)
+    .parents[1]
+    .joinpath("fixtures", "amazon", "continue_shopping_interstitial.html")
+    .read_text(encoding="utf-8")
+)
+
+
+def test_continue_interstitial_url_builds_browser_like_get() -> None:
+    from scout_api.modules.crawler.services.amazon_continue import (
+        continue_interstitial_url,
+    )
+
+    target = continue_interstitial_url(
+        _CONTINUE_HTML, base_url="https://www.amazon.com/dp/B09V9Z1WLN"
+    )
+    assert target is not None
+    assert target.startswith("https://www.amazon.com/errors_page/validateCaptcha?")
+    assert "amzn=J%2Fi2FMQ0P833mDdGKox18w%3D%3D" in target
+    assert "field-keywords=YJTKEN" in target
+    # Real image CAPTCHAs are not "continue" pages.
+    captcha = (
+        '<form action="/errors/validateCaptcha"><img src="https://x/captcha.jpg">'
+        '<input type="hidden" name="amzn" value="a">'
+        '<input id="captchacharacters" name="field-keywords" type="text"></form>'
+    )
+    assert (
+        continue_interstitial_url(captcha, base_url="https://www.amazon.com/") is None
+    )
+    assert continue_interstitial_url("<html>ok</html>", base_url="https://x/") is None
+
+
+def test_http_first_submits_continue_interstitial_then_uses_pdp() -> None:
+    url = "https://www.amazon.com/dp/B09V9Z1WLN"
+    pdp = _html_response(
+        url,
+        '<span id="productTitle">Phone</span><input id="ASIN" value="B09V9Z1WLN"/>'
+        '<div id="ppd"><span class="priceToPay">'
+        '<span class="a-offscreen">$190.63</span></span></div>',
+    )
+
+    class _Http:
+        def __init__(self) -> None:
+            self.calls: list[str] = []
+
+        def fetch(self, u: str) -> HtmlResponse:
+            self.calls.append(u)
+            if len(self.calls) == 1:
+                return _html_response(u, _CONTINUE_HTML)
+            if "validateCaptcha" in u:
+                return _html_response(u, "<html></html>")
+            return pdp
+
+    http = _Http()
+    browser = _RecordingFetcher(error=AssertionError("browser must not run"))
+    result = AmazonHttpFirstHtmlFetcher(
+        http=http, browser=browser, empty_buybox_retry_seconds=0
+    ).fetch(url)
+
+    assert result is pdp
+    assert len(http.calls) == 3 and "validateCaptcha" in http.calls[1]
+    assert browser.calls == []
+
+
+def test_http_404_is_not_escalated_to_browser() -> None:
+    url = "https://www.amazon.com/dp/B0DGHMQ2F4"
+    err = RequestError(
+        "HTTP 404", code="UPSTREAM_HTTP_ERROR", upstream_status=404, url=url
+    )
+    browser = _RecordingFetcher(error=AssertionError("browser must not run"))
+    fetcher = AmazonHttpFirstHtmlFetcher(
+        http=_RecordingFetcher(error=err), browser=browser
+    )
+    try:
+        fetcher.fetch(url)
+    except RequestError as exc:
+        assert exc.upstream_status == 404
+    else:
+        raise AssertionError("expected RequestError")
+    assert browser.calls == []
+
+
+def test_http_404_after_continue_form_is_not_escalated_to_browser() -> None:
+    url = "https://www.amazon.com/dp/B0DGHMQ2F4"
+
+    class _Http:
+        def __init__(self) -> None:
+            self.calls: list[str] = []
+
+        def fetch(self, u: str) -> HtmlResponse:
+            self.calls.append(u)
+            if len(self.calls) == 1:
+                return _html_response(u, _CONTINUE_HTML)
+            if "validateCaptcha" in u:
+                return _html_response(u, "<html></html>")
+            raise RequestError(
+                "HTTP 404", code="UPSTREAM_HTTP_ERROR", upstream_status=404, url=u
+            )
+
+    browser = _RecordingFetcher(error=AssertionError("browser must not run"))
+    fetcher = AmazonHttpFirstHtmlFetcher(http=_Http(), browser=browser)
+    try:
+        fetcher.fetch(url)
+    except RequestError as exc:
+        assert exc.upstream_status == 404
+    else:
+        raise AssertionError("expected RequestError")
+    assert browser.calls == []

@@ -11,7 +11,7 @@ from urllib.parse import urlparse
 
 from scrapy.http import Response
 
-from ...core.exceptions import MissingPriceError, ParseError
+from ...core.exceptions import ListingGoneError, MissingPriceError, ParseError
 from ...core.fingerprints import canonicalize_url
 from ...models.product import ProductDetails, ProductOffer
 from ...utils.parsing import parse_money
@@ -256,7 +256,7 @@ class VisaoVipSpider(BaseStoreSpider):
         title = " ".join(response.css("title::text").getall()).strip()
         body = response.text or ""
         if _SOFT_404_TITLE.search(title) and "productCode" not in body:
-            raise ParseError("Página Visão VIP não encontrada (soft-404)")
+            raise ListingGoneError("Página Visão VIP não encontrada (soft-404)")
         if response.status == 404:
             raise ParseError("Página Visão VIP não encontrada (HTTP 404)")
 

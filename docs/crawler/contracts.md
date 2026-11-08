@@ -143,8 +143,10 @@ ADR: [0011](../adr/0011-offer-vs-product-details.md), [0012](../adr/0012-optiona
   Default `include_images=false`.
 - Persistence (PostgreSQL): `CanonicalProduct`, `StoreListing`, `OfferSnapshot`,
   `OfferEvent` — refresh **appends** snapshots/events (never silent overwrite).
-- `UPSTREAM_BLOCKED` on refresh → `scrape_failed` (listing stays active).
-  Unparseable/gone PDP → `offer_removed`.
+- `UPSTREAM_BLOCKED`/timeouts on refresh → `scrape_failed` with `observed=false`
+  (listing and last snapshot stay intact). Own throttle / browser infra →
+  `deferred` (no failure, no event). Only `ListingGoneError` (soft-404) or N
+  consecutive extraction failures → `offer_removed` (ADR 0055).
 
 ## Critical invariants
 

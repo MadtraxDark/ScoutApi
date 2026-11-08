@@ -34,7 +34,11 @@ from scout_api.modules.auth.deps import (
     require_permission,
 )
 from scout_api.modules.auth.schemas import AuthenticatedPrincipal, UserRole
-from scout_api.modules.crawler.core.exceptions import ParseError, RequestError
+from scout_api.modules.crawler.core.exceptions import (
+    ParseError,
+    RequestError,
+    classify_failure,
+)
 from scout_api.modules.crawler.schemas import CrawlErrorResponse
 from scout_api.modules.crawler.stores import STORE_CONFIGS
 from scout_api.modules.images.drive_client import (
@@ -981,9 +985,7 @@ def approve_review_offer(
     ],
 ) -> ProductView:
     try:
-        return service.approve_review_listing(
-            product_id, listing_id, owner=principal
-        )
+        return service.approve_review_listing(product_id, listing_id, owner=principal)
     except RequestError as exc:
         raise HTTPException(
             status_code=_status_for_request_error(exc),
@@ -1150,6 +1152,7 @@ def match_product(
                 "upstream_status": exc.upstream_status,
                 "retryable": exc.retryable,
                 "retry_after": exc.retry_after,
+                "kind": classify_failure(exc),
             },
         ) from exc
     except ParseError as exc:
@@ -1593,6 +1596,7 @@ def refresh_offers(
                 "upstream_status": exc.upstream_status,
                 "retryable": exc.retryable,
                 "retry_after": exc.retry_after,
+                "kind": classify_failure(exc),
             },
         ) from exc
     except ParseError as exc:

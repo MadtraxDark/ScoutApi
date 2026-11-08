@@ -632,3 +632,24 @@ def test_changes_endpoint_auth_validation_and_safe_errors(session, monkeypatch):
     finally:
         app.dependency_overrides.clear()
         get_settings.cache_clear()
+
+
+def test_scrape_failed_does_not_present_failure_as_empty_new_state(session):
+    _, listing = product_listing(session)
+    add_event(
+        session,
+        listing,
+        "scrape_failed",
+        before={"seller": "bftechchapeco", "availability": "available"},
+        after={"error": "x", "code": "UPSTREAM_BLOCKED", "kind": "blocked"},
+    )
+    offer = (
+        changes(session, filters=ActivityFilters(event_type="scrape_failed"))
+        .items[0]
+        .offer
+    )
+    assert offer.old_seller == "bftechchapeco"
+    assert offer.seller == "bftechchapeco"
+    assert offer.observed is False
+    assert offer.error_kind == "blocked"
+    assert offer.new_price is None

@@ -68,6 +68,8 @@ class Settings(BaseSettings):
     circuit_breaker_failure_threshold: int = 5
     circuit_breaker_cooldown: int = 300
     scrape_url_cooldown_seconds: int = 300
+    scrape_store_failure_cooldown_base_seconds: int = 30
+    scrape_store_failure_cooldown_max_seconds: int = 300
     scrape_domain_min_interval_seconds: float = 15.0
     scrape_result_cache_ttl_seconds: int = 300
     scrape_distributed_lock_enabled: bool = True
@@ -169,6 +171,8 @@ class Settings(BaseSettings):
     offer_monitor_lease_seconds: int = 300
     offer_monitor_retry_base_seconds: int = 300
     offer_monitor_retry_max_seconds: int = 3600
+    offer_monitor_defer_seconds: int = 60
+    offer_monitor_extraction_failures_before_removal: int = 3
     offer_monitor_jitter_seconds: int = 600
     offer_promotion_grace_seconds: int = 60
     offer_monitor_stale_heartbeat_seconds: int = 300

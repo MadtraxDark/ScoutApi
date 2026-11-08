@@ -30,3 +30,8 @@ def url_cooldown_key(url: str) -> str:
 def domain_cooldown_key(hostname: str) -> str:
     host = hostname.strip().lower()
     return f"{KEY_PREFIX}:cooldown:domain:{host}"
+
+
+def store_cooldown_key(hostname: str) -> str:
+    host = hostname.strip().lower()
+    return f"{KEY_PREFIX}:cooldown:store-failure:{host}"

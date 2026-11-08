@@ -39,8 +39,9 @@ class AvifOptimizer:
             category=OperationCategory.EXTERNAL_TOOL,
             context={"quality": quality},
         ):
-            with Image.open(io.BytesIO(original)) as img:
-                img.load()
+            with Image.open(io.BytesIO(original)) as opened:
+                opened.load()
+                img: Image.Image = opened
                 if img.mode not in {"RGB", "RGBA"}:
                     img = img.convert("RGBA" if "A" in img.getbands() else "RGB")
                 width, height = img.size
