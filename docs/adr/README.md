@@ -75,6 +75,7 @@ Política de quando criar/atualizar docs:
 | [0051](0051-persistent-catalog-activity-read-model.md) | Atividade do catálogo como read-model do histórico persistido | Accepted |
 | [0052](0052-catalog-change-explorer.md) | Consulta administrativa do histórico do catálogo | Accepted |
 | [0053](0053-known-listing-refresh-before-discovery.md) | Refresh de listings conhecidas antes do discovery | Accepted |
+| [0054](0054-registration-canonical-identity-resolution.md) | Resolução de identidade canônica no cadastro de produtos | Accepted |
 
 
 ## Quando criar ADR

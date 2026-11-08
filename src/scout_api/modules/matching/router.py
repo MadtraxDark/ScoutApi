@@ -61,6 +61,7 @@ from scout_api.modules.matching.models import StoreMetadata
 from scout_api.modules.matching.offer_refresh_service import OfferRefreshService
 from scout_api.modules.matching.product_match_service import ProductMatchService
 from scout_api.modules.matching.product_registration_service import (
+    ProductIdentityReviewRequired,
     ProductRegistrationService,
 )
 from scout_api.modules.matching.schemas import (
@@ -77,6 +78,7 @@ from scout_api.modules.matching.schemas import (
     ProductListResponse,
     ProductRegisterRequest,
     ProductRegisterResponse,
+    ProductResolveResponse,
     ProductSearchResponse,
     ProductUpdateRequest,
     ProductView,
@@ -213,7 +215,12 @@ def get_notification_service(
         403: {"model": CrawlErrorResponse, "description": "Sem permissão de escrita."},
         409: {
             "model": CrawlErrorResponse,
-            "description": "Conflito de integridade ao persistir o produto.",
+            "description": (
+                "Produto possivelmente já cadastrado "
+                "(`PRODUCT_IDENTITY_REVIEW_REQUIRED`, com `existing_product`), "
+                "GTIN de outro produto (`PRODUCT_IDENTITY_CONFLICT`) "
+                "ou conflito de integridade."
+            ),
         },
         422: {
             "model": CrawlErrorResponse,
@@ -229,9 +236,10 @@ def get_notification_service(
     summary="Cadastrar produto",
     description=(
         "Cadastra um produto canônico ou reutiliza um já existente "
-        "sem sobrescrita silenciosa. "
-        "Pode anexar um listing de loja quando store "
-        "e identificadores forem informados."
+        "sem sobrescrita silenciosa. A identidade é resolvida por listing da "
+        "mesma loja, GTIN e correspondência de produto (marca, modelo e "
+        "variante); um produto já cadastrado recebe uma nova oferta em vez de "
+        "um novo produto canônico. `resolution` informa o resultado."
     ),
 )
 def register_product(
@@ -243,6 +251,59 @@ def register_product(
 ) -> ProductRegisterResponse:
     try:
         return service.register_saved(payload, owner=principal)
+    except ProductIdentityReviewRequired as exc:
+        raise _http_for_identity_review(exc, service, principal) from exc
+    except RequestError as exc:
+        raise HTTPException(
+            status_code=_status_for_request_error(exc),
+            detail={
+                "code": exc.code,
+                "message": str(exc),
+                "retryable": exc.retryable,
+            },
+        ) from exc
+    except SQLAlchemyError as exc:
+        raise _http_for_database_error(exc) from exc
+
+
+@router.post(
+    "/products/resolve",
+    response_model=ProductResolveResponse,
+    tags=["Produtos"],
+    responses={
+        401: {"model": CrawlErrorResponse, "description": "Não autenticado."},
+        403: {"model": CrawlErrorResponse, "description": "Sem permissão de escrita."},
+        409: {
+            "model": CrawlErrorResponse,
+            "description": "GTIN pertence a outro produto.",
+        },
+        422: {
+            "model": CrawlErrorResponse,
+            "description": "Dados de cadastro inválidos.",
+        },
+        503: {
+            "model": CrawlErrorResponse,
+            "description": "Banco de dados indisponível ou não configurado.",
+        },
+    },
+    status_code=status.HTTP_200_OK,
+    dependencies=[Depends(require_permission("products:write")), _RL_DEFAULT],
+    summary="Resolver identidade de cadastro",
+    description=(
+        "Somente leitura. Informa se o produto do preview já possui o mesmo "
+        "listing, se é o mesmo produto em outra loja (nova oferta), se exige "
+        "revisão ou se é um produto novo. Não grava nada."
+    ),
+)
+def resolve_product(
+    payload: ProductRegisterRequest,
+    service: Annotated[ProductRegistrationService, Depends(get_registration_service)],
+    principal: Annotated[
+        AuthenticatedPrincipal, Depends(require_permission("products:write"))
+    ],
+) -> ProductResolveResponse:
+    try:
+        return service.resolve(payload, viewer=principal)
     except RequestError as exc:
         raise HTTPException(
             status_code=_status_for_request_error(exc),
@@ -1566,6 +1627,34 @@ def _http_for_database_error(exc: SQLAlchemyError) -> HTTPException:
     )
 
 
+def _http_for_identity_review(
+    exc: ProductIdentityReviewRequired,
+    service: ProductRegistrationService,
+    principal: AuthenticatedPrincipal,
+) -> HTTPException:
+    candidate = service.get_product(exc.candidate.id, viewer=principal)
+    existing: dict[str, object] = {"id": str(exc.candidate.id)}
+    if candidate is not None:
+        existing.update(
+            title=candidate.title,
+            brand=candidate.brand,
+            created_at=candidate.created_at.isoformat(),
+            image_url=candidate.primary_image_url,
+        )
+    return HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail={
+            "code": exc.code,
+            "message": str(exc),
+            "retryable": False,
+            "existing_product": existing,
+            "match_confidence": (
+                str(exc.confidence) if exc.confidence is not None else None
+            ),
+        },
+    )
+
+
 def _status_for_request_error(exc: RequestError) -> int:
     if exc.code in {"DUPLICATE_REQUEST", "RATE_LIMITED"}:
         return status.HTTP_429_TOO_MANY_REQUESTS
@@ -1575,7 +1664,11 @@ def _status_for_request_error(exc: RequestError) -> int:
         return status.HTTP_422_UNPROCESSABLE_ENTITY
     if exc.code in {"PRODUCT_NOT_FOUND", "REVIEW_OFFER_NOT_FOUND"}:
         return status.HTTP_404_NOT_FOUND
-    if exc.code == "OFFER_NOT_REVIEWABLE":
+    if exc.code in {
+        "OFFER_NOT_REVIEWABLE",
+        "PRODUCT_IDENTITY_REVIEW_REQUIRED",
+        "PRODUCT_IDENTITY_CONFLICT",
+    }:
         return status.HTTP_409_CONFLICT
     if exc.code == "FORBIDDEN":
         return status.HTTP_403_FORBIDDEN

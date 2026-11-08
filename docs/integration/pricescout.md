@@ -36,6 +36,7 @@ PriceScout (localhost:3000)
 | preview | `POST …/preview` | `POST /crawl` | FRONTEND_ADAPTER | mapper preview |
 | get/discard preview | preview TTL | — | OBSOLETE_FRONTEND_BEHAVIOR | estado local FE |
 | import | `POST …/import` | `POST /products` | FRONTEND_ADAPTER | `ProductRegisterRequest` |
+| identity check | — | `POST /products/resolve` | DIRECT_MAPPING | somente leitura; `resolution` antes da aprovação (ADR 0054) |
 | other-store prices | sync legado | `POST /match` | DIRECT_MAPPING | tooling / sync |
 | other-store match run | job + poll | `POST /products/{id}/match-runs` + `GET /match-runs/{id}/live` | DIRECT_MAPPING | job persistente (ADR 0036) e ofertas progressivas (ADR 0049) |
 | other-store active | — | `GET /products/{id}/match-runs/active` | DIRECT_MAPPING | banner / botão |
@@ -106,6 +107,7 @@ Canônico: [`docs/persistence/product-images.md`](../persistence/product-images.
    “Produto encontrado, mas não foi possível carregar a galeria.”
 4. Permitir selecionar / remover / reordenar / marcar principal **antes** do
    import; deixar claro que ainda não estão no Drive.
+5. Antes de aprovar: `POST /products/resolve` (sem imagens). `existing_listing` bloqueia; `existing_product_new_listing` avisa que será nova oferta; `needs_review` exige escolha (`target_product_id` ou `create_new_product`). Ver ADR 0054.
 5. Import: `POST /products` com `images: [{ source_url, position, is_main }]`
    das aprovadas (idempotente no clique).
 6. Após cadastro: listar via `GET /products/{id}/images` ou campo `images` /

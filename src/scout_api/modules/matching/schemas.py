@@ -366,6 +366,21 @@ class ProductRegisterRequest(BaseModel):
             "Persistidas somente após este cadastro — nunca no crawl."
         ),
     )
+    target_product_id: UUID | None = Field(
+        default=None,
+        description=(
+            "Produto canônico confirmado pelo usuário quando a resolução "
+            "retornou `needs_review`: a oferta é anexada a este produto."
+        ),
+    )
+    create_new_product: bool = Field(
+        default=False,
+        description=(
+            "Confirmação explícita de que não é o mesmo produto do candidato "
+            "em revisão. Ignora apenas a correspondência por identidade; "
+            "listing da mesma loja e GTIN continuam sendo respeitados."
+        ),
+    )
 
 
 class ProductListingView(BaseModel):
@@ -492,11 +507,51 @@ class ProductUpdateRequest(BaseModel):
     )
 
 
+ProductResolutionKind = Literal[
+    "existing_listing",
+    "existing_product_new_listing",
+    "needs_review",
+    "new_product",
+]
+ProductMatchedBy = Literal["store_identity", "gtin", "identity", "user_confirmed"]
+
+
 class ProductRegisterResponse(BaseModel):
     created: bool
     listing_created: bool = False
     product: ProductView
     listing: ProductListingView | None = None
+    resolution: ProductResolutionKind = Field(
+        default="new_product",
+        description=(
+            "Como o cadastro foi resolvido: listing já existente, nova oferta "
+            "em produto existente ou produto novo."
+        ),
+    )
+    matched_by: ProductMatchedBy | None = Field(
+        default=None,
+        description="Evidência usada para reconhecer o produto existente.",
+    )
+    match_confidence: Decimal | None = Field(
+        default=None,
+        description="Confiança da correspondência por identidade (0..1).",
+    )
+
+
+class ProductResolveResponse(BaseModel):
+    """Resultado somente leitura da resolução de identidade de um cadastro."""
+
+    resolution: ProductResolutionKind
+    matched_by: ProductMatchedBy | None = None
+    match_confidence: Decimal | None = None
+    product: ProductView | None = Field(
+        default=None,
+        description="Produto canônico existente (ou candidato em revisão).",
+    )
+    listing: ProductListingView | None = Field(
+        default=None,
+        description="Listing já existente da mesma loja, quando houver.",
+    )
 
 
 class ProductSearchResponse(BaseModel):

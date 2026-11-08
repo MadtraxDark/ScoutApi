@@ -8,10 +8,11 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
+from scout_api.modules.crawler.core.fingerprints import canonicalize_url
 from scout_api.modules.crawler.models.product import ProductOffer, ProductPriceItem
 from scout_api.modules.matching.identity import ProductIdentity
 from scout_api.modules.matching.models import (
@@ -94,11 +95,24 @@ class MatchingRepository:
     def find_listing_by_url(
         self, store: str, canonical_url: str
     ) -> StoreListing | None:
-        stmt = select(StoreListing).where(
-            StoreListing.store == store,
-            StoreListing.canonical_url == canonical_url,
-        )
-        return self._session.scalars(stmt).first()
+        """Find by canonical URL, also trying the canonical form of the input.
+
+        Older listings may hold a raw URL (tracking, host case, trailing
+        slash), so both the given and the canonicalized forms are tried.
+        """
+        candidates = [canonical_url]
+        normalized = canonicalize_url(canonical_url)
+        if normalized != canonical_url:
+            candidates.append(normalized)
+        for candidate in candidates:
+            stmt = select(StoreListing).where(
+                StoreListing.store == store,
+                StoreListing.canonical_url == candidate,
+            )
+            found = self._session.scalars(stmt).first()
+            if found is not None:
+                return found
+        return None
 
     def find_listing_by_store_product_id(
         self,
@@ -206,6 +220,77 @@ class MatchingRepository:
             .limit(limit)
         )
         return list(self._session.scalars(stmt).all())
+
+    def list_identity_candidates(
+        self,
+        *,
+        viewer_id: uuid.UUID,
+        is_admin: bool,
+        limit: int = 5000,
+    ) -> list[CanonicalProduct]:
+        """Lightweight canonical rows visible to the viewer (no eager loads).
+
+        Used by registration identity resolution; brand/model gates run in
+        the resolver because normalization is not expressible in SQL.
+        """
+        stmt = select(CanonicalProduct)
+        if not is_admin:
+            stmt = stmt.where(
+                or_(
+                    CanonicalProduct.owner_user_id.is_(None),
+                    CanonicalProduct.owner_user_id == viewer_id,
+                )
+            )
+        stmt = stmt.order_by(CanonicalProduct.updated_at.desc()).limit(limit)
+        return list(self._session.scalars(stmt).all())
+
+    def listing_stores_by_canonical(
+        self, canonical_ids: list[uuid.UUID]
+    ) -> dict[uuid.UUID, set[tuple[str, str]]]:
+        """Map canonical id -> {(store, country)} of its non-removed listings."""
+        if not canonical_ids:
+            return {}
+        rows = self._session.execute(
+            select(
+                StoreListing.canonical_product_id,
+                StoreListing.store,
+                StoreListing.country,
+            ).where(
+                StoreListing.canonical_product_id.in_(canonical_ids),
+                StoreListing.status != "removed",
+            )
+        ).all()
+        out: dict[uuid.UUID, set[tuple[str, str]]] = {}
+        for canonical_id, store, country in rows:
+            out.setdefault(canonical_id, set()).add((store, country))
+        return out
+
+    def acquire_identity_lock(self, key: str) -> bool:
+        """Serialize canonical creation per identity key until commit.
+
+        PostgreSQL only (``pg_advisory_xact_lock``); a no-op elsewhere.
+        Returns True when the lock was taken.
+        """
+        bind = self._session.get_bind()
+        if bind.dialect.name != "postgresql":
+            return False
+        self._session.execute(
+            text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"),
+            {"key": key},
+        )
+        return True
+
+    def acquire_store_identity_lock(
+        self, store: str, country: str, product_id: str
+    ) -> bool:
+        """Serialize registrations of the same store listing until commit.
+
+        Must be taken before the canonical identity lock (fixed order avoids
+        deadlocks). PostgreSQL only; a no-op elsewhere.
+        """
+        return self.acquire_identity_lock(
+            f"store-listing:{store}|{country}|{product_id}"
+        )
 
     def count_canonical_products(
         self,

@@ -7,10 +7,12 @@ import time
 from decimal import Decimal
 from uuid import UUID
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from scout_api.modules.auth.schemas import AuthenticatedPrincipal, UserRole
 from scout_api.modules.crawler.core.exceptions import RequestError
+from scout_api.modules.crawler.core.fingerprints import canonicalize_url
 from scout_api.modules.crawler.utils.product_identity import (
     canonical_model_key,
     canonical_variant_key,
@@ -20,6 +22,12 @@ from scout_api.modules.images.service import (
     ProductImageService,
     primary_display_url,
     to_image_view,
+)
+from scout_api.modules.matching.canonical_resolver import (
+    CanonicalIdentityResolver,
+    CanonicalResolution,
+    ProductIdentityReviewRequired,
+    can_access_product,
 )
 from scout_api.modules.matching.identity import (
     normalize_brand,
@@ -33,21 +41,17 @@ from scout_api.modules.matching.schemas import (
     ProductListResponse,
     ProductRegisterRequest,
     ProductRegisterResponse,
+    ProductResolveResponse,
     ProductSearchResponse,
     ProductUpdateRequest,
     ProductView,
 )
 
-
-def can_access_product(
-    product: CanonicalProduct, principal: AuthenticatedPrincipal
-) -> bool:
-    """BOLA: private products are visible only to owner or admin."""
-    if product.owner_user_id is None:
-        return True
-    if principal.role == UserRole.ADMIN:
-        return True
-    return product.owner_user_id == principal.id
+__all__ = [
+    "ProductIdentityReviewRequired",
+    "ProductRegistrationService",
+    "can_access_product",
+]
 
 
 class ProductRegistrationService:
@@ -62,11 +66,28 @@ class ProductRegistrationService:
         *,
         owner: AuthenticatedPrincipal,
     ) -> ProductRegisterResponse:
-        """Commit mandatory catalog state before HTTP success can be sent."""
+        """Commit mandatory catalog state before HTTP success can be sent.
+
+        A unique-constraint race (two requests for the same listing) rolls
+        back and re-resolves: if the winner's listing is now visible the
+        call is answered idempotently, otherwise the integrity error is
+        re-raised (409). Operational failures are never swallowed.
+        """
         started = time.perf_counter()
-        response = self.register(request, owner=owner)
-        registered = time.perf_counter()
-        self._session.commit()
+        try:
+            response = self.register(request, owner=owner)
+            registered = time.perf_counter()
+            self._session.commit()
+        except IntegrityError:
+            self._session.rollback()
+            replay = self._replay_existing_listing(request, owner=owner)
+            if replay is None:
+                raise
+            logging.getLogger(__name__).info(
+                "product_import_idempotent_after_conflict store=%s",
+                request.store,
+            )
+            return replay
         logging.getLogger(__name__).info(
             "product_import_saved registration_ms=%.1f commit_ms=%.1f images=%s",
             (registered - started) * 1000,
@@ -75,115 +96,113 @@ class ProductRegistrationService:
         )
         return response
 
+    def _replay_existing_listing(
+        self,
+        request: ProductRegisterRequest,
+        *,
+        owner: AuthenticatedPrincipal,
+    ) -> ProductRegisterResponse | None:
+        """Re-resolve after a rollback; return an idempotent reply or None."""
+        request = self._normalize_urls(request)
+        gtin, country, _, _ = self._validate(request)
+        attrs, _ = self._identity_attributes(request)
+        resolution = CanonicalIdentityResolver(self._session).resolve(
+            request,
+            gtin=gtin,
+            country=country,
+            category=_category(attrs),
+            viewer=owner,
+        )
+        if (
+            resolution.kind != "existing_listing"
+            or resolution.product is None
+            or resolution.listing is None
+        ):
+            self._session.rollback()
+            return None
+        response = self._response(
+            resolution,
+            created=False,
+            listing_created=False,
+            listing=resolution.listing,
+            owner=owner,
+        )
+        self._session.rollback()
+        return response
+
+    @staticmethod
+    def _normalize_urls(request: ProductRegisterRequest) -> ProductRegisterRequest:
+        """Canonicalize url/canonical_url once (tracking, host case, slash)."""
+        updates: dict[str, object] = {}
+        for field in ("url", "canonical_url"):
+            value = getattr(request, field)
+            if value:
+                normalized = canonicalize_url(str(value))
+                if normalized != str(value):
+                    updates[field] = normalized
+        return request.model_copy(update=updates) if updates else request
+
     def register(
         self,
         request: ProductRegisterRequest,
         *,
         owner: AuthenticatedPrincipal,
     ) -> ProductRegisterResponse:
-        gtin = normalize_gtin(request.gtin)
-        if request.gtin and gtin is None:
-            raise RequestError(
-                "GTIN/EAN/UPC inválido",
-                code="INVALID_REQUEST",
-            )
-
-        store = request.store
-        country = (request.country or "BR").upper() if request.store else None
-        has_store_identity = bool(store and request.product_id and country)
-        has_url_listing = bool(store and request.canonical_url and request.product_id)
-        if gtin is None and not has_store_identity:
-            raise RequestError(
-                "Informe GTIN válido ou store + country + product_id "
-                "(canonical_url recomendada para listing)",
-                code="INVALID_REQUEST",
-            )
-
+        request = self._normalize_urls(request)
+        gtin, country, has_store_identity, has_url_listing = self._validate(request)
+        attrs, vkey = self._identity_attributes(request)
         repo = MatchingRepository(self._session)
 
-        if has_store_identity:
-            assert store is not None and country is not None and request.product_id
-            existing_listing = repo.find_listing_by_store_identity(
-                store=store,
-                country=country,
-                product_id=request.product_id,
-                sku=request.sku,
-                canonical_url=(
-                    str(request.canonical_url) if request.canonical_url else None
-                ),
-            )
-            if existing_listing is not None:
-                product = repo.get_canonical(existing_listing.canonical_product_id)
-                if product is None:
-                    raise RequestError(
-                        "Listing órfão sem produto canônico",
-                        code="DATABASE_ERROR",
-                    )
-                if not can_access_product(product, owner):
-                    raise RequestError(
-                        "Produto existente pertencente a outro usuário",
-                        code="FORBIDDEN",
-                    )
-                product_view = self.get_product(product.id, viewer=owner)
-                if product_view is None:
-                    raise RequestError(
-                        "Produto existente pertencente a outro usuário",
-                        code="FORBIDDEN",
-                    )
-                if request.images:
-                    self._persist_images(product.id, request.images, owner=owner)
-                self._seed_offer_snapshot(repo, existing_listing, request)
-                product_view = self.get_product(product.id, viewer=owner)
-                assert product_view is not None
-                listing = repo.get_listing(existing_listing.id) or existing_listing
-                return ProductRegisterResponse(
-                    created=False,
-                    listing_created=False,
-                    product=product_view,
-                    listing=_to_listing_view(listing, session=self._session),
-                )
+        resolution = CanonicalIdentityResolver(self._session).resolve(
+            request,
+            gtin=gtin,
+            country=country,
+            category=_category(attrs),
+            viewer=owner,
+            lock=True,
+        )
 
-        attrs = dict(request.attributes or {})
-        if request.variant:
-            attrs.setdefault("variant", request.variant)
-        if "category" not in attrs:
-            from scout_api.modules.crawler.utils.product_attributes import (
-                detect_product_category,
+        if resolution.kind == "existing_listing":
+            assert resolution.product is not None and resolution.listing is not None
+            # Re-import of the same store listing: idempotent, no new images,
+            # no seeded snapshot. Only a missing validated GTIN is learned.
+            if gtin is not None:
+                self._learn_gtin(repo, resolution.product, gtin)
+            return self._response(
+                resolution,
+                created=False,
+                listing_created=False,
+                listing=resolution.listing,
+                owner=owner,
             )
 
-            detected = detect_product_category(request.title)
-            if detected:
-                attrs["category"] = detected
-        string_attrs = {k: str(v) for k, v in attrs.items() if isinstance(v, str)}
-        vkey = request.variant_key or variant_key(string_attrs)
+        if resolution.kind == "needs_review":
+            assert resolution.product is not None
+            raise ProductIdentityReviewRequired(
+                resolution.product, resolution.confidence
+            )
 
-        if gtin is not None:
-            existing = repo.find_canonical_by_gtin(gtin)
-            if existing is not None:
-                if not can_access_product(existing, owner):
-                    raise RequestError(
-                        "Produto existente pertencente a outro usuário",
-                        code="FORBIDDEN",
-                    )
-                listing_view = None
-                listing_created = False
-                if has_url_listing or has_store_identity:
-                    listing, listing_created = self._attach_listing(
-                        repo, existing, request, gtin=gtin, country=country or "BR"
-                    )
-                    listing_view = _to_listing_view(listing, session=self._session)
-                product_view = self.get_product(existing.id, viewer=owner)
-                assert product_view is not None
-                if request.images:
-                    self._persist_images(existing.id, request.images, owner=owner)
-                    product_view = self.get_product(existing.id, viewer=owner)
-                    assert product_view is not None
-                return ProductRegisterResponse(
-                    created=False,
-                    listing_created=listing_created,
-                    product=product_view,
-                    listing=listing_view,
+        if resolution.kind == "existing_product_new_listing":
+            existing = resolution.product
+            assert existing is not None
+            if gtin is not None:
+                self._learn_gtin(repo, existing, gtin)
+            listing = None
+            listing_created = False
+            if has_url_listing or has_store_identity:
+                listing, listing_created = self._attach_listing(
+                    repo, existing, request, gtin=gtin, country=country or "BR"
                 )
+            self._session.flush()
+            if request.images and not self._has_images(existing.id):
+                self._persist_images(existing.id, request.images, owner=owner)
+            return self._response(
+                resolution,
+                created=False,
+                listing_created=listing_created,
+                listing=listing,
+                owner=owner,
+            )
 
         canonical, created = repo.get_or_create_canonical(
             title=request.title,
@@ -199,20 +218,19 @@ class ProductRegistrationService:
                 "Produto existente pertencente a outro usuário",
                 code="FORBIDDEN",
             )
-        listing_view = None
+        listing = None
         listing_created = False
         if has_url_listing or (has_store_identity and request.canonical_url):
             listing, listing_created = self._attach_listing(
                 repo, canonical, request, gtin=gtin, country=country or "BR"
             )
-            listing_view = _to_listing_view(listing, session=self._session)
         elif has_store_identity and not request.canonical_url:
             # Store identity without URL: still persist listing with synthetic URL.
-            assert store and request.product_id
-            synthetic = f"scout://{store}/{country}/{request.product_id}"
+            assert request.store and request.product_id
+            synthetic = f"scout://{request.store}/{country}/{request.product_id}"
             listing, listing_created = repo.get_or_create_listing(
                 canonical=canonical,
-                store=store,
+                store=request.store,
                 country=country or "BR",
                 product_id=request.product_id,
                 url=synthetic,
@@ -222,17 +240,142 @@ class ProductRegistrationService:
                 title=request.title,
             )
             self._seed_offer_snapshot(repo, listing, request)
-            listing_view = _to_listing_view(listing, session=self._session)
         self._session.flush()
         if request.images:
             self._persist_images(canonical.id, request.images, owner=owner)
-        product_view = self.get_product(canonical.id, viewer=owner)
-        assert product_view is not None
+        # A concurrent GTIN insert can still resolve to an existing canonical.
+        final = CanonicalResolution(
+            kind="new_product" if created else "existing_product_new_listing",
+            product=canonical,
+            matched_by=None if created else "gtin",
+        )
+        return self._response(
+            final,
+            created=created,
+            listing_created=listing_created,
+            listing=listing,
+            owner=owner,
+        )
+
+    def resolve(
+        self,
+        request: ProductRegisterRequest,
+        *,
+        viewer: AuthenticatedPrincipal,
+    ) -> ProductResolveResponse:
+        """Read-only preview of what ``register`` would do (no writes)."""
+        request = self._normalize_urls(request)
+        gtin, country, _, _ = self._validate(request)
+        attrs, _ = self._identity_attributes(request)
+        resolution = CanonicalIdentityResolver(self._session).resolve(
+            request,
+            gtin=gtin,
+            country=country,
+            category=_category(attrs),
+            viewer=viewer,
+        )
+        product_view = (
+            self.get_product(resolution.product.id, viewer=viewer)
+            if resolution.product is not None
+            else None
+        )
+        listing_view = (
+            _to_listing_view(resolution.listing, session=self._session)
+            if resolution.listing is not None
+            else None
+        )
+        return ProductResolveResponse(
+            resolution=resolution.kind,
+            matched_by=resolution.matched_by,
+            match_confidence=resolution.confidence,
+            product=product_view,
+            listing=listing_view,
+        )
+
+    @staticmethod
+    def _validate(
+        request: ProductRegisterRequest,
+    ) -> tuple[str | None, str | None, bool, bool]:
+        gtin = normalize_gtin(request.gtin)
+        if request.gtin and gtin is None:
+            raise RequestError(
+                "GTIN/EAN/UPC inválido",
+                code="INVALID_REQUEST",
+            )
+        store = request.store
+        country = (request.country or "BR").upper() if request.store else None
+        has_store_identity = bool(store and request.product_id and country)
+        has_url_listing = bool(store and request.canonical_url and request.product_id)
+        if gtin is None and not has_store_identity:
+            raise RequestError(
+                "Informe GTIN válido ou store + country + product_id "
+                "(canonical_url recomendada para listing)",
+                code="INVALID_REQUEST",
+            )
+        return gtin, country, has_store_identity, has_url_listing
+
+    @staticmethod
+    def _identity_attributes(
+        request: ProductRegisterRequest,
+    ) -> tuple[dict[str, object], str | None]:
+        attrs: dict[str, object] = dict(request.attributes or {})
+        if request.variant:
+            attrs.setdefault("variant", request.variant)
+        if "category" not in attrs:
+            from scout_api.modules.crawler.utils.product_attributes import (
+                detect_product_category,
+            )
+
+            detected = detect_product_category(request.title)
+            if detected:
+                attrs["category"] = detected
+        string_attrs = {k: str(v) for k, v in attrs.items() if isinstance(v, str)}
+        vkey = request.variant_key or variant_key(string_attrs)
+        return attrs, vkey
+
+    def _learn_gtin(
+        self, repo: MatchingRepository, product: CanonicalProduct, gtin: str
+    ) -> None:
+        """Attach a validated GTIN when missing (never a second, different one)."""
+        if repo.ensure_gtin_identifier(product, gtin, source="product_register"):
+            self._session.flush()
+            # The eager-loaded collection does not see the new identifier row.
+            self._session.expire(product, ["identifiers"])
+
+    def _has_images(self, product_id: UUID) -> bool:
+        from scout_api.modules.images.repository import ProductImageRepository
+
+        rows = ProductImageRepository(self._session).list_for_product(product_id)
+        return bool(rows)
+
+    def _response(
+        self,
+        resolution: CanonicalResolution,
+        *,
+        created: bool,
+        listing_created: bool,
+        listing: StoreListing | None,
+        owner: AuthenticatedPrincipal,
+    ) -> ProductRegisterResponse:
+        assert resolution.product is not None
+        product_view = self.get_product(resolution.product.id, viewer=owner)
+        if product_view is None:
+            raise RequestError(
+                "Produto existente pertencente a outro usuário",
+                code="FORBIDDEN",
+            )
+        listing_view = None
+        if listing is not None:
+            fresh = MatchingRepository(self._session).get_listing(listing.id)
+            listing_view = _to_listing_view(fresh or listing, session=self._session)
         return ProductRegisterResponse(
             created=created,
             listing_created=listing_created,
             product=product_view,
             listing=listing_view,
+            resolution=resolution.kind,
+            matched_by=resolution.matched_by,
+            match_confidence=resolution.confidence,
         )
 
     def _persist_images(
@@ -826,3 +969,8 @@ def _to_listing_view(
         exchange_rate_source=fx.get("exchange_rate_source"),  # type: ignore[arg-type]
         exchange_rate_updated_at=fx.get("exchange_rate_updated_at"),  # type: ignore[arg-type]
     )
+
+
+def _category(attrs: dict[str, object]) -> str | None:
+    value = attrs.get("category")
+    return str(value) if value else None

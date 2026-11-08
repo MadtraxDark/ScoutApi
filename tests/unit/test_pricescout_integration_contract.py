@@ -161,11 +161,21 @@ def test_products_list_requires_auth(auth_settings: str) -> None:
     assert client.get("/products").status_code == 401
 
 
+def test_product_resolve_requires_auth(auth_settings: str) -> None:
+    client = TestClient(app)
+    response = client.post(
+        "/products/resolve",
+        json={"title": "Sem auth", "gtin": "7891991010863"},
+    )
+    assert response.status_code == 401
+
+
 def test_openapi_includes_pricescout_routes(auth_settings: str) -> None:
     client = TestClient(app)
     schema = client.get("/openapi.json").json()
     paths = schema["paths"]
     assert "/products" in paths
+    assert "post" in paths["/products/resolve"]
     assert "get" in paths["/products"]
     assert "patch" in paths["/products/{product_id}"]
     assert "delete" in paths["/products/{product_id}"]

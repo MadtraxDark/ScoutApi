@@ -18,6 +18,13 @@ TRACKING_KEYS = {
     "utm_source",
     "utm_term",
     "utm_content",
+    "utm_id",
+    "gclsrc",
+    "dclid",
+    "msclkid",
+    "mc_cid",
+    "mc_eid",
+    "igshid",
     "xptdk",
     # AliExpress SERP / campaign tracking (sku selection uses sku_id separately).
     "spm",
@@ -38,7 +45,7 @@ TRACKING_KEYS = {
 }
 
 # Marketing / affiliate prefixes (Mercado Livre Google Shopping, etc.)
-TRACKING_PREFIXES = ("matt_", "cq_", "gad_")
+TRACKING_PREFIXES = ("matt_", "cq_", "gad_", "utm_")
 
 
 def canonicalize_url(url: str) -> str:
